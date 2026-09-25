@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="평가원 과학탐구 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
+    <title>기출 탐색기</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div><strong>기출 탐색기</strong><small>5E 기출 라이브러리</small></div>
+        </div>
+        <div class="topbar-actions">
+          <div class="source-status" id="source-status" role="status">PDF 색인을 불러오는 중입니다</div>
+          <details class="index-issues" id="index-issues" hidden>
+            <summary id="issues-heading" title="색인 상태 확인"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg><span>점검</span><span class="issues-count" id="issues-count"></span></summary>
+            <div class="index-issues-panel"><strong>색인 상태</strong><p id="issues-description"></p><ul id="issues-list"></ul></div>
+          </details>
+        </div>
+        <section class="search-panel" aria-label="기출 검색">
+        <form class="search-form" id="search-form" autocomplete="off">
+          <label class="search-box" for="keyword-input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/></svg>
+            <span id="tokens" class="tokens"></span>
+            <input id="keyword-input" type="search" placeholder="예: 빛 간섭 경로차" aria-label="검색할 단어 입력" />
+          </label>
+          <label class="filter-control"><span class="sr-only">과목</span><select id="subject-filter" aria-label="과목"><option value="">전과목</option><option value="p1">물리학Ⅰ</option><option value="p2">물리학Ⅱ</option><option value="c1">화학Ⅰ</option><option value="c2">화학Ⅱ</option><option value="b1">생명과학Ⅰ</option><option value="b2">생명과학Ⅱ</option><option value="e1">지구과학Ⅰ</option><option value="e2">지구과학Ⅱ</option></select></label>
+          <label class="filter-control"><span class="sr-only">연도</span><select id="year-filter" aria-label="연도"><option value="">전체 연도</option></select></label>
+          <label class="filter-control"><span class="sr-only">시험</span><select id="month-filter" aria-label="시험"><option value="">전체 시험</option><option value="6">6월 모평</option><option value="9">9월 모평</option><option value="11">수능</option></select></label>
+          <button class="button primary" type="submit">검색</button>
+          <button class="button secondary" type="button" id="clear-search">초기화</button>
+        </form>
+        <p class="search-help" id="search-help" role="status" aria-live="polite"></p>
+        </section>
+      </header>
+
+      <main class="workspace" id="workspace">
+        <section class="results-pane" aria-label="검색 결과">
+          <div class="pane-header"><div class="results-heading"><h1 id="result-count">문항을 불러오는 중</h1><div class="result-mode-switch" role="group" aria-label="검색 결과 단위"><button id="mode-questions" type="button" aria-pressed="true">문항별</button><button id="mode-files" type="button" aria-pressed="false">시험지별</button></div></div><div class="pane-actions"><span class="result-sort" id="result-sort">관련도 · 최신순</span><button class="button secondary preview-toggle" id="preview-toggle" type="button" aria-controls="detail-pane" aria-pressed="false" disabled>미리보기 열기</button></div></div>
+          <div class="result-grid" id="result-list"></div>
+          <nav class="results-pagination" id="results-pagination" aria-label="검색 결과 페이지" hidden><button class="button secondary" id="previous-page" type="button">이전</button><span id="page-position" aria-live="polite"></span><button class="button secondary" id="load-more" type="button">다음</button></nav>
+        </section>
+
+        <section class="detail-pane" id="detail-pane" aria-label="원본 확인">
+          <div class="detail-empty" id="detail-empty"><div class="empty-icon" aria-hidden="true">PDF</div><h2>문항을 선택하세요</h2><p>검색 결과에서 문항을 고르면 원본 PDF의 해당 문항을 보여줍니다.</p></div>
+          <div class="file-preview" id="file-preview" hidden>
+            <header class="file-preview-header"><button class="detail-back" id="file-preview-back" type="button">← 결과만 보기</button><h2 id="file-preview-title"></h2><a class="button secondary" id="file-preview-open" target="_blank" rel="noopener">PDF 열기 ↗</a></header>
+            <div class="file-pages" id="file-preview-pages" role="region" aria-label="시험지 페이지 스크롤" tabindex="0"></div>
+          </div>
+          <div class="detail-content" id="detail-content" hidden>
+            <header class="detail-header">
+              <button class="detail-back" id="mobile-back" type="button">← 검색 결과</button>
+              <div class="detail-title"><h2 id="detail-heading"></h2><p id="detail-subheading"></p></div>
+              <nav class="question-nav" aria-label="검색 결과 문항 이동">
+                <button class="nav-button" id="previous-question" type="button" aria-label="이전 문항" aria-keyshortcuts="ArrowLeft ArrowUp" title="이전 문항 (← 또는 ↑)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+                <span class="nav-position" id="nav-position" aria-live="polite"></span>
+                <button class="nav-button" id="next-question" type="button" aria-label="다음 문항" aria-keyshortcuts="ArrowRight ArrowDown" title="다음 문항 (→ 또는 ↓)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+              </nav>
+              <a class="button secondary pdf-link" id="open-pdf" target="_blank" rel="noopener">시험지 PDF 열기 ↗</a>
+            </header>
+            <div class="detail-scroll">
+              <section class="source-section" aria-label="문항 원본 이미지">
+                <div class="section-bar"><strong>문항 원본</strong><span>이미지를 누르면 확대할 수 있습니다</span></div>
+                <button id="source-image-link" class="source-image-link" type="button" aria-label="문항 이미지 확대해서 보기"><img id="source-image" alt="" /><span class="zoom-hint">확대해서 보기</span></button>
+                <p class="source-note" id="source-note"></p>
+              </section>
+              <div class="detail-support">
+                <div class="metadata-strip"><span class="metadata-label">단원·태그</span><div id="tag-list" class="tag-list"></div></div>
+                <details class="curriculum-disclosure" id="curriculum-disclosure"><summary><span>교육과정·성취기준 보기</span><span id="standards-count" class="standards-count"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="curriculum-body"><span id="confidence-badge" class="confidence-badge"></span><div id="curriculum-content"></div></div></details>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog class="image-viewer" id="image-viewer" aria-labelledby="viewer-title">
+      <div class="viewer-shell">
+        <div class="viewer-toolbar"><strong id="viewer-title">문항 이미지</strong><div class="viewer-controls"><button class="nav-button" id="zoom-out" type="button" aria-label="축소">−</button><span id="zoom-level" aria-live="polite">100%</span><button class="nav-button" id="zoom-in" type="button" aria-label="확대">+</button><a id="viewer-original" target="_blank" rel="noopener">이미지 원본 열기 ↗</a><button class="nav-button" id="close-viewer" type="button" aria-label="확대 보기 닫기">×</button></div></div>
+        <div class="viewer-stage" id="viewer-stage"><img id="viewer-image" alt="" /></div>
+      </div>
+    </dialog>
+  </body>
+</html>

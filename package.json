@@ -1,0 +1,12 @@
+{
+  "name": "exam-search-public",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test_search.mjs",
+    "qa": "node qa.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
