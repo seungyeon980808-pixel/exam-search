@@ -1,4 +1,6 @@
 import * as pdfjs from './vendor/pdfjs/pdf.mjs';
+import { driveFilePath } from './data.mjs';
+import { downloadDriveFile } from './drive-source.mjs';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).href;
 
@@ -10,10 +12,10 @@ const options = {
 };
 
 function openPdf(name) {
-  const url = new URL(`./pdfs/${encodeURIComponent(name)}`, import.meta.url).href;
   if (!documentCache.has(name)) {
     documentCache.clear();
-    const promise = pdfjs.getDocument({ url, ...options }).promise;
+    const promise = downloadDriveFile(driveFilePath(name))
+      .then((bytes) => pdfjs.getDocument({ data: new Uint8Array(bytes), ...options }).promise);
     documentCache.set(name, promise);
     promise.catch(() => documentCache.delete(name));
   }

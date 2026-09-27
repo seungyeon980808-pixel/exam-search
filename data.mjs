@@ -1,6 +1,7 @@
 import { catalogFiles, prepareQuestions, searchFiles, searchQuestions } from './search.mjs';
 
 let catalogPromise;
+let publicPaths = new Map();
 
 async function catalog() {
   if (!catalogPromise) {
@@ -10,12 +11,17 @@ async function catalog() {
       return response.json();
     })).then(([index, sourceFiles, synonyms]) => {
       const questions = prepareQuestions(index.items, synonyms.map || {});
+      publicPaths = new Map(sourceFiles.map((file) => [file.pdfFile, file.publicPath]));
       return { index, questions, files: catalogFiles(sourceFiles.map((file) => file.pdfFile), questions),
         pageCounts: new Map(sourceFiles.map((file) => [file.pdfFile, file.pageCount])),
         byId: new Map(questions.map((item) => [item.id, item])) };
     });
   }
   return catalogPromise;
+}
+
+export function driveFilePath(name) {
+  return publicPaths.get(name) || '';
 }
 
 export async function getJson(path) {

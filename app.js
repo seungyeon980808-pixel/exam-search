@@ -1,4 +1,5 @@
-import { getJson } from './data.mjs';
+import { driveFilePath, getJson } from './data.mjs';
+import { driveLink } from './drive-source.mjs';
 import { renderFilePages, renderQuestion } from './pdf-viewer.mjs';
 
 const $ = (selector) => document.querySelector(selector);
@@ -209,7 +210,9 @@ function fileRowFor(item) {
   text.append(name, exam, count);
   const open = document.createElement('a');
   open.className = 'file-open';
-  open.href = `./pdfs/${encodeURIComponent(item.pdfFile)}#page=${item.firstMatchPage || 1}`;
+  const href = driveLink(driveFilePath(item.pdfFile));
+  open.href = href ? `${href}#page=${item.firstMatchPage || 1}` : '';
+  open.hidden = !href;
   open.target = '_blank';
   open.rel = 'noopener';
   open.textContent = 'PDF 열기 ↗';
@@ -224,17 +227,19 @@ async function selectFile(item) {
   for (const row of list.querySelectorAll('.file-row')) {
     row.setAttribute('aria-current', String(row.dataset.file === item.pdfFile));
   }
-  const href = `./pdfs/${encodeURIComponent(item.pdfFile)}#page=${item.firstMatchPage || 1}`;
+  const href = driveLink(driveFilePath(item.pdfFile));
   $('#file-preview-title').textContent = item.pdfFile;
-  $('#file-preview-open').href = href;
+  $('#file-preview-open').href = href ? `${href}#page=${item.firstMatchPage || 1}` : '';
+  $('#file-preview-open').hidden = !href;
   $('#detail-empty').hidden = true;
   $('#detail-content').hidden = true;
   $('#file-preview').hidden = false;
   const pages = $('#file-preview-pages');
   pages.textContent = '시험지 페이지를 불러오는 중…';
   setFilePreviewMode(true);
+  stopFileRendering?.();
+  stopFileRendering = null;
   try {
-    stopFileRendering?.();
     stopFileRendering = await renderFilePages(item.pdfFile, pages, item.firstMatchPage || 1,
       () => fileRequestId === state.fileRequestId);
   } catch (error) {
@@ -392,7 +397,9 @@ async function selectQuestion(id, openDetail = true) {
     $('#detail-content').hidden = false;
     $('#detail-heading').textContent = `${item.subjectLabel} ${item.no}번`;
     $('#detail-subheading').textContent = `${item.exam} · ${item.page}쪽`;
-    $('#open-pdf').href = `./pdfs/${encodeURIComponent(item.pdfFile)}#page=${item.page}`;
+    const href = driveLink(driveFilePath(item.pdfFile));
+    $('#open-pdf').href = href ? `${href}#page=${item.page}` : '';
+    $('#open-pdf').hidden = !href;
     const imageUrl = `./cards/${encodeURIComponent(id)}.webp`;
     const imageLink = $('#source-image-link');
     imageLink.classList.add('is-loading');
@@ -409,10 +416,13 @@ async function selectQuestion(id, openDetail = true) {
       if (activeQuestionObjectUrl) URL.revokeObjectURL(activeQuestionObjectUrl);
       activeQuestionObjectUrl = highResolutionUrl;
       image.src = highResolutionUrl;
-    }).catch(() => {
-      if (selectionRequestId === state.selectionRequestId) setHelp('고해상도 미리보기를 만들 수 없어 카드 이미지를 표시합니다.', true);
+    }).catch((error) => {
+      if (selectionRequestId === state.selectionRequestId) {
+        $('#source-note').textContent = `${error.message} 카드 이미지는 계속 볼 수 있습니다.`;
+        setHelp(error.message, true);
+      }
     });
-    $('#source-note').textContent = `${item.pdfFile} · ${item.page}쪽에서 추출한 이미지입니다. 수식과 그림은 PDF 원본에서 대조하세요.`;
+    $('#source-note').textContent = `${item.pdfFile} · ${item.page}쪽 원본입니다. 수식과 그림은 PDF에서 대조하세요.`;
     const tagList = $('#tag-list');
     tagList.replaceChildren();
     const names = [...new Set([...(item.parts || []), ...(item.tags || [])])];

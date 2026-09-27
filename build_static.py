@@ -32,6 +32,12 @@ class Question(TypedDict):
     displayBox: NotRequired[list[float]]
 
 
+class MissingPublicPathError(RuntimeError):
+    def __init__(self, filename: str) -> None:
+        self.filename = filename
+        super().__init__(f"공개 공유 폴더의 시험지 경로가 없습니다: {filename}")
+
+
 def content_bottom(page: pymupdf.Page, box: list[float]) -> float:
     """Mirror the local preview's 72-dpi ink threshold and five-point pad."""
     clip = pymupdf.Rect(*box)
@@ -88,7 +94,6 @@ def build_file(
                 )
                 save_webp(pix, card, 78)
         page_count = len(doc)
-    shutil.copy2(path, output_dir / "pdfs" / path.name)
     return path.name, page_count, items
 
 
@@ -97,8 +102,15 @@ def build(
     index_path: Path,
     output_dir: Path,
     synonyms_path: Path,
+    public_pack_path: Path,
     limit_files: int = 0,
 ) -> None:
+    pack = json.loads(public_pack_path.read_text(encoding="utf-8"))
+    public_paths = {
+        Path(path).name: path
+        for path in pack["paths"]["documents"]
+        if path.startswith("기출문제/") and PDF_NAME.fullmatch(Path(path).name)
+    }
     index = json.loads(index_path.read_text(encoding="utf-8"))
     source_files = sorted(
         path
@@ -107,6 +119,9 @@ def build(
     )
     if limit_files:
         source_files = source_files[:limit_files]
+    for path in source_files:
+        if path.name not in public_paths:
+            raise MissingPublicPathError(path.name)
     allowed = {path.name for path in source_files}
     questions: list[Question] = [
         item for item in index["items"] if item["pdfFile"] in allowed
@@ -115,7 +130,7 @@ def build(
     for item in questions:
         by_file[item["pdfFile"]].append(item)
 
-    for folder in ("data", "pdfs", "cards", "thumbnails"):
+    for folder in ("data", "cards", "thumbnails"):
         (output_dir / folder).mkdir(parents=True, exist_ok=True)
     files: list[dict[str, str | int]] = []
     with ProcessPoolExecutor(max_workers=6) as pool:
@@ -126,7 +141,8 @@ def build(
         for number, future in enumerate(as_completed(futures), 1):
             name, page_count, completed_items = future.result()
             if page_count:
-                files.append({"pdfFile": name, "pageCount": page_count})
+                files.append({"pdfFile": name, "pageCount": page_count,
+                              "publicPath": public_paths[name]})
             else:
                 typer.echo(f"Skipped unreadable PDF: {name}", err=True)
             by_file[name] = completed_items
@@ -155,10 +171,11 @@ def main(
     pdf_dir: Annotated[Path, typer.Option(exists=True, file_okay=False)],
     index: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
     synonyms: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
+    public_pack: Annotated[Path, typer.Option(exists=True, dir_okay=False)],
     output: Annotated[Path, typer.Option()] = SCRIPT_DIR,
     limit_files: Annotated[int, typer.Option(min=0)] = 0,
 ) -> None:
-    build(pdf_dir, index, output, synonyms, limit_files)
+    build(pdf_dir, index, output, synonyms, public_pack, limit_files)
 
 
 if __name__ == "__main__":
