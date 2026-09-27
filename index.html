@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="평가원 과학탐구 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
     <title>기출 탐색기</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=editable-2" />
     <script src="./app.js" type="module"></script>
   </head>
   <body>
@@ -65,7 +65,7 @@
             </header>
             <div class="detail-scroll">
               <section class="source-section" aria-label="문항 원본 이미지">
-                <div class="section-bar"><strong>문항 원본</strong><span>이미지를 누르면 확대할 수 있습니다</span></div>
+                <div class="section-bar"><strong>문항 원본</strong><button class="button secondary editable-open" id="open-editable" type="button">한글 문서에서 보기</button></div>
                 <button id="source-image-link" class="source-image-link" type="button" aria-label="문항 이미지 확대해서 보기"><img id="source-image" alt="" /><span class="zoom-hint">확대해서 보기</span></button>
                 <p class="source-note" id="source-note"></p>
               </section>
@@ -82,6 +82,16 @@
       <div class="viewer-shell">
         <div class="viewer-toolbar"><strong id="viewer-title">문항 이미지</strong><div class="viewer-controls"><button class="nav-button" id="zoom-out" type="button" aria-label="축소">−</button><span id="zoom-level" aria-live="polite">100%</span><button class="nav-button" id="zoom-in" type="button" aria-label="확대">+</button><a id="viewer-original" target="_blank" rel="noopener">이미지 원본 열기 ↗</a><button class="nav-button" id="close-viewer" type="button" aria-label="확대 보기 닫기">×</button></div></div>
         <div class="viewer-stage" id="viewer-stage"><img id="viewer-image" alt="" /></div>
+      </div>
+    </dialog>
+    <dialog class="editable-dialog" id="editable-dialog" aria-labelledby="editable-title">
+      <div class="editable-shell">
+        <header class="editable-toolbar">
+          <strong id="editable-title">편집 문서</strong>
+          <div class="editable-actions"><button class="button primary" id="editable-download" type="button" disabled>HWPX 내려받기</button><button class="button secondary" id="editable-close" type="button">닫기</button></div>
+        </header>
+        <p class="editable-status" id="editable-status" role="status" aria-live="polite"></p>
+        <div class="editable-host" id="editable-host"></div>
       </div>
     </dialog>
   </body>

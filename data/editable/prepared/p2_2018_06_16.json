@@ -1,0 +1,92 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p2_2018_06_16",
+  "title": "2018학년도 6월 모평 물리학Ⅱ 16번",
+  "number": 16,
+  "sourcePdf": "p2_2018_06.pdf",
+  "sourceSha256": "49a193a2462f1024bb367c283e219da746d4acfd03e12207afdc7989fc801681",
+  "page": 3,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "그림과같이슬릿에단색광을비추었더니스크린에간섭무늬가 생겼다. 이웃한밝은무늬의간격은Dx이다. 표는이중슬릿의 간격d 를일정하게하고, 단색광의파장l 와이중슬릿에서 스크린까지의거리L 을바꿀때의Dx를나타낸것이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "lå, l∫, lç를비교한것으로옳은것은?",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "①",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "lå >l∫>lç",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "②",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "l∫>lå >lç",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "③",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "l∫>lç >lå",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "④",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "lç >lå >l∫",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "⑤",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "lç >l∫>lå",
+          "script": ""
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}

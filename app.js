@@ -1,6 +1,7 @@
 import { driveFilePath, getJson } from './data.mjs';
 import { driveLink } from './drive-source.mjs';
 import { renderFilePages, renderQuestion } from './pdf-viewer.mjs';
+import { openEditable } from './editable-editor.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const shell = $('.app-shell');
@@ -606,6 +607,9 @@ $('#file-preview-back').addEventListener('click', () => {
 $('#previous-question').addEventListener('click', () => navigateQuestion(-1));
 $('#next-question').addEventListener('click', () => navigateQuestion(1));
 $('#source-image-link').addEventListener('click', openViewer);
+$('#open-editable').addEventListener('click', () => {
+  if (state.selectedId) void openEditable(state.selectedId, $('#detail-heading').textContent);
+});
 $('#close-viewer').addEventListener('click', () => viewer.close());
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - 25));
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + 25));
@@ -623,7 +627,7 @@ window.addEventListener('keydown', (event) => {
     previewToggle.focus();
     return;
   }
-  if (event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable="true"], dialog')) return;
+  if ($('#editable-dialog').open || event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable="true"], dialog')) return;
   if (state.mode === 'files') return;
   const direction = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[event.key];
   if (!direction) return;

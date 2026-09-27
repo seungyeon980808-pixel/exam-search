@@ -11,6 +11,8 @@
 - `search.mjs`: 5E 로컬 검색 규칙을 브라우저용으로 옮긴 코드
 - `drive-source.mjs`: 5E 공개 게이트웨이를 통해 원본 PDF를 가져옴
 - `pdf-viewer.mjs`: 받은 PDF 바이트를 PDF.js로 문항과 스크롤 가능한 시험지 페이지에 렌더링
+- `data/editable/`: 대표 문항의 구조화 초안과 편집 가능한 HWPX, 지원 여부 목록
+- `editable-editor.mjs`: 문항 화면에서 rhwp 편집기를 열고 수정본을 내려받는 기능
 
 `build_static.py`는 로컬 색인·PDF 폴더·공유 폴더의 `pack.json`을 입력받아 배포 파일을 다시 생성합니다. 공유 폴더에 경로가 없는 시험지는 빌드가 실패합니다. 개인 Google Drive 경로와 PDF 원본은 저장소에 기록하지 않습니다.
 
@@ -31,6 +33,27 @@ npm run qa
 ```
 
 `npm run qa`는 공개 게이트웨이에서 실제 PDF를 읽으므로 로컬 PDF가 필요하지 않습니다. 네트워크 없이 화면을 점검하려면 `EXAM_PDF_DIR="/path/to/PDF-folder" npm run qa`로 로컬 PDF를 모의 응답에 사용합니다.
+
+## 편집 가능한 문항 초안
+
+문항 원본에서 `한글 문서에서 보기`를 누르면 준비된 HWPX를 rhwp로 열 수 있습니다. 본문·발문·<보기>·선지를 수정하고 `HWPX 내려받기`로 별도 파일을 저장합니다. 수식은 HWPX의 편집 가능한 수식 개체이며, 그림·도표는 현재 변환 대상에서 제외됩니다. PDF 원본과 검색 자료는 변경되지 않습니다.
+
+현재 첫 검증 묶음은 물리학Ⅱ 5문항입니다. `p2_2018_06_06`은 분수 수식 3개를 포함합니다. `p2_2018_06_15`는 ExamPool의 문항 행 구분이 실패해 편집본을 제공하지 않으며, 버튼을 누르면 실패 이유를 보여줍니다. 나머지 문항도 모두 `원본 대조 필요` 초안이며, PDF의 글꼴 인코딩에 따라 띄어쓰기·기호·문장 순서가 틀릴 수 있습니다. 원본을 확인하기 전에는 완성된 문항으로 사용하지 마세요.
+
+추가 문항은 원본 PDF가 있는 로컬 환경에서 생성합니다. PDF와 ExamPool 소스는 이 저장소에 복사하지 않습니다.
+
+```bash
+UV_CACHE_DIR=/path/to/uv-cache uv run --no-project --python 3.12 \
+  --with pymupdf==1.28.0 --with 'pydantic>=2' --with 'fonttools>=4.63' \
+  --with pillow --with olefile \
+  python tools/build_editable.py \
+  --exampool-root /path/to/ExamPool \
+  --pdf-root /path/to/exam-search-public/pdfs \
+  p2_2018_06_06
+node tools/render_editable.mjs --rhwp-core /path/to/5E/manual-library/vendor/rhwp-core
+```
+
+`vendor/rhwp-editor`와 `vendor/rhwp-studio`는 5E에서 이미 사용하던 rhwp 0.8.6 편집기 정적 자산을 재사용합니다. 편집기는 사이트에서 직접 제공하므로 방문자가 별도 앱을 설치하거나 외부 편집기 페이지에 접속할 필요가 없습니다.
 
 ## 공개 Google Drive 원본
 

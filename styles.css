@@ -190,6 +190,7 @@ a { color: var(--accent); }
 .section-bar { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
 .section-bar strong { font-size: var(--text-md); }
 .section-bar span { color: var(--muted); font-size: var(--text-sm); word-break: keep-all; }
+.section-bar .editable-open { min-height: var(--control-height); padding-inline: var(--space-3); font-size: var(--text-sm); }
 .source-image-link { display: block; position: relative; width: 100%; margin: auto; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--paper); box-shadow: var(--paper-shadow); cursor: zoom-in; }
 .source-image-link img { display: block; width: 100%; height: auto; }
 .source-image-link.is-loading { min-height: 240px; }
@@ -226,6 +227,18 @@ a { color: var(--accent); }
 #zoom-level { min-width: 48px; text-align: center; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .viewer-stage { min-height: 0; overflow: auto; padding: var(--space-4); background: var(--app); }
 .viewer-stage img { display: block; width: var(--viewer-width, 100%); max-width: none; height: auto; margin: 0 auto; background: var(--paper); }
+.editable-dialog { width: min(96vw, 1600px); height: 94dvh; max-width: none; max-height: none; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--app); box-shadow: var(--paper-shadow); }
+.editable-dialog::backdrop { background: var(--viewer-backdrop); }
+.editable-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; }
+.editable-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: 64px; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); background: var(--panel); }
+.editable-toolbar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editable-actions { display: flex; gap: var(--space-2); flex: none; }
+.editable-status { margin: 0; padding: var(--space-2) var(--space-4); color: var(--warning); background: var(--panel-soft); font-size: var(--text-sm); word-break: keep-all; }
+.editable-status.is-error { color: var(--danger); }
+.editable-host { min-height: 0; overflow: hidden; }
+.editable-dialog.is-unavailable { height: max-content; max-height: 80dvh; }
+.editable-dialog.is-unavailable .editable-shell { display: block; height: auto; }
+.editable-dialog.is-unavailable .editable-host { display: none; }
 
 @media (min-width: 901px) and (max-width: 1200px) {
   .app-shell.is-split .detail-back, .app-shell.is-file-preview .file-preview-header .detail-back { display: none; }
@@ -283,6 +296,10 @@ a { color: var(--accent); }
 }
 
 @media (max-width: 560px) {
+  .editable-dialog { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
+  .editable-toolbar { gap: var(--space-2); padding-inline: var(--space-2); }
+  .editable-toolbar strong { font-size: var(--text-sm); }
+  .editable-actions .button { min-height: var(--control-height); padding-inline: var(--space-2); font-size: var(--text-sm); }
   .topbar-actions { gap: var(--space-2); }
   .source-status { display: none; }
   .index-issues summary { padding: 0 var(--space-2); }

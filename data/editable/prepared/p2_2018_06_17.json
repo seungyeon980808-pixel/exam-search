@@ -1,0 +1,125 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p2_2018_06_17",
+  "title": "2018학년도 6월 모평 물리학Ⅱ 17번",
+  "number": 17,
+  "sourcePdf": "p2_2018_06.pdf",
+  "sourceSha256": "49a193a2462f1024bb367c283e219da746d4acfd03e12207afdc7989fc801681",
+  "page": 4,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "그림(가)와같이단색광이공기에서반원형매질A로입사하여 2개의경계면에서굴절한뒤공기로진행한다. 매질B로입사할때입사각은qº이고, 단색광이A에서 굴절각은q¡이다. B에서공기로굴절할때 그림(나)는(가)에서B를매질C로바꾸었을 공기로굴절할때굴절각은q™이다. 때(가)의단색광이진행하는경로를나타낸것이고, C 에서 (가) (나)",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "이에대한설명으로옳은것만을<보기>에서있는대로고른 것은? [3점]",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄱ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "굴절률은A가B보다작다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄴ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "단색광의속력은B에서가C에서보다작다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄷ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "q¡ >q™이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "①",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "②",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄴ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "③",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄷ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "④",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄴ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "⑤",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄷ",
+          "script": ""
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}

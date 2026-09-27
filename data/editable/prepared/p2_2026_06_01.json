@@ -1,0 +1,103 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p2_2026_06_01",
+  "title": "2026학년도 6월 모평 물리학Ⅱ 1번",
+  "number": 1,
+  "sourcePdf": "p2_2026_06.pdf",
+  "sourceSha256": "26df04f36bde6b651c8c19708c543ad49b115d529db90c1c430a783e873f0a61",
+  "page": 1,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "다음은 어떤 천체와 관련된 설명이다. 질량이 매우 크고 지름이 매우 작아 탈출 속력이 빛의 속력보다 커서 내부의 빛조차 빠져나가지 못하는 천체를 ㉠ 이라고 한다. 별에서 나온 빛이 ㉠ 주변을 지나면 빛이 휘어져 별의 상이 여러 개로 보일 수 있는데 이러한 현상은 ㉡ 의 한 예이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "material",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "㉠ ㉡",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "㉠, ㉡으로 가장 적절한 것은?",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "①",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "블랙홀 전자기 유도",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "②",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "태양 전자기 유도",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "③",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "블랙홀 중력 렌즈 효과",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "④",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "태양 중력 렌즈 효과",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "⑤",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "블랙홀 상호 유도",
+          "script": ""
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}
