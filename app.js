@@ -31,6 +31,7 @@ const initialParams = new URLSearchParams(location.search);
 let initialSelectionPending = true;
 let activeQuestionObjectUrl = null;
 let stopFileRendering = null;
+let selectedQuestion = null;
 
 function setHelp(message, error = false) {
   help.textContent = message;
@@ -124,6 +125,7 @@ function setFilePreviewMode(open) {
 function setResultMode(mode) {
   if (state.mode === mode) return;
   state.mode = mode;
+  selectedQuestion = null;
   state.requestId += 1;
   state.selectionRequestId += 1;
   state.fileRequestId += 1;
@@ -384,6 +386,7 @@ async function selectQuestion(id, openDetail = true) {
     const item = await getJson(`/api/question?id=${encodeURIComponent(id)}`);
     if (selectionRequestId !== state.selectionRequestId) return;
     state.selectedId = id;
+    selectedQuestion = item;
     let selectedCard;
     for (const [index, card] of [...list.querySelectorAll('.result-card')].entries()) {
       const selected = card.dataset.id === id;
@@ -606,14 +609,17 @@ $('#file-preview-back').addEventListener('click', () => {
 });
 $('#previous-question').addEventListener('click', () => navigateQuestion(-1));
 $('#next-question').addEventListener('click', () => navigateQuestion(1));
-$('#source-image-link').addEventListener('click', openViewer);
+$('#source-image-link').addEventListener('click', () => {
+  if (selectedQuestion) void openEditable(selectedQuestion);
+});
+$('#open-viewer').addEventListener('click', openViewer);
 $('#open-editable').addEventListener('click', () => {
-  if (state.selectedId) void openEditable(state.selectedId, $('#detail-heading').textContent);
+  if (selectedQuestion) void openEditable(selectedQuestion);
 });
 $('#close-viewer').addEventListener('click', () => viewer.close());
 $('#zoom-out').addEventListener('click', () => setZoom(state.zoom - 25));
 $('#zoom-in').addEventListener('click', () => setZoom(state.zoom + 25));
-viewer.addEventListener('close', () => $('#source-image-link').focus());
+viewer.addEventListener('close', () => $('#open-viewer').focus());
 window.addEventListener('keydown', (event) => {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
   if (event.key === 'Escape' && shell.classList.contains('is-split') && !viewer.open) {

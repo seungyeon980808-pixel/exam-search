@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test_search.mjs test_drive_source.mjs",
-    "qa": "node qa.mjs"
+    "test": "node --test test_search.mjs test_drive_source.mjs test_editable_convert.mjs",
+    "qa": "node qa.mjs",
+    "qa:editable": "node qa_editable.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

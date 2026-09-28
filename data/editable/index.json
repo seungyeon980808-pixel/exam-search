@@ -2,12 +2,19 @@
   "schema": "exam-editable-index-v1",
   "generator": "ExamPool PDF text and equation pipeline",
   "items": {
+    "p1_2027_06_06": {
+      "status": "needs_review",
+      "source": "./data/editable/prepared/p1_2027_06_06.json",
+      "file": "./data/editable/p1_2027_06_06.hwpx"
+    },
     "p2_2018_06_03": {
       "status": "needs_review",
+      "source": "./data/editable/prepared/p2_2018_06_03.json",
       "file": "./data/editable/p2_2018_06_03.hwpx"
     },
     "p2_2018_06_06": {
       "status": "needs_review",
+      "source": "./data/editable/prepared/p2_2018_06_06.json",
       "file": "./data/editable/p2_2018_06_06.hwpx"
     },
     "p2_2018_06_15": {
@@ -16,14 +23,17 @@
     },
     "p2_2018_06_16": {
       "status": "needs_review",
+      "source": "./data/editable/prepared/p2_2018_06_16.json",
       "file": "./data/editable/p2_2018_06_16.hwpx"
     },
     "p2_2018_06_17": {
       "status": "needs_review",
+      "source": "./data/editable/prepared/p2_2018_06_17.json",
       "file": "./data/editable/p2_2018_06_17.hwpx"
     },
     "p2_2026_06_01": {
       "status": "needs_review",
+      "source": "./data/editable/prepared/p2_2026_06_01.json",
       "file": "./data/editable/p2_2026_06_01.hwpx"
     }
   }

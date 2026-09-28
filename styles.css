@@ -191,7 +191,8 @@ a { color: var(--accent); }
 .section-bar strong { font-size: var(--text-md); }
 .section-bar span { color: var(--muted); font-size: var(--text-sm); word-break: keep-all; }
 .section-bar .editable-open { min-height: var(--control-height); padding-inline: var(--space-3); font-size: var(--text-sm); }
-.source-image-link { display: block; position: relative; width: 100%; margin: auto; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--paper); box-shadow: var(--paper-shadow); cursor: zoom-in; }
+.source-image-link { display: block; position: relative; width: 100%; margin: auto; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--paper); box-shadow: var(--paper-shadow); cursor: pointer; }
+.source-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .source-image-link img { display: block; width: 100%; height: auto; }
 .source-image-link.is-loading { min-height: 240px; }
 .zoom-hint { position: absolute; inset-block-start: var(--space-4); inset-inline-end: var(--space-4); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--panel); background: var(--viewer-backdrop); font-size: var(--text-sm); opacity: 0; transition: opacity var(--motion-fast) ease; }

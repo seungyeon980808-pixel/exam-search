@@ -55,40 +55,57 @@ async function syncDirty() {
   }
 }
 
-export async function openEditable(questionId, title) {
+export async function openEditable(question) {
   if (dirty && !window.confirm('내려받지 않은 수정 내용이 있습니다. 다른 문항을 열까요?')) return;
+  const questionId = question.id;
   currentId = questionId;
   dirty = false;
   savedSha = '';
   loading = true;
   download.disabled = true;
   dialog.classList.remove('is-unavailable');
-  document.querySelector('#editable-title').textContent = title;
-  setStatus('편집 문서 상태를 확인하는 중입니다.');
+  document.querySelector('#editable-title').textContent = `${question.subjectLabel} ${question.no}번`;
+  setStatus('편집 가능한 문서를 준비하는 중입니다.');
   if (!dialog.open) dialog.showModal();
   try {
-    const entry = (await entries())[questionId];
-    if (!entry || entry.status !== 'needs_review' || !entry.file) {
-      dialog.classList.add('is-unavailable');
-      setStatus(entry?.reason || '이 문항의 편집 문서는 아직 준비되지 않았습니다.', true);
-      return;
+    if (location.protocol === 'file:') {
+      throw new Error('rhwp 편집기는 파일 직접 열기에서 실행되지 않습니다. 공개 사이트 링크 또는 로컬 웹 서버로 접속해 주세요.');
     }
-    setStatus('rhwp 편집기를 불러오는 중입니다.');
-    const [instance, response] = await Promise.all([
-      prepareEditor(), fetch(new URL(entry.file, location.href)),
+    const entry = (await entries())[questionId];
+    if (entry?.status === 'unavailable') {
+      throw new Error(entry.reason || '이 문항은 편집본을 안전하게 만들 수 없습니다.');
+    }
+    const preparedSource = entry?.status === 'needs_review' && entry.source;
+    const preparedFile = entry?.status === 'needs_review' && entry.file;
+    const prepared = preparedSource || preparedFile;
+    setStatus(prepared ? '저장된 편집본과 rhwp를 불러오는 중입니다.' : '색인 텍스트를 편집 가능한 HWPX로 변환하는 중입니다.');
+    const [instance, bytes] = await Promise.all([
+      prepareEditor(),
+      preparedSource
+        ? fetch(new URL(preparedSource, location.href)).then(async (response) => {
+          if (!response.ok) throw new Error('문항의 편집 데이터를 불러오지 못했습니다.');
+          const questionData = await response.json();
+          return import('./editable-convert.mjs').then(({ createPreparedHwpx }) => createPreparedHwpx(questionData));
+        })
+        : preparedFile ? fetch(new URL(preparedFile, location.href)).then(async (response) => {
+          if (!response.ok) throw new Error('문항의 HWPX 파일을 불러오지 못했습니다.');
+          return new Uint8Array(await response.arrayBuffer());
+        })
+        : import('./editable-convert.mjs').then(({ createEditableHwpx }) => createEditableHwpx(question)),
     ]);
-    if (!response.ok) throw new Error('문항의 HWPX 파일을 불러오지 못했습니다.');
-    const bytes = new Uint8Array(await response.arrayBuffer());
     await instance.loadFile(bytes, `${questionId}.hwpx`, {
       skipUnsavedGuard: true, suppressDialogs: true,
     });
     savedSha = (await instance.getDocumentState()).documentSha256;
     dirty = false;
     download.disabled = false;
-    setStatus('PDF에서 자동 추출한 초안입니다. 그림은 생략됐으며, 원본과 문장·수식을 대조한 뒤 사용하세요.');
+    setStatus(prepared
+      ? 'PDF 원본 기반 편집 초안입니다. 그림은 생략됐으며, 원본과 문장·수식을 대조한 뒤 사용하세요.'
+      : '색인 텍스트로 현장에서 만든 편집 초안입니다. 그림은 생략됐고 수식·선지·문장 순서가 틀릴 수 있으니 원본과 대조하세요.');
     window.clearInterval(dirtyTimer);
     dirtyTimer = window.setInterval(() => { syncDirty().catch(() => {}); }, 1200);
   } catch (error) {
+    dialog.classList.add('is-unavailable');
     setStatus(error instanceof Error ? error.message : '편집 문서를 열지 못했습니다.', true);
   } finally {
     loading = false;
