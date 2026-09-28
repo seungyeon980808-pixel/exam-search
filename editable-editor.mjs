@@ -3,6 +3,7 @@ import { driveLink } from './drive-source.mjs';
 import { editableEntries, resolveEditableContent } from './editable-source.mjs';
 import { createEditableBatch } from './editable-batch.mjs';
 import { createPreparedHwpx, createCollectionHwpx } from './editable-convert.mjs';
+import { renderQuestion } from './pdf-viewer.mjs';
 
 const dialog = document.querySelector('#editable-dialog');
 const host = document.querySelector('#editable-host');
@@ -14,12 +15,18 @@ const list = document.querySelector('#editable-items');
 const sources = document.querySelector('#editable-sources');
 const retry = document.querySelector('#editable-retry');
 const partial = document.querySelector('#editable-partial');
+const content = document.querySelector('#editable-content');
+const reference = document.querySelector('#editable-reference');
+const referenceImage = document.querySelector('#editable-reference-image');
+const referenceMessage = document.querySelector('#editable-reference-message');
+const referenceScroll = document.querySelector('#editable-reference-scroll');
 let editorPromise;
 let editor;
 let session;
 let intent = 0;
 let loadQueue = Promise.resolve();
 let dirtyTimer;
+let referenceUrl;
 
 const active = (value) => session === value && dialog.open;
 const ready = (item) => item.status === 'ready' || item.status === 'draft';
@@ -30,6 +37,33 @@ function setStatus(message, isError = false) {
 function pdfHref(question) {
   const href = driveLink(driveFilePath(question.pdfFile));
   return href ? `${href}#page=${question.page}` : '';
+}
+function clearReference() {
+  if (referenceUrl) URL.revokeObjectURL(referenceUrl);
+  referenceUrl = null;
+  referenceImage.removeAttribute('src');
+  referenceImage.hidden = true;
+  referenceMessage.textContent = '원본 문항을 불러오는 중입니다.';
+  referenceMessage.hidden = false;
+  referenceScroll.scrollTop = 0;
+  original.removeAttribute('href');
+  original.hidden = true;
+}
+async function showReference(value, question) {
+  try {
+    const url = await renderQuestion(question, 2);
+    if (!active(value)) { URL.revokeObjectURL(url); return; }
+    referenceUrl = url;
+    referenceImage.alt = `${question.exam} ${question.subjectLabel} ${question.no}번 PDF 원본 문항`;
+    referenceImage.src = url;
+    referenceImage.hidden = false;
+    referenceMessage.hidden = true;
+    original.href = url;
+    original.hidden = false;
+  } catch {
+    if (!active(value)) return;
+    referenceMessage.textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
+  }
 }
 function renderItems(value) {
   const labels = { pending: '대기', running: '분석 중', ready: '준비됨', draft: '색인 초안', error: '실패', cancelled: '취소됨' };
@@ -85,14 +119,18 @@ async function begin(title, collection) {
   if (!await allowReplace() || request !== intent) return null;
   session?.batch?.cancel();
   window.clearInterval(dirtyTimer);
+  clearReference();
   const value = { collection, items: [], loaded: false, dirty: false, savedSha: '', batch: null };
   session = value;
   download.disabled = true;
   retry.hidden = partial.hidden = true;
-  original.hidden = pdfLink.hidden = collection;
+  pdfLink.hidden = collection;
+  reference.hidden = collection;
+  content.classList.toggle('has-reference', !collection);
   sources.hidden = !collection;
   sources.open = false;
   host.hidden = true;
+  host.style.visibility = '';
   list.replaceChildren();
   dialog.classList.remove('is-unavailable');
   document.querySelector('#editable-title').textContent = title;
@@ -116,6 +154,13 @@ async function loadDocument(value, bytes, filename) {
       value.filename = filename;
       value.draft = value.items.some((item) => item.status === 'draft');
       host.hidden = false;
+      host.style.visibility = 'hidden';
+      await new Promise((resolve) => window.setTimeout(resolve, 160));
+      if (!active(value)) return;
+      // rhwp는 좁은 임베드에서도 종이를 가운데 정렬한다. 첫 문장이 잘리지 않도록 왼쪽부터 연다.
+      const editorScroll = instance.element.contentDocument?.getElementById('scroll-container');
+      if (editorScroll) editorScroll.scrollLeft = 0;
+      host.style.visibility = '';
       download.disabled = false;
       retry.hidden = partial.hidden = true;
       renderItems(value);
@@ -140,8 +185,7 @@ function fail(value, error) {
 export async function openEditable(question) {
   const value = await begin(`${question.subjectLabel} ${question.no}번`, false);
   if (!value) return;
-  original.href = `./cards/${encodeURIComponent(question.id)}.webp`;
-  original.hidden = false;
+  void showReference(value, question);
   pdfLink.href = pdfHref(question);
   pdfLink.hidden = !pdfHref(question);
   try {
@@ -217,6 +261,7 @@ async function requestClose() {
   session?.batch?.cancel();
   session = null;
   window.clearInterval(dirtyTimer);
+  clearReference();
   download.disabled = true;
   dialog.close();
 }

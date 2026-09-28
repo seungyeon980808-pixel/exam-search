@@ -106,7 +106,13 @@
           <button class="button secondary" id="editable-retry" type="button" hidden>실패 문항 재시도</button>
           <button class="button primary" id="editable-partial" type="button" hidden>성공한 문항만 열기</button>
         </div>
-        <div class="editable-host" id="editable-host"></div>
+        <div class="editable-content" id="editable-content">
+          <section class="editable-reference" id="editable-reference" aria-label="원본 문항 이미지" hidden>
+            <div class="editable-reference-heading"><strong>원본 문항</strong><span>PDF 원본과 편집본을 비교하세요</span></div>
+            <div class="editable-reference-scroll" id="editable-reference-scroll"><img id="editable-reference-image" alt="" hidden /><p id="editable-reference-message" role="status">원본 문항을 불러오는 중입니다.</p></div>
+          </section>
+          <div class="editable-host" id="editable-host"></div>
+        </div>
       </div>
     </dialog>
   </body>
