@@ -943,17 +943,30 @@ async function start() {
   try {
     const status = await getJson('/api/status');
     const issues = status.incomplete.length;
+    const missingPdfs = status.incomplete.filter((issue) => issue.pdfFile);
+    const unverifiedCandidates = status.incomplete.filter((issue) => issue.reason === 'new_candidates_unverified');
     const degraded = status.degradedPdfCount || 0;
     const mismatched = status.curriculumYearMismatchCount || 0;
     $('#source-status').textContent = `${status.pdfCount.toLocaleString('ko-KR')}개 시험지 · ${status.questionCount.toLocaleString('ko-KR')}개 문항`;
     if (issues || degraded || mismatched) {
       $('#index-issues').hidden = false;
       $('#issues-count').textContent = String(issues + degraded + mismatched);
-      $('#issues-description').textContent = `누락 ${issues}개 시험지${degraded ? ` · 본문 글꼴 추출 주의 ${degraded}개` : ''}${mismatched ? ` · 교육과정 연도 불일치 ${mismatched}문항` : ''}`;
+      $('#issues-description').textContent = [
+        missingPdfs.length ? `누락 ${missingPdfs.length}개 시험지` : '',
+        unverifiedCandidates.length ? `확장 문항 검토 필요 ${unverifiedCandidates.reduce((sum, issue) => sum + issue.questionCount, 0).toLocaleString('ko-KR')}개` : '',
+        degraded ? `본문 글꼴 추출 주의 ${degraded}개` : '',
+        mismatched ? `교육과정 연도 불일치 ${mismatched}문항` : '',
+      ].filter(Boolean).join(' · ');
       const issueList = $('#issues-list');
       for (const issue of status.incomplete) {
         const line = document.createElement('li');
-        line.textContent = `${issue.pdfFile}: ${issue.found === 0 ? '문항 추출 불가' : issue.reason || `${issue.missing.length}개 문항 누락`}`;
+        if (issue.reason === 'new_candidates_unverified') {
+          line.textContent = `확장 문항 ${issue.questionCount.toLocaleString('ko-KR')}개는 원본 대조 전이며, ${issue.unreadableQuestionCount.toLocaleString('ko-KR')}개는 본문 검색이 되지 않습니다.`;
+        } else if (issue.pdfFile) {
+          line.textContent = `${issue.pdfFile}: ${issue.found === 0 ? '문항 추출 불가' : issue.reason || `${issue.missing.length}개 문항 누락`}`;
+        } else {
+          line.textContent = issue.reason || '색인 검토 필요';
+        }
         issueList.append(line);
       }
       if (degraded) {
