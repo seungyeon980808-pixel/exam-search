@@ -4,13 +4,14 @@ import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const evidence = '/tmp/exam-search-file-conversion-qa';
+const base = process.env.QA_BASE || 'http://127.0.0.1:8813/';
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   for (const width of [1280, 768, 375]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     page.setDefaultTimeout(120000);
-    await page.goto('http://127.0.0.1:8813/?subject=p1&mode=files&view=split&file=p1_2027_06.pdf');
+    await page.goto(new URL('?subject=p1&mode=files&view=split&file=p1_2027_06.pdf', base).href);
     await page.locator('.file-page-label button').first().waitFor();
     await page.locator('.file-page-canvas[data-rendered="true"]').first().waitFor();
     assert.equal(await page.locator('#file-preview-editable').textContent(), '전체 20문항 한글로');
