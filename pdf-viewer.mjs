@@ -1,9 +1,10 @@
+import './stream-iterator-polyfill.mjs';
 import * as pdfjs from './vendor/pdfjs/pdf.mjs';
 import { driveFilePath } from './data.mjs';
 import { downloadDriveFile } from './drive-source.mjs';
 import { equationTextItems } from './pdf-text-geometry.mjs';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).href;
+pdfjs.GlobalWorkerOptions.workerSrc = new URL('./pdf-worker.mjs', import.meta.url).href;
 
 const documentCache = new Map();
 const byteCache = new Map();

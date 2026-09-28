@@ -27,6 +27,7 @@ let intent = 0;
 let loadQueue = Promise.resolve();
 let dirtyTimer;
 let referenceUrl;
+let referenceUrls = [];
 
 const active = (value) => session === value && dialog.open;
 const ready = (item) => item.status === 'ready' || item.status === 'draft';
@@ -41,6 +42,9 @@ function pdfHref(question) {
 function clearReference() {
   if (referenceUrl) URL.revokeObjectURL(referenceUrl);
   referenceUrl = null;
+  for (const url of referenceUrls) URL.revokeObjectURL(url);
+  referenceUrls = [];
+  for (const figure of referenceScroll.querySelectorAll('.editable-reference-item')) figure.remove();
   referenceImage.removeAttribute('src');
   referenceImage.hidden = true;
   referenceMessage.textContent = '원본 문항을 불러오는 중입니다.';
@@ -63,6 +67,36 @@ async function showReference(value, question) {
   } catch {
     if (!active(value)) return;
     referenceMessage.textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
+  }
+}
+async function showCollectionReference(value, items) {
+  referenceImage.hidden = true;
+  referenceMessage.hidden = true;
+  const slots = items.map((item) => {
+    const figure = document.createElement('figure');
+    figure.className = 'editable-reference-item';
+    const caption = document.createElement('figcaption');
+    caption.textContent = `${item.question.exam} ${item.question.subjectLabel} ${item.question.no}번`;
+    const note = document.createElement('p');
+    note.textContent = '원본 문항을 불러오는 중입니다.';
+    figure.append(caption, note);
+    referenceScroll.append(figure);
+    return { item, figure, note };
+  });
+  for (const { item, figure, note } of slots) {
+    if (!active(value)) return;
+    try {
+      const url = await renderQuestion(item.question, 2);
+      if (!active(value)) { URL.revokeObjectURL(url); return; }
+      referenceUrls.push(url);
+      const image = document.createElement('img');
+      image.alt = `${item.question.exam} ${item.question.subjectLabel} ${item.question.no}번 PDF 원본 문항`;
+      image.src = url;
+      note.replaceWith(image);
+    } catch {
+      if (active(value)) note.textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
+    }
+    if (!figure.isConnected) return;
   }
 }
 function renderItems(value) {
@@ -163,6 +197,7 @@ async function loadDocument(value, bytes, filename) {
       host.style.visibility = '';
       download.disabled = false;
       retry.hidden = partial.hidden = true;
+      if (value.collection) sources.open = false;
       renderItems(value);
       setStatus(value.draft
         ? '원본 PDF 분석에 실패해 색인 텍스트로 만든 편집 초안이 포함되어 있습니다. 수식·선지를 원본 PDF와 확인하세요.'
@@ -219,6 +254,9 @@ async function openResults(value) {
     setStatus(`${included.length}개 문항을 한 문서로 구성하는 중입니다.`);
     const bytes = await createCollectionHwpx(included.map((item) => item.result));
     if (!active(value)) return;
+    reference.hidden = false;
+    content.classList.add('has-reference');
+    void showCollectionReference(value, included.filter((item) => item.question));
     await loadDocument(value, bytes, `선택문항-${included.length}개-${localDate()}.hwpx`);
     if (active(value)) { value.batch.cancel(); value.batch = null; }
   } catch (error) { fail(value, error); }
