@@ -37,7 +37,7 @@ try {
   for (const width of [1280, 768, 375]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     page.on('pageerror', (error) => failures.push(`${width}px JS: ${error.message}`));
-    if (!directPrivate) await page.route('**/data/*.json', async (route) => {
+    if (!directPrivate && !publicDrive) await page.route('**/data/*.json', async (route) => {
       const name = path.basename(new URL(route.request().url()).pathname);
       return route.fulfill({ status: 200, contentType: 'application/json',
         body: await readFile(path.join(preview, 'data', name)) });
