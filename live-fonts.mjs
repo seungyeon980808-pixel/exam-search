@@ -1,0 +1,67 @@
+import { verifyGlyph } from './ttf-glyphs.mjs';
+
+let registryPromise;
+
+function registry() {
+  if (!registryPromise) {
+    registryPromise = fetch(new URL('./data/editable/glyph-proofs.json', import.meta.url))
+      .then(async (response) => {
+        if (!response.ok) throw new Error('수식 글꼴 검증표를 불러오지 못했습니다.');
+        return response.json();
+      }).catch((error) => { registryPromise = null; throw error; });
+  }
+  return registryPromise;
+}
+
+export function inQuestion(item, question, pageHeight) {
+  if (typeof item.str !== 'string' || !item.str.trim() || !item.transform) return false;
+  const [x0, y0, x1, y1] = question.box;
+  const x = item.transform[4];
+  const y = pageHeight - item.transform[5];
+  return x + item.width > x0 && x < x1 && y >= y0 - 3 && y <= y1 + 3;
+}
+
+export async function verifiedGlyphMap(question, pdf) {
+  const needed = new Set();
+  for (const item of pdf.content.items) {
+    if (!inQuestion(item, question, pdf.pageHeight)) continue;
+    for (const char of item.str) {
+      if (/[\uE000-\uF8FF]/u.test(char)) needed.add(`${item.fontName}:${char.codePointAt(0)}`);
+    }
+  }
+  if (!needed.size) return new Map();
+  const { fonts } = await registry();
+  const mapped = new Map();
+  const checked = new Set();
+  const rejected = new Set();
+  for (const glyph of pdf.glyphs) {
+    const key = `${glyph.fontId}:${glyph.codepoint}`;
+    if (!needed.has(key)) continue;
+    const font = pdf.fonts[glyph.fontId];
+    const baseName = font?.name?.split('+').at(-1);
+    const candidates = fonts.filter((entry) => entry.fontName === baseName)
+      .flatMap((entry) => entry.glyphs
+        .filter((proof) => proof.codepoint === glyph.codepoint)
+        .map((proof) => ({ ...proof, unitsPerEm: entry.unitsPerEm })));
+    if (!font?.data || !candidates.length) { rejected.add(key); continue; }
+    const identity = `${key}:${glyph.glyphId}`;
+    if (checked.has(identity)) continue;
+    checked.add(identity);
+    let matched = false;
+    for (const proof of candidates) {
+      if (await verifyGlyph(font.data, glyph.glyphId, proof)) {
+        const previous = mapped.get(key);
+        if (previous && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
+        mapped.set(key, proof.formula);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) rejected.add(key);
+  }
+  const missing = [...needed].filter((key) => !mapped.has(key) || rejected.has(key));
+  if (missing.length) {
+    throw new Error(`원본 PDF에서 수식 글자 ${missing.length}종의 모양을 검증하지 못했습니다. 원본 PDF를 열어 확인해 주세요.`);
+  }
+  return mapped;
+}

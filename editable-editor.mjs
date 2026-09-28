@@ -4,6 +4,7 @@ const status = document.querySelector('#editable-status');
 const download = document.querySelector('#editable-download');
 const close = document.querySelector('#editable-close');
 const original = document.querySelector('#editable-original');
+const pdfLink = document.querySelector('#editable-pdf');
 
 let editorPromise;
 let editor;
@@ -13,6 +14,19 @@ let dirty = false;
 let loading = false;
 let dirtyTimer;
 let savedSha = '';
+const liveDocuments = new Map();
+
+function liveDocument(question) {
+  if (!liveDocuments.has(question.id)) {
+    const promise = import('./live-convert.mjs')
+      .then(({ convertQuestionNow }) => convertQuestionNow(question))
+      .then((prepared) => import('./editable-convert.mjs')
+        .then(({ createPreparedHwpx }) => createPreparedHwpx(prepared)));
+    liveDocuments.set(question.id, promise);
+    promise.catch(() => liveDocuments.delete(question.id));
+  }
+  return liveDocuments.get(question.id);
+}
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -69,6 +83,11 @@ export async function openEditable(question) {
   const sourceImage = document.querySelector('#source-image');
   original.href = sourceImage?.src || '';
   original.hidden = !sourceImage?.src;
+  const { driveFilePath } = await import('./data.mjs');
+  const { driveLink } = await import('./drive-source.mjs');
+  const href = driveLink(driveFilePath(question.pdfFile));
+  pdfLink.href = href ? `${href}#page=${question.page}` : '';
+  pdfLink.hidden = !href;
   setStatus('편집 가능한 문서를 준비하는 중입니다.');
   if (!dialog.open) dialog.showModal();
   try {
@@ -76,13 +95,11 @@ export async function openEditable(question) {
       throw new Error('rhwp 편집기는 파일 직접 열기에서 실행되지 않습니다. 공개 사이트 링크 또는 로컬 웹 서버로 접속해 주세요.');
     }
     const entry = (await entries())[questionId];
-    if (entry?.status === 'unavailable') {
-      throw new Error(entry.reason || '이 문항은 편집본을 안전하게 만들 수 없습니다.');
-    }
     const preparedSource = entry?.status === 'needs_review' && entry.source;
     const preparedFile = entry?.status === 'needs_review' && entry.file;
     const prepared = preparedSource || preparedFile;
-    setStatus(prepared ? '저장된 편집본과 rhwp를 불러오는 중입니다.' : '색인 텍스트를 편집 가능한 HWPX로 변환하는 중입니다.');
+    let usedIndexFallback = false;
+    setStatus(prepared ? '저장된 편집본과 rhwp를 불러오는 중입니다.' : '원본 PDF에서 글자와 수식 위치를 분석하는 중입니다.');
     const [instance, bytes] = await Promise.all([
       prepareEditor(),
       preparedSource
@@ -95,7 +112,13 @@ export async function openEditable(question) {
           if (!response.ok) throw new Error('문항의 HWPX 파일을 불러오지 못했습니다.');
           return new Uint8Array(await response.arrayBuffer());
         })
-        : import('./editable-convert.mjs').then(({ createEditableHwpx }) => createEditableHwpx(question)),
+        : liveDocument(question).catch(async (error) => {
+          if (/[\uE000-\uF8FF]/u.test(question.text || '') || entry?.status === 'unavailable') throw error;
+          const { createEditableHwpx } = await import('./editable-convert.mjs');
+          const fallback = await createEditableHwpx(question);
+          usedIndexFallback = true;
+          return fallback;
+        }),
     ]);
     await instance.loadFile(bytes, `${questionId}.hwpx`, {
       skipUnsavedGuard: true, suppressDialogs: true,
@@ -103,9 +126,9 @@ export async function openEditable(question) {
     savedSha = (await instance.getDocumentState()).documentSha256;
     dirty = false;
     download.disabled = false;
-    setStatus(prepared
-      ? 'PDF 원본 기반 편집 초안입니다. 그림은 생략됐으며, 원본과 문장·수식을 대조한 뒤 사용하세요.'
-      : '색인 텍스트로 현장에서 만든 편집 초안입니다. 그림은 생략됐고 수식·선지·문장 순서가 틀릴 수 있으니 원본과 대조하세요.');
+    setStatus(usedIndexFallback
+      ? '원본 PDF 분석에 실패해 색인 텍스트로 만든 편집 초안입니다. 수식·선지를 원본 PDF와 확인하세요.'
+      : '편집 가능한 문서입니다. 그림·도표는 생략됐습니다. 원본 PDF와 문장·수식을 대조한 뒤 사용하세요.');
     window.clearInterval(dirtyTimer);
     dirtyTimer = window.setInterval(() => { syncDirty().catch(() => {}); }, 1200);
   } catch (error) {

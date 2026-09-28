@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { contentRuns, createEditableHwpx, createPreparedHwpx, paragraphsForText } from './editable-convert.mjs';
+import { buildLiveStructure } from './live-convert.mjs';
 import { HwpDocument } from './vendor/rhwp-studio/assets/rhwp-core.js';
 
 const index = JSON.parse(await readFile(new URL('./data/questions.json', import.meta.url), 'utf8'));
@@ -33,6 +34,65 @@ test('formula markup becomes a native editable equation after HWPX roundtrip', a
     assert.equal(equation.script, '{{3} over {2}}');
   } finally {
     document.free();
+  }
+});
+
+test('click-time fraction markup becomes an editable HWP equation', async () => {
+  const bytes = await createPreparedHwpx({ schema: 'exam-editable-v1', status: 'needs_review',
+    number: 1, blocks: [
+      { role: 'stem', runs: [
+        { kind: 'text', value: '속력은 ' },
+        { kind: 'equation', script: String.raw`v_{0}=\frac{1}{14}gt_{0}` },
+        { kind: 'text', value: '이다.' },
+      ] },
+    ] });
+  const document = new HwpDocument(bytes);
+  try {
+    const [control] = JSON.parse(document.getControls()).filter((entry) => entry.ctrlId === 'eqed');
+    assert.equal(JSON.parse(document.getEquationProperties(control.list, control.para,
+      control.controlIndex, -1, -1)).script, 'v_{0} = {{1} over {14}}gt_{0}');
+  } finally {
+    document.free();
+  }
+});
+
+test('live PDF reconstruction retains superscripts and standalone equation lines', () => {
+  const item = (str, x, y, width, fontName) => ({
+    str, width, fontName, transform: [1, 0, 0, 1, x, y],
+  });
+  const question = { id: 'sample', no: 1, box: [0, 0, 400, 1000],
+    pdfFile: 'sample.pdf', page: 1 };
+  const pdf = { pageHeight: 1000, fonts: { eq: { name: 'HyhwpEQ' }, txt: { name: 'Text' } },
+    content: { items: [
+      item('1. 운동 에너지는 ', 0, 100, 80, 'txt'),
+      item('E=mc', 80, 100, 30, 'eq'), item('2', 110, 105, 8, 'eq'),
+      item('이다.', 120, 100, 30, 'txt'), item('x=y', 0, 70, 30, 'eq'),
+      ...[...'①②③④⑤'].map((label, index) => item(`${label} 선택`, index * 70, 30, 60, 'txt')),
+    ] } };
+  const prepared = buildLiveStructure(question, pdf, new Map());
+  const equations = prepared.blocks.flatMap((block) => block.runs)
+    .filter((run) => run.kind === 'equation').map((run) => run.script);
+  assert.deepEqual(equations, ['E=mc^{2}', 'x=y']);
+  assert.equal(prepared.blocks.filter((block) => block.role === 'choice').length, 5);
+});
+
+test('standalone equation superscripts do not depend on PDF glyph order', () => {
+  const item = (str, x, y, width, fontName) => ({
+    str, width, fontName, transform: [1, 0, 0, 1, x, y],
+  });
+  const question = { id: 'sample', no: 1, box: [0, 0, 400, 1000],
+    pdfFile: 'sample.pdf', page: 1 };
+  const choices = [...'①②③④⑤'].map((label, index) =>
+    item(`${label} 선택`, index * 70, 30, 60, 'txt'));
+  const parts = [item('E=mc', 0, 70, 30, 'eq'), item('2', 30, 75, 8, 'eq')];
+  for (const ordered of [parts, [...parts].reverse()]) {
+    const pdf = { pageHeight: 1000,
+      fonts: { eq: { name: 'HyhwpEQ' }, txt: { name: 'Text' } },
+      content: { items: [item('1. 운동 에너지', 0, 100, 80, 'txt'), ...ordered, ...choices] } };
+    const prepared = buildLiveStructure(question, pdf, new Map());
+    const equations = prepared.blocks.flatMap((block) => block.runs)
+      .filter((run) => run.kind === 'equation').map((run) => run.script);
+    assert.deepEqual(equations, ['E=mc^{2}']);
   }
 });
 

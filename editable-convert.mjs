@@ -121,9 +121,17 @@ export function insertRuns(document, paragraphIndex, runs) {
     if (!result.ok) throw new Error(`${paragraphIndex + 1}번째 문단의 텍스트를 삽입하지 못했습니다.`);
   }
   for (const equation of equations.reverse()) {
-    const result = JSON.parse(document.insertEquation(0, paragraphIndex, equation.offset, groupFractions(equation.script), 1200, 0));
+    const result = JSON.parse(document.insertEquation(0, paragraphIndex, equation.offset, groupFractions(equationScript(equation.script)), 1200, 0));
     if (!result.ok) throw new Error(`${paragraphIndex + 1}번째 문단의 수식을 삽입하지 못했습니다.`);
   }
+}
+
+function configurePage(document) {
+  const page = JSON.parse(document.getPageDef(0));
+  page.marginLeft = 5668;
+  page.marginRight = 5668;
+  const result = JSON.parse(document.setPageDef(0, JSON.stringify(page)));
+  if (!result.ok) throw new Error('편집 문서의 쪽 여백을 설정하지 못했습니다.');
 }
 
 async function core() {
@@ -162,6 +170,7 @@ export async function createEditableHwpx(question) {
   try {
     const blank = JSON.parse(document.createBlankDocument());
     if (!blank.sectionCount) throw new Error('rhwp 문서를 생성하지 못했습니다.');
+    configurePage(document);
     for (const [index, runs] of paragraphs.entries()) {
       if (index) document.insertParagraph(0, index);
       insertRuns(document, index, runs);
@@ -179,6 +188,7 @@ export async function createPreparedHwpx(question) {
   try {
     const blank = JSON.parse(document.createBlankDocument());
     if (!blank.sectionCount) throw new Error('rhwp 문서를 생성하지 못했습니다.');
+    configurePage(document);
     for (const [index, runs] of paragraphs.entries()) {
       if (index) document.insertParagraph(0, index);
       insertRuns(document, index, runs);

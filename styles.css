@@ -298,8 +298,13 @@ a { color: var(--accent); }
 
 @media (max-width: 560px) {
   .editable-dialog { width: 100vw; height: 100dvh; border: 0; border-radius: 0; }
-  .editable-toolbar { gap: var(--space-2); padding-inline: var(--space-2); }
-  .editable-toolbar strong { font-size: var(--text-sm); }
+  .editable-toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: var(--space-2); padding-inline: var(--space-2); }
+  .editable-toolbar strong { grid-column: 1 / 4; font-size: var(--text-sm); }
+  .editable-actions { display: contents; }
+  #editable-close { grid-column: 4; grid-row: 1; }
+  #editable-pdf { grid-column: 1; grid-row: 2; }
+  #editable-original { grid-column: 2; grid-row: 2; }
+  #editable-download { grid-column: 3 / 5; grid-row: 2; }
   .editable-actions .button { min-height: var(--control-height); padding-inline: var(--space-2); font-size: var(--text-sm); }
   .topbar-actions { gap: var(--space-2); }
   .source-status { display: none; }
