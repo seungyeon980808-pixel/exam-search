@@ -22,6 +22,17 @@ const covered = (item, bar) => item.recovered && item.value.startsWith('\\frac{'
   : center(item) >= bar.x - 0.7 && center(item) < right(bar) - 0.3;
 const isLimit = (item) => /^\\(?:sum|int|prod|lim)(?:\s|$)/u.test(item.value.trim());
 
+/** A tall radical can sit beside both its own top bar and an inner fraction bar.
+ * The owner is the single highest bar that horizontally encloses every other match. */
+export function radicalBarFor(radical, bars) {
+  const matches = bars.filter((bar) => Math.abs(bar.x - right(radical)) <= 3
+    && Math.abs(bar.y - radical.y) <= Math.max(6, radical.height));
+  if (matches.length <= 1) return matches[0] || null;
+  const [top, ...rest] = [...matches].sort((a, b) => b.y - a.y);
+  return rest.every((bar) => top.y - bar.y > 2.3 && top.x <= bar.x + 0.7 && right(top) >= right(bar) - 0.7)
+    ? top : undefined;
+}
+
 function combined(parts, anchor, value) {
   const x = Math.min(...parts.map((part) => part.x));
   return { ...anchor, x, width: Math.max(...parts.map(right)) - x,
@@ -113,10 +124,9 @@ export function recoverEquationItems(items, baseline) {
   const bars = work.filter((item) => structural(item) === 'bar');
   const ownership = new Map();
   for (const radical of radicals) {
-    const matches = bars.filter((bar) => Math.abs(bar.x - right(radical)) <= 3
-      && Math.abs(bar.y - radical.y) <= Math.max(6, radical.height));
-    if (matches.length !== 1 || ownership.has(matches[0])) fail(radical, 'ambiguous radical bar');
-    ownership.set(matches[0], radical);
+    const match = radicalBarFor(radical, bars);
+    if (!match || ownership.has(match)) fail(radical, 'ambiguous radical bar');
+    ownership.set(match, radical);
   }
   for (const bar of [...bars].sort((a, b) => a.width - b.width)) {
     const radical = ownership.get(bar);
@@ -131,12 +141,29 @@ export function recoverEquationItems(items, baseline) {
     if (nearby.some((item) => structural(item))) fail(bar, 'overlapping structures');
     const above = nearby.filter((item) => item.y > bar.y + 2.3);
     const below = nearby.filter((item) => item.y < bar.y - 2.3);
+    if (!radical && !above.length && !heads.length) {
+      // Segment names such as S₁S₂ often use the text font under an equation-font overbar.
+      for (const item of work) {
+        if (item.math || !/^[A-Za-z]+$/u.test(item.value.trim()) || !covered(item, bar)
+          || item.y >= bar.y - 2.3 || bar.y - item.y > Math.max(8, bar.height)) continue;
+        const letter = { ...item, value: item.value.trim(), math: true };
+        work = work.map((entry) => entry === item ? letter : entry);
+        below.push(letter);
+        nearby.push(letter);
+      }
+    }
     const onAxis = nearby.filter((item) => Math.abs(item.y - bar.y) <= 2.3);
     if (!radical && above.length && below.length) {
       for (const script of onAxis) {
-        const parents = [...above, ...below].filter((candidate) => candidate.height > script.height * 1.2
-          && script.x - right(candidate) >= -1 && script.x - right(candidate) <= 3
+        let parents = [...above, ...below].filter((candidate) => candidate.height > script.height * 1.2
+          && script.x - right(candidate) >= -1 && script.x - right(candidate) <= Math.max(3, candidate.height * 0.4)
           && Math.abs(script.y - candidate.y) >= 2.3 && Math.abs(script.y - candidate.y) <= 10);
+        if (parents.length > 1) {
+          // The nearest base wins; a far fallback only applies when nothing is adjacent.
+          const gap = (candidate) => Math.abs(script.x - right(candidate));
+          const nearest = Math.min(...parents.map(gap));
+          if (nearest <= 3) parents = parents.filter((candidate) => gap(candidate) - nearest < 0.5);
+        }
         if (parents.length !== 1) fail(script, 'fraction script baseline collision');
         (above.includes(parents[0]) ? above : below).push(script);
       }

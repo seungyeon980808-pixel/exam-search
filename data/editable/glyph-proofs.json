@@ -1648,6 +1648,73 @@
           ]
         }
       ]
+    },
+    {
+      "fontName": "HyhwpEQ",
+      "unitsPerEm": 1024,
+      "glyphs": [
+        {
+          "codepoint": 57350,
+          "glyphId": 255,
+          "formula": "G",
+          "glyfSha256": "ea20a6f15cd1fec0709d52e62c775701b1bbb05404788cdde66aa8ba16091042",
+          "metrics": [
+            803,
+            57
+          ]
+        },
+        {
+          "codepoint": 57364,
+          "glyphId": 174,
+          "formula": "U",
+          "glyfSha256": "d9a86543673f41bd00b50f39936da9abfdc1e0ed0439303afa9313a0de9e76b4",
+          "metrics": [
+            768,
+            34
+          ]
+        },
+        {
+          "codepoint": 57510,
+          "glyphId": 320,
+          "formula": "\\kappa",
+          "glyfSha256": "f32b529f1ba83c36d906de15732118779b9734f0d75c69737bcc509c1764ff9b",
+          "metrics": [
+            590,
+            56
+          ]
+        },
+        {
+          "codepoint": 57523,
+          "glyphId": 333,
+          "formula": "\\psi",
+          "glyfSha256": "87ee9a2846ebcae84e387b3e796e896f0c5025665a63e18ef8d1104e6d83a422",
+          "metrics": [
+            666,
+            29
+          ]
+        },
+        {
+          "codepoint": 57524,
+          "glyphId": 334,
+          "formula": "\\omega",
+          "glyfSha256": "40a1bfca526e3ccf7cf00d0d03ed0bf55e1e24118f52fc0024505ecfd27839a2",
+          "metrics": [
+            628,
+            29
+          ]
+        },
+        {
+          "codepoint": 57524,
+          "glyphId": 429,
+          "formula": "\\omega",
+          "glyfSha256": "40a1bfca526e3ccf7cf00d0d03ed0bf55e1e24118f52fc0024505ecfd27839a2",
+          "metrics": [
+            628,
+            29
+          ]
+        }
+      ],
+      "evidence": "PDF render crops: p2_2024_11_15 G, p2_2019_09_10 U_0, p2_2019_06_09 kappa, p2_2019_09_14 psi_A, p2_2019_06_14 and p2_2025_11_17 omega"
     }
   ]
 }
