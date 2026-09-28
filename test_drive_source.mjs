@@ -21,3 +21,10 @@ test('공개 시험지 경로는 로그인 없이 기존 5E 게이트웨이에�
     globalThis.fetch = originalFetch;
   }
 });
+
+test('확장 과목 PDF는 독립 공개 폴더로 라우팅하고 기존 과탐 경로는 유지한다', () => {
+  const path = '기출문제/기출확장_국영수사탐/국어/2017_11_국어.pdf';
+  assert.equal(driveLink(path), 'https://5e-google-drive-gateway.5e-desktop.workers.dev/v1/google-drive/folders/1ckc6lPTmGobFNf8Zv0zMuwR5Gg3qykGo/public/%EA%B5%AD%EC%96%B4/2017_11_%EA%B5%AD%EC%96%B4.pdf');
+  assert.throws(() => driveLink('기출문제/기출확장_국영수사탐'), /경로/);
+  assert.throws(() => driveLink('기출문제/기출확장_국영수사탐/../x.pdf'), /경로/);
+});

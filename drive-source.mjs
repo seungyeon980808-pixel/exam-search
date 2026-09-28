@@ -1,4 +1,5 @@
 const PUBLIC_BASE = 'https://5e-google-drive-gateway.5e-desktop.workers.dev/v1/google-drive/folders/1N46Woe4wIXs-PoUpVf0Uu4hPkSIUBqgX/public/';
+const EXPANSION_BASE = 'https://5e-google-drive-gateway.5e-desktop.workers.dev/v1/google-drive/folders/1ckc6lPTmGobFNf8Zv0zMuwR5Gg3qykGo/public/';
 
 export class DriveError extends Error {
   constructor(message, status = 0) {
@@ -13,6 +14,10 @@ export function driveLink(path) {
   const segments = path.split('/');
   if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
     throw new DriveError('공개 시험지 경로가 올바르지 않습니다.');
+  }
+  if (segments[0] === '기출문제' && segments[1] === '기출확장_국영수사탐') {
+    if (segments.length < 4) throw new DriveError('공개 시험지 경로가 올바르지 않습니다.');
+    return EXPANSION_BASE + segments.slice(2).map(encodeURIComponent).join('/');
   }
   return PUBLIC_BASE + segments.map(encodeURIComponent).join('/');
 }

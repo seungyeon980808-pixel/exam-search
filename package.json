@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test_search.mjs test_drive_source.mjs",
+    "test": "node --test test_search.mjs test_drive_source.mjs test_expansion.mjs test_subject_hierarchy.mjs",
     "qa": "node qa.mjs"
   },
   "devDependencies": {

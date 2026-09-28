@@ -1,7 +1,18 @@
-import { catalogFiles, prepareQuestions, searchFiles, searchQuestions } from './search.mjs';
+import { catalogFiles, curriculumYearMismatch, prepareQuestions, searchFiles, searchQuestions, subjectGroup } from './search.mjs';
 
 let catalogPromise;
+let answersPromise;
 let publicPaths = new Map();
+
+// A separate, optional answer index is fetched only after the user turns answers on.
+async function answers() {
+  if (!answersPromise) answersPromise = fetch(new URL('./data/answers.json', import.meta.url))
+    .then(async (response) => response.status === 404 ? { items: [] }
+      : response.ok ? response.json() : Promise.reject(new Error('정답 색인을 불러오지 못했습니다.')))
+    .then((index) => new Map((index.items || []).map((entry) => [entry.questionId, entry])))
+    .catch((error) => { answersPromise = null; throw error; });
+  return answersPromise;
+}
 
 async function catalog() {
   if (!catalogPromise) {
@@ -12,7 +23,7 @@ async function catalog() {
     })).then(([index, sourceFiles, synonyms]) => {
       const questions = prepareQuestions(index.items, synonyms.map || {});
       publicPaths = new Map(sourceFiles.map((file) => [file.pdfFile, file.publicPath]));
-      return { index, questions, files: catalogFiles(sourceFiles.map((file) => file.pdfFile), questions),
+      return { index, questions, files: catalogFiles(sourceFiles, questions),
         pageCounts: new Map(sourceFiles.map((file) => [file.pdfFile, file.pageCount])),
         byId: new Map(questions.map((item) => [item.id, item])) };
     });
@@ -29,14 +40,37 @@ export async function getJson(path) {
   const url = new URL(path, location.href);
   const params = url.searchParams;
   if (url.pathname === '/api/status') {
+    const subjects = [...new Map(questions.map((item) => [item.subject, item.subjectLabel || item.subject])).entries()]
+      .map(([value, label]) => ({ value, label, group: subjectGroup(value).value }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+    const availableGroups = new Map(subjects.map(({ value }) => {
+      const entry = subjectGroup(value);
+      return [entry.value, entry];
+    }));
+    const groups = ['kor', 'eng', 'math', 'science', 'social', 'other']
+      .filter((value) => availableGroups.has(value)).map((value) => availableGroups.get(value));
+    const applicable = questions.filter((item) => !curriculumYearMismatch(item));
+    const curriculumYearMismatchCount = questions.length - applicable.length;
+    const frameworks = [...new Set(applicable.map((item) => item.curriculum?.framework).filter(Boolean))].sort();
+    const units = [...new Set(applicable.flatMap((item) => [item.curriculum?.unit,
+      ...(item.curriculum?.standards || []).map((standard) => standard.unit)].filter(Boolean)))].sort();
+    const standards = [...new Map(applicable.flatMap((item) => (item.curriculum?.standards || [])
+      .filter((standard) => standard.code).map((standard) => [standard.code, standard.text || standard.code]))).entries()]
+      .map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
     return { pdfCount: index.pdfCount, questionCount: index.questionCount,
-      incomplete: index.incomplete, degradedPdfCount: index.degradedPdfCount,
-      years: [...new Set(questions.map((item) => item.year))].sort((a, b) => b - a) };
+      incomplete: index.incomplete || [], degradedPdfCount: index.degradedPdfCount,
+      years: [...new Set(questions.map((item) => item.year))].sort((a, b) => b - a),
+      groups, subjects, frameworks, units, standards, curriculumYearMismatchCount };
   }
   if (url.pathname === '/api/question') {
     const item = byId.get(params.get('id'));
     if (!item) throw new Error('문항을 찾을 수 없습니다.');
     return item;
+  }
+  if (url.pathname === '/api/answer') {
+    const entry = (await answers()).get(params.get('id'));
+    // Candidate and unverified entries never acquire a displayable answer by accident.
+    return entry?.verificationStatus === 'verified' ? entry : null;
   }
   if (url.pathname === '/api/file-pages') {
     const pageCount = pageCounts.get(params.get('name'));
@@ -44,9 +78,10 @@ export async function getJson(path) {
     return { pageCount };
   }
   if (url.pathname === '/api/search' || url.pathname === '/api/files') {
-    const filters = { subject: params.get('subject') || '',
+    const filters = { group: params.get('group') || '', subject: params.get('subject') || '',
       yearFrom: params.get('yearFrom') || '', yearTo: params.get('yearTo') || '',
-      month: params.get('month') || '' };
+      month: params.get('month') || '', framework: params.get('framework') || '',
+      unit: params.get('unit') || '', standard: params.get('standard') || '' };
     const query = params.get('q') || '';
     const fileMode = url.pathname === '/api/files';
     const found = fileMode ? searchFiles(files, questions, query, filters)

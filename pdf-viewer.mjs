@@ -13,7 +13,7 @@ const options = {
 
 function openPdf(name) {
   if (!documentCache.has(name)) {
-    documentCache.clear();
+    if (documentCache.size >= 4) documentCache.delete(documentCache.keys().next().value);
     const promise = downloadDriveFile(driveFilePath(name))
       .then((bytes) => pdfjs.getDocument({ data: new Uint8Array(bytes), ...options }).promise);
     documentCache.set(name, promise);
@@ -22,10 +22,38 @@ function openPdf(name) {
   return documentCache.get(name);
 }
 
-export async function renderQuestion(item) {
+function trimTrailingPaper(canvas) {
+  const { width, height } = canvas;
+  if (!width || !height) return canvas;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const pixels = context.getImageData(0, 0, width, height).data;
+  const left = Math.floor(width * 0.015);
+  const right = Math.ceil(width * 0.985);
+  const required = Math.max(3, Math.floor((right - left) * 0.004));
+  let bottom = height - 1;
+  for (; bottom >= 0; bottom -= 1) {
+    let ink = 0;
+    for (let x = left; x < right; x += 2) {
+      const offset = (bottom * width + x) * 4;
+      if (pixels[offset] < 235 && pixels[offset + 1] < 235 && pixels[offset + 2] < 235) ink += 1;
+      if (ink >= required) break;
+    }
+    if (ink >= required) break;
+  }
+  const trimmedHeight = Math.min(height, bottom + Math.max(12, Math.round(height * 0.012)));
+  if (trimmedHeight < height * 0.85 && trimmedHeight > height * 0.25) {
+    const cropped = document.createElement('canvas');
+    cropped.width = width;
+    cropped.height = trimmedHeight;
+    cropped.getContext('2d', { alpha: false }).drawImage(canvas, 0, 0);
+    return cropped;
+  }
+  return canvas;
+}
+
+export async function renderQuestion(item, scale = 3) {
   const doc = await openPdf(item.pdfFile);
   const page = await doc.getPage(item.page);
-  const scale = 3;
   const box = item.displayBox || item.box;
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil((box[2] - box[0]) * scale);
@@ -34,8 +62,23 @@ export async function renderQuestion(item) {
   await page.render({ canvasContext: context, canvas,
     viewport: page.getViewport({ scale }),
     transform: [1, 0, 0, 1, -box[0] * scale, -box[1] * scale] }).promise;
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.86));
+  const output = item.sourceSha256 ? trimTrailingPaper(canvas) : canvas;
+  const blob = await new Promise((resolve) => output.toBlob(resolve, 'image/webp', 0.86));
   if (!blob) throw new Error('문항 이미지를 생성하지 못했습니다.');
+  return URL.createObjectURL(blob);
+}
+
+export async function renderFileThumbnail(name) {
+  const doc = await openPdf(name);
+  const page = await doc.getPage(1);
+  const base = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: 240 / base.width });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport }).promise;
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.72));
+  if (!blob) throw new Error('시험지 미리보기를 생성하지 못했습니다.');
   return URL.createObjectURL(blob);
 }
 
