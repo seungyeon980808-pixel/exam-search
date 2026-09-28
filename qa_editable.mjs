@@ -105,13 +105,36 @@ try {
 
   const unsafePage = await browser.newPage();
   await unsafePage.goto(`${base}?subject=p1&year=2027&id=p1_2027_06_05`);
-  await unsafePage.locator('#detail-heading').getByText('물리학Ⅰ 5번').waitFor();
   await unsafePage.locator('#open-editable').click();
   await unsafePage.locator('#editable-status').getByText('수식을 안전하게 복원할 수 없어', { exact: false }).waitFor();
   assert.equal(await unsafePage.locator('#editable-download').isEnabled(), false);
-  await unsafePage.screenshot({ path: `${evidence}/unsafe-formula-blocked.png` });
-  console.log('other PUA-bearing question: no formula-dropping draft or download');
   await unsafePage.close();
+
+  for (const width of [1280, 375]) {
+    const roughPage = await browser.newPage({ viewport: { width, height: 900 }, acceptDownloads: true });
+    await roughPage.goto(`${base}?subject=p1&month=6&id=p1_2027_06_18`);
+    await roughPage.locator('#detail-heading').getByText('물리학Ⅰ 18번').waitFor();
+    await roughPage.locator('#open-editable').click();
+    await roughPage.locator('#editable-status').getByText('PDF 원본 기반 편집 초안입니다', { exact: false }).waitFor();
+    await roughPage.frameLocator('iframe').getByRole('textbox', { name: '문서 편집 입력' }).waitFor();
+    assert.equal(await roughPage.locator('#editable-download').isEnabled(), true);
+    assert.equal(await roughPage.locator('#editable-original').isVisible(), true);
+    await roughPage.screenshot({ path: `${evidence}/restored-p1-2027-06-18-${width}.png` });
+    if (width === 1280) {
+      const downloadEvent = roughPage.waitForEvent('download');
+      await roughPage.locator('#editable-download').click();
+      const downloaded = await downloadEvent;
+      const document = new HwpDocument(await readFile(await downloaded.path()));
+      try {
+        const equations = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
+        assert.equal(equations.length, 16);
+      } finally {
+        document.free();
+      }
+    }
+    console.log(`${width}px: restored question opens; downloaded HWPX retains 16 editable equations`);
+    await roughPage.close();
+  }
 } finally {
   await browser.close();
 }

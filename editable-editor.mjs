@@ -3,6 +3,7 @@ const host = document.querySelector('#editable-host');
 const status = document.querySelector('#editable-status');
 const download = document.querySelector('#editable-download');
 const close = document.querySelector('#editable-close');
+const original = document.querySelector('#editable-original');
 
 let editorPromise;
 let editor;
@@ -65,6 +66,9 @@ export async function openEditable(question) {
   download.disabled = true;
   dialog.classList.remove('is-unavailable');
   document.querySelector('#editable-title').textContent = `${question.subjectLabel} ${question.no}번`;
+  const sourceImage = document.querySelector('#source-image');
+  original.href = sourceImage?.src || '';
+  original.hidden = !sourceImage?.src;
   setStatus('편집 가능한 문서를 준비하는 중입니다.');
   if (!dialog.open) dialog.showModal();
   try {

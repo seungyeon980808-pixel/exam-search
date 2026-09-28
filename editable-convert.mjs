@@ -1,5 +1,23 @@
 let corePromise;
 
+export function groupFractions(script) {
+  let result = '';
+  for (let offset = 0; offset < script.length;) {
+    const group = script[offset] === '{' && balancedFormula(script, offset);
+    if (!group) { result += script[offset++]; continue; }
+    const over = /^\s+over\s*\{/u.exec(script.slice(group[1]));
+    const denominator = over && balancedFormula(script, group[1] + over[0].length - 1);
+    if (denominator) {
+      result += `{{${groupFractions(group[0])}} over {${groupFractions(denominator[0])}}}`;
+      offset = denominator[1];
+    } else {
+      result += `{${groupFractions(group[0])}}`;
+      offset = group[1];
+    }
+  }
+  return result.replace(/([=<>+])/gu, ' $1 ');
+}
+
 function balancedFormula(text, opening) {
   let depth = 0;
   for (let index = opening; index < text.length; index += 1) {
@@ -103,7 +121,7 @@ export function insertRuns(document, paragraphIndex, runs) {
     if (!result.ok) throw new Error(`${paragraphIndex + 1}번째 문단의 텍스트를 삽입하지 못했습니다.`);
   }
   for (const equation of equations.reverse()) {
-    const result = JSON.parse(document.insertEquation(0, paragraphIndex, equation.offset, equation.script, 1200, 0));
+    const result = JSON.parse(document.insertEquation(0, paragraphIndex, equation.offset, groupFractions(equation.script), 1200, 0));
     if (!result.ok) throw new Error(`${paragraphIndex + 1}번째 문단의 수식을 삽입하지 못했습니다.`);
   }
 }
@@ -128,10 +146,12 @@ export async function createEditableHwpx(question) {
   if (/\(cid:\d+\)/u.test(question.text || '')) {
     throw new Error('이 문항은 복원되지 않은 글자가 있어 편집본을 만들지 않았습니다. PDF 원본을 확인해 주세요.');
   }
-  if (/[\uE000-\uF8FF]/u.test(question.text || '')) {
+  const hasUnresolvedMath = /[\uE000-\uF8FF]/u.test(question.text || '');
+  if (hasUnresolvedMath) {
     throw new Error('이 문항은 특수 글꼴 수식을 안전하게 복원할 수 없어 편집본을 만들지 않았습니다. PDF 원본과 대조한 편집본이 필요합니다.');
   }
-  const paragraphs = paragraphsForText(question.text || '', question.no);
+  const text = question.text || '';
+  const paragraphs = paragraphsForText(text, question.no);
   if (!paragraphs.length) throw new Error('이 문항은 색인 텍스트를 읽을 수 없어 자동 변환할 수 없습니다. PDF 원본을 확인해 주세요.');
   if (![...'①②③④⑤'].every((label) => paragraphs.some((runs) => runs[0]?.kind === 'text'
     && runs[0].value.trimStart().startsWith(label)))) {

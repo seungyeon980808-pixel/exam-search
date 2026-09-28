@@ -1,0 +1,275 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p1_2027_06_18",
+  "title": "2027학년도 6월 모평 물리1 18번",
+  "number": 18,
+  "sourcePdf": "p1_2027_06.pdf",
+  "sourceSha256": "54a72a90a97b5d51b44139d05fda52a530de8fc6e368734a96f309862793d0f8",
+  "page": 4,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "그림 (가)는 각 빗면과 나란한 실 p, q로 연결된 질량이 각각 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "2m",
+          "script": "2m"
+        },
+        {
+          "kind": "text",
+          "value": ", ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "2m",
+          "script": "2m"
+        },
+        {
+          "kind": "text",
+          "value": ", ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "3m",
+          "script": "3m"
+        },
+        {
+          "kind": "text",
+          "value": "인 물체 A, B, C 중 B를 잡아 정지시킨 모습을, (나)는 (가)에서 B를 가만히 놓은 후 B의 속력을 시간 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t",
+          "script": "t"
+        },
+        {
+          "kind": "text",
+          "value": "에 따라 나타낸 것이다. ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=t_{0}",
+          "script": "t=t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때 p가 끊어지고, ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=2t_{0}",
+          "script": "t=2t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때 q가 끊어 진다. ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=\\frac{3}{2}t_{0}",
+          "script": "t={3} over {2}t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때 A에 작용하는 알짜힘의 크기는 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=\\frac{5}{2}t_{0}",
+          "script": "t={5} over {2}t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때 B에 작용하는 알짜힘의 크기의 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "4",
+          "script": "4"
+        },
+        {
+          "kind": "text",
+          "value": "배이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "이에 대한 설명으로 옳은 것만을 <보기>에서 있는 대로 고른 것은? (단, 중력 가속도는 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "g",
+          "script": "g"
+        },
+        {
+          "kind": "text",
+          "value": "이고, 실의 질량, 공기 저항, 모든 마찰은 무시 한다.)",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄱ",
+      "runs": [
+        {
+          "kind": "equation",
+          "value": "v_{0}=\\frac{1}{14}gt_{0}",
+          "script": "v_{0}={1} over {14}gt_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄴ",
+      "runs": [
+        {
+          "kind": "equation",
+          "value": "t=\\frac{1}{2}t_{0}",
+          "script": "t={1} over {2}t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때, q가 C를 당기는 힘의 크기는 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "\\frac{25}{14}mg",
+          "script": "{25} over {14}mg"
+        },
+        {
+          "kind": "text",
+          "value": "이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄷ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "B의 가속도 크기는 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=\\frac{3}{2}t_{0}",
+          "script": "t={3} over {2}t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때가 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "t=\\frac{5}{2}t_{0}",
+          "script": "t={5} over {2}t_{0}"
+        },
+        {
+          "kind": "text",
+          "value": "일 때의 ",
+          "script": ""
+        },
+        {
+          "kind": "equation",
+          "value": "2",
+          "script": "2"
+        },
+        {
+          "kind": "text",
+          "value": "배이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "①",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄴ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "②",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄷ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "③",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄴ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "④",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄷ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "⑤",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄴ,ㄷ",
+          "script": ""
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}

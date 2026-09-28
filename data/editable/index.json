@@ -35,6 +35,10 @@
       "status": "needs_review",
       "source": "./data/editable/prepared/p2_2026_06_01.json",
       "file": "./data/editable/p2_2026_06_01.hwpx"
+    },
+    "p1_2027_06_18": {
+      "status": "needs_review",
+      "source": "./data/editable/prepared/p1_2027_06_18.json"
     }
   }
 }

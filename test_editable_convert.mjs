@@ -30,7 +30,7 @@ test('formula markup becomes a native editable equation after HWPX roundtrip', a
     const equation = JSON.parse(document.getEquationProperties(
       controls[0].list, controls[0].para, controls[0].controlIndex, -1, -1,
     ));
-    assert.equal(equation.script, '{3} over {2}');
+    assert.equal(equation.script, '{{3} over {2}}');
   } finally {
     document.free();
   }
@@ -95,6 +95,33 @@ test('2027 June Physics I question 6 keeps every text-layer formula as editable 
 test('private-use math glyphs cannot silently become plain-text drafts', async () => {
   const question = index.items.find((item) => item.id === 'p1_2027_06_06');
   await assert.rejects(createEditableHwpx(question), /수식을 안전하게 복원/u);
+});
+
+test('2027 June question 18 restores fractions and subscripts as editable equation objects', async () => {
+  const question = JSON.parse(await readFile(new URL('./data/editable/prepared/p1_2027_06_18.json', import.meta.url)));
+  const bytes = await createPreparedHwpx(question);
+  const document = new HwpDocument(bytes);
+  try {
+    const controls = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
+    const scripts = controls.map((control) => JSON.parse(document.getEquationProperties(
+      control.list, control.para, control.controlIndex, -1, -1,
+    )).script);
+    assert.deepEqual(scripts, ['2m', '2m', '3m', 't', 't = t_{0}', 't = 2t_{0}',
+      't = {{3} over {2}}t_{0}', 't = {{5} over {2}}t_{0}', '4', 'g',
+      'v_{0} = {{1} over {14}}gt_{0}', 't = {{1} over {2}}t_{0}', '{{25} over {14}}mg',
+      't = {{3} over {2}}t_{0}', 't = {{5} over {2}}t_{0}', '2']);
+    const fraction = controls[10];
+    const changed = JSON.parse(document.setEquationProperties(fraction.list, fraction.para,
+      fraction.controlIndex, -1, -1, JSON.stringify({ script: 'v_{0}={1} over {7}gt_{0}' })));
+    assert.equal(changed.ok, true);
+    const reopened = new HwpDocument(document.exportHwpx());
+    try {
+      assert.equal(JSON.parse(reopened.getEquationProperties(fraction.list, fraction.para,
+        fraction.controlIndex, -1, -1)).script, 'v_{0}={1} over {7}gt_{0}');
+    } finally { reopened.free(); }
+  } finally {
+    document.free();
+  }
 });
 
 test('prepared formulas remain inline with their surrounding Korean text', () => {

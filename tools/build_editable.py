@@ -143,6 +143,9 @@ def main() -> None:
     parser.add_argument("--pdf-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("data/editable"))
     parser.add_argument("--equation-font", type=Path, help="ExamPool에서 검증한 HYHWPEQ.TTF 파일")
+    parser.add_argument("--embedded-font-proofs", type=Path,
+                        default=Path(__file__).with_name("embedded-font-proofs.json"),
+                        help="원본 대조를 마친 내장 수식 글꼴의 고유값과 문자 대응표")
     parser.add_argument("--all", action="store_true", help="색인된 모든 문항을 변환합니다.")
     parser.add_argument("ids", nargs="*")
     args = parser.parse_args()
@@ -170,6 +173,7 @@ def main() -> None:
         from app.pdf_hwp_pipeline import build_editable_draft, detect_items
         from app.pdf_hwp_pipeline_models import ConversionUnit, LayoutStyle, UnsupportedDraftLayoutError
         from app.pdf_hwp_roundtrip_structure import PreparedStructureError, parse_prepared_structure
+        from embedded_fonts import register_embedded_fonts
         if args.equation_font:
             try:
                 equation_font.LOCAL_FONT_PATH = str(check_equation_font(
@@ -190,6 +194,7 @@ def main() -> None:
                 continue
             try:
                 if pdf not in detections:
+                    register_embedded_fonts(args.embedded_font_proofs, pdf)
                     detections[pdf] = detect_items(pdf)
                 detection = detections[pdf]
                 candidate = next((entry for entry in detection.items
