@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
@@ -12,6 +12,16 @@ if (!preview || !manifestPath) throw new Error('EXAM_PREVIEW_OUTPUT과 EXAM_STAG
 const manifest = JSON.parse(await readFile(manifestPath));
 const stageFiles = new Map(manifest.files.map((file) => [file.flatRelativePath, file]));
 const indexed = JSON.parse(await readFile(path.join(preview, 'data/questions.json')));
+const indexedFiles = JSON.parse(await readFile(path.join(preview, 'data/files.json')));
+const expansionFiles = indexedFiles.filter((file) => file.sourceSha256);
+assert.equal(expansionFiles.length, 401, 'new problem PDF count');
+for (const file of expansionFiles) {
+  const relative = file.publicPath.replace(/^기출문제\/기출확장_국영수사탐\//u, '');
+  const source = stageFiles.get(relative);
+  assert(source && source.kind === '문제지', `missing staged PDF: ${file.pdfFile}`);
+  assert.equal(source.sha256, file.sourceSha256, file.pdfFile);
+  assert.equal((await stat(path.join(manifest.root, relative))).size, source.bytes, file.pdfFile);
+}
 const samples = ['kor', 'eng', 'math', 'life_ethics'].map((subject) => {
   const item = indexed.items.find((entry) => entry.subject === subject && entry.year === 2026
     && entry.page && entry.box?.length === 4);
