@@ -44,10 +44,16 @@ createServer((request, response) => {
     return sendFile(response, path.join(stage.root, relative));
   }
   if (parts[0] === 'data') {
-    if (parts.length !== 2 || !['questions.json', 'files.json', 'answers.json', 'synonyms.json'].includes(parts[1])) {
-      return response.writeHead(404).end('Not found');
+    if (parts.length === 2 && ['questions.json', 'files.json', 'answers.json', 'synonyms.json'].includes(parts[1])) {
+      return sendFile(response, path.join(preview, 'data', parts[1]));
     }
-    return sendFile(response, path.join(preview, 'data', parts[1]));
+    if (parts.length >= 3 && parts[1] === 'editable') {
+      const editableRoot = path.join(root, 'data', 'editable');
+      const editableFile = path.resolve(root, ...parts);
+      if (!editableFile.startsWith(`${editableRoot}${path.sep}`)) return response.writeHead(404).end('Not found');
+      return sendFile(response, editableFile);
+    }
+    return response.writeHead(404).end('Not found');
   }
   if (parts.length === 1 && parts[0] === 'drive-source.mjs') {
     const source = readFileSync(path.join(root, 'drive-source.mjs'), 'utf8');

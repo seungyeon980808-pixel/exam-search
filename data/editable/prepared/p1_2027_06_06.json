@@ -1,0 +1,68 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p1_2027_06_06",
+  "title": "2027학년도 6월 모평 물리학Ⅰ 6번",
+  "number": 6,
+  "sourcePdf": "p1_2027_06.pdf",
+  "sourceSha256": "54a72a90a97b5d51b44139d05fda52a530de8fc6e368734a96f309862793d0f8",
+  "page": 1,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        { "kind": "text", "value": "그림은 평면에 고정된 두 지점 ", "script": "" },
+        { "kind": "equation", "value": "S_{1}", "script": "S_{1}" },
+        { "kind": "text", "value": ", ", "script": "" },
+        { "kind": "equation", "value": "S_{2}", "script": "S_{2}" },
+        { "kind": "text", "value": "에서 진폭이 같고 서로 반대의 위상으로 발생시킨 두 물결파의 시간 ", "script": "" },
+        { "kind": "equation", "value": "t=0", "script": "t=0" },
+        { "kind": "text", "value": "일 때의 모습을 나타낸 것이다. 점 P, Q, R는 평면상에 고정된 세 지점이다. 두 물결파의 주기는 각각 ", "script": "" },
+        { "kind": "equation", "value": "T_{0}", "script": "T_{0}" },
+        { "kind": "text", "value": "으로 같다.", "script": "" }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        { "kind": "text", "value": "이에 대한 설명으로 옳은 것만을 <보기>에서 있는 대로 고른 것은? [3점]", "script": "" }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄱ",
+      "runs": [
+        { "kind": "equation", "value": "t=\\frac{T_{0}}{4}", "script": "t={T_{0}} over {4}" },
+        { "kind": "text", "value": "일 때, 수면의 높이는 P에서와 Q에서가 같다.", "script": "" }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄴ",
+      "runs": [
+        { "kind": "text", "value": "Q에서 두 물결파의 위상은 서로 같다.", "script": "" }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄷ",
+      "runs": [
+        { "kind": "equation", "value": "\\bar{PR}", "script": "bar {PR}" },
+        { "kind": "text", "value": "에서 상쇄 간섭이 일어나는 지점의 개수는 ", "script": "" },
+        { "kind": "equation", "value": "2", "script": "2" },
+        { "kind": "text", "value": "개이다.", "script": "" }
+      ]
+    },
+    { "role": "choice", "label": "①", "runs": [{ "kind": "text", "value": "ㄱ", "script": "" }] },
+    { "role": "choice", "label": "②", "runs": [{ "kind": "text", "value": "ㄴ", "script": "" }] },
+    { "role": "choice", "label": "③", "runs": [{ "kind": "text", "value": "ㄱ, ㄷ", "script": "" }] },
+    { "role": "choice", "label": "④", "runs": [{ "kind": "text", "value": "ㄴ, ㄷ", "script": "" }] },
+    { "role": "choice", "label": "⑤", "runs": [{ "kind": "text", "value": "ㄱ, ㄴ, ㄷ", "script": "" }] }
+  ],
+  "notes": [
+    "이 문항의 본문 수식 7곳을 원본 PDF와 대조해 편집 가능한 수식으로 입력했습니다.",
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}

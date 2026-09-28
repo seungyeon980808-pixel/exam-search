@@ -1,0 +1,125 @@
+{
+  "schema": "exam-editable-v1",
+  "questionId": "p2_2018_06_03",
+  "title": "2018학년도 6월 모평 물리학Ⅱ 3번",
+  "number": 3,
+  "sourcePdf": "p2_2018_06.pdf",
+  "sourceSha256": "49a193a2462f1024bb367c283e219da746d4acfd03e12207afdc7989fc801681",
+  "page": 1,
+  "status": "needs_review",
+  "blocks": [
+    {
+      "role": "stem",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "그림은xy 평면에서운동하는질량2 kg 인물체의위치의 x성분과속도의y성분vy를각각시간t 에따라나타낸것이다. 물체의운동에대한설명으로옳은것만을<보기>에서있는",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "ask",
+      "label": "",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "대로고른것은? [3점]",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄱ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "0초부터4초까지변위의크기는2m이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄴ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "1초일때와3초일때가속도의방향은같다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "bogi",
+      "label": "ㄷ",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "2초일때물체에작용하는알짜힘의크기는2N이다.",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "①",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "②",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄷ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "③",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄴ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "④",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄴ,ㄷ",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "role": "choice",
+      "label": "⑤",
+      "runs": [
+        {
+          "kind": "text",
+          "value": "ㄱ,ㄴ,ㄷ",
+          "script": ""
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "그림·도표 이미지는 이 편집본에서 생략했습니다."
+  ]
+}

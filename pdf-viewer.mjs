@@ -5,6 +5,7 @@ import { downloadDriveFile } from './drive-source.mjs';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).href;
 
 const documentCache = new Map();
+const byteCache = new Map();
 const options = {
   cMapUrl: new URL('./vendor/pdfjs/cmaps/', import.meta.url).href,
   cMapPacked: true,
@@ -13,11 +14,20 @@ const options = {
 
 function openPdf(name) {
   if (!documentCache.has(name)) {
-    if (documentCache.size >= 4) documentCache.delete(documentCache.keys().next().value);
-    const promise = downloadDriveFile(driveFilePath(name))
-      .then((bytes) => pdfjs.getDocument({ data: new Uint8Array(bytes), ...options }).promise);
+    if (documentCache.size >= 4) {
+      const oldest = documentCache.keys().next().value;
+      documentCache.delete(oldest);
+      byteCache.delete(oldest);
+    }
+    const bytes = downloadDriveFile(driveFilePath(name));
+    byteCache.set(name, bytes);
+    const promise = bytes
+      .then((data) => pdfjs.getDocument({ data: new Uint8Array(data.slice(0)), ...options }).promise);
     documentCache.set(name, promise);
-    promise.catch(() => documentCache.delete(name));
+    promise.catch(() => {
+      if (documentCache.get(name) === promise) documentCache.delete(name);
+      if (byteCache.get(name) === bytes) byteCache.delete(name);
+    });
   }
   return documentCache.get(name);
 }
@@ -49,6 +59,43 @@ function trimTrailingPaper(canvas) {
     return cropped;
   }
   return canvas;
+}
+
+export async function readQuestionPdf(item) {
+  const documentPromise = openPdf(item.pdfFile);
+  const bytesPromise = byteCache.get(item.pdfFile);
+  await documentPromise;
+  const bytes = await bytesPromise;
+  const task = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)),
+    fontExtraProperties: true, ...options });
+  try {
+    const pdf = await task.promise;
+    const page = await pdf.getPage(item.page);
+    const [content, operations] = await Promise.all([
+      page.getTextContent({ disableNormalization: true }), page.getOperatorList(),
+    ]);
+    const fonts = Object.fromEntries(Object.keys(content.styles).map((key) => {
+      const font = page.commonObjs.get(key);
+      return [key, { name: font.name || '', data: font.data ? Uint8Array.from(font.data) : null }];
+    }));
+    const glyphs = [];
+    let fontId = '';
+    for (let index = 0; index < operations.fnArray.length; index += 1) {
+      const operation = operations.fnArray[index];
+      const args = operations.argsArray[index];
+      if (operation === pdfjs.OPS.setFont) fontId = args[0];
+      if (operation !== pdfjs.OPS.showText) continue;
+      for (const glyph of args[0]) {
+        if (glyph && typeof glyph === 'object' && /[\uE000-\uF8FF]/u.test(glyph.unicode || '')) {
+          glyphs.push({ fontId, codepoint: glyph.unicode.codePointAt(0),
+            glyphId: glyph.originalCharCode });
+        }
+      }
+    }
+    return { content, fonts, glyphs, pageHeight: page.getViewport({ scale: 1 }).height };
+  } finally {
+    await task.destroy();
+  }
 }
 
 export async function renderQuestion(item, scale = 3) {
