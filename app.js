@@ -2,7 +2,7 @@ import { driveFilePath, getJson } from './data.mjs';
 import { driveLink } from './drive-source.mjs';
 import { renderFilePages, renderFileThumbnail, renderQuestion } from './pdf-viewer.mjs';
 import { curriculumDisplayState } from './search.mjs';
-import { openEditable } from './editable-editor.mjs';
+import { openEditable, openEditableCollection } from './editable-editor.mjs';
 import { createQuestionSelection } from './question-selection.mjs';
 
 const $ = (selector) => document.querySelector(selector);
@@ -442,6 +442,10 @@ function fileRowFor(item) {
 
 async function selectFile(item) {
   const fileRequestId = ++state.fileRequestId;
+  const convert = $('#file-preview-editable');
+  convert.disabled = true;
+  convert.textContent = '전체 문항 한글로';
+  convert.onclick = null;
   state.selectedFile = item.pdfFile;
   for (const row of list.querySelectorAll('.file-row')) {
     row.setAttribute('aria-current', String(row.dataset.file === item.pdfFile));
@@ -458,9 +462,28 @@ async function selectFile(item) {
   setFilePreviewMode(true);
   stopFileRendering?.();
   stopFileRendering = null;
+  const questionsPromise = getJson(`/api/file-questions?name=${encodeURIComponent(item.pdfFile)}`);
   try {
+    const { items } = await questionsPromise;
+    if (fileRequestId !== state.fileRequestId) return;
+    convert.disabled = !items.length;
+    convert.textContent = items.length ? `전체 ${items.length}문항 한글로` : '색인된 문항 없음';
+    convert.title = '검색 조건과 무관하게 이 시험지에 색인된 모든 문항을 변환합니다. 그림과 표는 제외됩니다.';
+    convert.onclick = () => void openEditableCollection(items.map((entry) => entry.id));
     stopFileRendering = await renderFilePages(item.pdfFile, pages, item.firstMatchPage || 1,
       () => fileRequestId === state.fileRequestId);
+    if (fileRequestId !== state.fileRequestId) return;
+    for (const section of pages.querySelectorAll('.file-page')) {
+      const pageItems = items.filter((entry) => entry.page === Number(section.dataset.page));
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button secondary';
+      button.textContent = pageItems.length ? `이 쪽 ${pageItems.length}문항 한글로` : '이 쪽에 색인된 문항 없음';
+      button.disabled = !pageItems.length;
+      button.setAttribute('aria-label', `${section.dataset.page}쪽: ${button.textContent}`);
+      button.addEventListener('click', () => void openEditableCollection(pageItems.map((entry) => entry.id)));
+      section.querySelector('.file-page-label').append(button);
+    }
   } catch (error) {
     if (fileRequestId === state.fileRequestId) pages.textContent = error.message;
   }

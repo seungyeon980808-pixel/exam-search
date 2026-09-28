@@ -139,6 +139,7 @@ export async function renderFilePages(name, container, firstPage = 1, isCurrent 
   for (let number = 1; number <= doc.numPages; number += 1) {
     const section = document.createElement('section');
     section.className = 'file-page';
+    section.dataset.page = String(number);
     const label = document.createElement('span');
     label.className = 'file-page-label';
     label.textContent = `${number} / ${doc.numPages}쪽`;

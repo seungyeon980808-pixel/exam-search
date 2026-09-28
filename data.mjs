@@ -1,4 +1,4 @@
-import { catalogFiles, curriculumYearMismatch, prepareQuestions, searchFiles, searchQuestions, subjectGroup } from './search.mjs';
+import { catalogFiles, curriculumYearMismatch, prepareQuestions, searchFiles, searchQuestions, subjectGroup, fileQuestions } from './search.mjs';
 
 let catalogPromise;
 let answersPromise;
@@ -71,6 +71,9 @@ export async function getJson(path) {
     const entry = (await answers()).get(params.get('id'));
     // Candidate and unverified entries never acquire a displayable answer by accident.
     return entry?.verificationStatus === 'verified' ? entry : null;
+  }
+  if (url.pathname === '/api/file-questions') {
+    return { items: fileQuestions(questions, params.get('name')) };
   }
   if (url.pathname === '/api/file-pages') {
     const pageCount = pageCounts.get(params.get('name'));

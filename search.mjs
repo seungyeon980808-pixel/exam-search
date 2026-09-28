@@ -140,3 +140,7 @@ export function searchFiles(files, questions, query, filters = {}) {
   }
   return [...matches].map(([name, match]) => ({ ...byName.get(name), ...match }));
 }
+export function fileQuestions(questions, pdfFile, page = null) {
+  return questions.filter((item) => item.pdfFile === pdfFile && (page === null || item.page === page))
+    .sort((a, b) => a.page - b.page || a.no - b.no || a.id.localeCompare(b.id));
+}
