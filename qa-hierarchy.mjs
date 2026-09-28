@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 
 const base = process.env.EXAM_SEARCH_URL || 'http://127.0.0.1:8794/';
 const directPrivate = process.env.EXAM_QA_DIRECT_PRIVATE === '1';
+const publicDrive = process.env.EXAM_QA_PUBLIC_DRIVE === '1';
 const preview = process.env.EXAM_PREVIEW_OUTPUT;
 const manifestPath = process.env.EXAM_STAGE_MANIFEST;
 const evidence = process.env.EXAM_QA_EVIDENCE || '/private/tmp/exam-search-hierarchy-qa';
@@ -41,7 +42,7 @@ try {
       return route.fulfill({ status: 200, contentType: 'application/json',
         body: await readFile(path.join(preview, 'data', name)) });
     });
-    if (!directPrivate) await page.route('https://5e-google-drive-gateway.5e-desktop.workers.dev/**', async (route) => {
+    if (!directPrivate && !publicDrive) await page.route('https://5e-google-drive-gateway.5e-desktop.workers.dev/**', async (route) => {
       const url = new URL(route.request().url());
       const relative = url.pathname.split('/public/')[1]?.split('/').map(decodeURIComponent).join('/');
       const record = stageFiles.get(relative);
@@ -99,9 +100,9 @@ try {
     assert.equal(overflow.document > overflow.width, false, `${width}px horizontal overflow: ${JSON.stringify(overflow)}`);
     await page.close();
   }
-  if (!directPrivate) assert.ok(servedPdfs >= 8, `expected private PDF loads, got ${servedPdfs}`);
+  if (!directPrivate && !publicDrive) assert.ok(servedPdfs >= 8, `expected private PDF loads, got ${servedPdfs}`);
   assert.deepEqual(failures, []);
-  console.log(`4 new subjects × 3 viewports, original question PDF and file preview verified; ${directPrivate ? 'direct private localhost' : `private PDF loads ${servedPdfs}`}`);
+  console.log(`4 new subjects × 3 viewports, original question PDF and file preview verified; ${publicDrive ? 'anonymous public Drive' : directPrivate ? 'direct private localhost' : `private PDF loads ${servedPdfs}`}`);
 } finally {
   await browser.close();
 }
