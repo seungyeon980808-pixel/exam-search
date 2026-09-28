@@ -1,5 +1,6 @@
 import { readQuestionPdf } from './pdf-viewer.mjs';
 import { inQuestion, verifiedGlyphMap } from './live-fonts.mjs';
+import { recoverEquationItems, recoverPiecewiseItems } from './live-equations.mjs';
 
 function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {
@@ -11,15 +12,38 @@ function textFor(item, glyphs) {
   return decoded.reduce((result, value) => {
     const separator = /\\[A-Za-z]+$/u.test(result) && /^[A-Za-z]/u.test(value) ? ' ' : '';
     return result + separator + value;
-  }, '').replace(/\\lambda\s+([a-z])/gu, '\\lambda_{$1}');
+  }, '');
 }
 
 function clipItems(question, pdf, glyphs) {
-  return pdf.content.items.filter((item) => inQuestion(item, question, pdf.pageHeight))
-    .map((item) => ({ x: item.transform[4], y: item.transform[5], width: item.width,
+  const advances = new Map(pdf.glyphs?.map((glyph) =>
+    [`${glyph.fontId}:${glyph.codepoint}`, glyph.advance]) || []);
+  const source = pdf.equationItems ? [...pdf.content.items.filter((item) =>
+    !/^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '')),
+  ...pdf.equationItems] : pdf.content.items;
+  return source.filter((item) => inQuestion(item, question, pdf.pageHeight))
+    .flatMap((item) => {
+      const base = { x: item.transform[4], y: item.transform[5], width: item.width,
       height: item.height || 0,
       raw: item.str, value: textFor(item, glyphs),
-      math: pdf.fonts[item.fontName]?.name?.split('+').at(-1) === 'HyhwpEQ' }));
+      math: /^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '') };
+      if (!base.math || !/[\uE05C\uE06D\uE06E]/u.test(item.str) || [...item.str.trim()].length < 2) return [base];
+      const chars = [...item.str];
+      const widths = chars.map((char) => advances.get(`${item.fontName}:${char.codePointAt(0)}`)
+        ?? (/\s/u.test(char) ? 0 : undefined));
+      if (widths.some((width) => !Number.isFinite(width))) {
+        throw new Error('수식 구조 글자의 실제 너비를 확인할 수 없습니다.');
+      }
+      const total = widths.reduce((sum, width) => sum + width, 0);
+      if (total <= 0) throw new Error('수식 구조 글자의 실제 너비가 없습니다.');
+      let x = base.x;
+      return chars.map((char, index) => {
+        const width = base.width * widths[index] / total;
+        const part = { ...base, x, width, raw: char, value: textFor({ str: char, fontName: item.fontName }, glyphs) };
+        x += width;
+        return part;
+      });
+    });
 }
 
 function findLines(items) {
@@ -30,17 +54,30 @@ function findLines(items) {
     if (line) line.anchors.push(item);
     else lines.push({ y: item.y, anchors: [item], items: [] });
   }
-  for (const item of items) {
-    const line = [...lines].sort((left, right) => Math.abs(left.y - item.y) - Math.abs(right.y - item.y))[0];
-    if (line && Math.abs(line.y - item.y) < 13) line.items.push({ ...item });
-    else if (item.math) lines.push({ y: item.y, anchors: [], items: [{ ...item }] });
+  const bars = items.filter((item) => item.math && item.raw === '\uE06D');
+  for (const item of [...items].sort((a, b) => Number(b.raw === '\uE06D') - Number(a.raw === '\uE06D')
+    || b.height - a.height)) {
+    const enclosing = bars.filter((bar) => item === bar || (item.math
+      && item.x + item.width / 2 >= bar.x && item.x + item.width / 2 <= bar.x + bar.width
+      && Math.abs(item.y - bar.y) < 18)).sort((a, b) => Math.abs(item.y - a.y) - Math.abs(item.y - b.y)
+        || a.width - b.width)[0];
+    const placementY = enclosing ? enclosing.y + enclosing.height * 0.35
+      : /^\\sum$/u.test(item.value) ? item.y + item.height * 0.17 : item.y;
+    const line = [...lines].sort((left, right) => Math.abs(left.y - placementY) - Math.abs(right.y - placementY))[0];
+    if (line && Math.abs(line.y - placementY) < Math.max(13,
+      ...line.anchors.map((anchor) => anchor.height * 1.7))) line.items.push({ ...item });
+    else if (item.math) lines.push({ y: placementY, anchors: [], items: [{ ...item }] });
   }
   for (const line of lines.filter((entry) => !entry.anchors.length)) {
-    const ranked = [...line.items].sort((left, right) => right.height - left.height
-      || right.width - left.width);
+    const candidates = line.items.filter((item) => !/[\uE05C\uE06D\uE06E]/u.test(item.raw)
+      && !/^\\(?:sum|int|prod)/u.test(item.value));
+    const score = (item) => candidates.filter((other) => Math.abs(other.height - item.height) < 1
+      && Math.abs(other.y - item.y) < 1.5).length * Math.max(1, item.height) ** 2;
+    const ranked = [...(candidates.length ? candidates : line.items)].sort((left, right) => score(right) - score(left)
+      || right.height - left.height || right.width - left.width);
     const primary = ranked[0];
     if (ranked.some((item) => item !== primary
-      && Math.abs(item.height - primary.height) < 0.5
+      && score(item) === score(primary) && Math.abs(item.height - primary.height) < 0.5
       && Math.abs(item.width - primary.width) < 0.5
       && Math.abs(item.y - primary.y) > 2.3)) {
       throw new Error('독립 수식 줄의 기준선을 확인할 수 없습니다.');
@@ -50,92 +87,8 @@ function findLines(items) {
   return lines.sort((left, right) => right.y - left.y);
 }
 
-function recoverFractions(items) {
-  const consumed = new Set();
-  const additions = [];
-  for (const bar of items.filter((item) => item.math && item.value.includes('\\frac'))) {
-    const near = items.filter((item) => item !== bar && item.math
-      && item.x >= bar.x - 3 && item.x <= bar.x + bar.width + 2
-      && Math.abs(item.y - bar.y) < 18);
-    const above = near.filter((item) => item.y - bar.y > 2.5).sort((a, b) => a.x - b.x);
-    const below = near.filter((item) => bar.y - item.y > 2.5).sort((a, b) => a.x - b.x);
-    if (!above.length && below.length) {
-      consumed.add(bar);
-      for (const part of below) consumed.add(part);
-      additions.push({ x: bar.x, y: bar.y, width: bar.width, math: true,
-        value: `\\bar{${below.map((part) => part.value.trim()).join('')}}` });
-      continue;
-    }
-    if (!above.length || !below.length) {
-      throw new Error('PDF의 분자·분모 위치를 확인할 수 없습니다.');
-    }
-    consumed.add(bar);
-    for (const part of [...above, ...below]) consumed.add(part);
-    const numerator = recoverSubscripts(above, Math.max(...above.map((part) => part.y)));
-    additions.push({ x: bar.x, y: bar.y, width: bar.width, math: true,
-      value: `\\frac{${numerator.map((part) => part.value.trim()).join('')}}{${below.map((part) => part.value.trim()).join('')}}` });
-  }
-  return [...items.filter((item) => !consumed.has(item)), ...additions];
-}
-
-function recoverNuclearScripts(items, baseline) {
-  const ordered = [...items].sort((left, right) => left.x - right.x);
-  const removed = new Set();
-  for (const lower of ordered) {
-    if (!lower.math || !/^\d+$/u.test(lower.value.trim())
-      || baseline - lower.y < 2 || baseline - lower.y > 8) continue;
-    const upper = ordered.find((item) => item !== lower && item.math
-      && /^\d+$/u.test(item.value.trim()) && Math.abs(item.x - lower.x) < 1
-      && item.y - baseline > 2 && item.y - baseline < 8);
-    const symbol = ordered.find((item) => item.math && item.x >= lower.x + lower.width - 0.5
-      && item.x - lower.x - lower.width < 3 && /^[A-Za-z]/u.test(item.value));
-    if (!upper || !symbol) continue;
-    symbol.value = `{}^{${upper.value.trim()}}_{${lower.value.trim()}}${symbol.value}`;
-    removed.add(lower);
-    removed.add(upper);
-  }
-  return ordered.filter((item) => !removed.has(item));
-}
-
-function recoverSubscripts(items, baseline) {
-  const ordered = [...items].sort((left, right) => left.x - right.x);
-  const removed = new Set();
-  for (const item of ordered) {
-    if (!item.math || baseline - item.y < 2.3 || baseline - item.y > 8
-      || !/^[A-Za-z0-9]+$/u.test(item.value.trim())) continue;
-    const parent = ordered.filter((candidate) => candidate !== item && candidate.math
-      && candidate.x + candidate.width <= item.x + 1
-      && item.x - candidate.x - candidate.width < 8)
-      .sort((left, right) => right.x - left.x)[0];
-    if (!parent) throw new Error(`수식의 아래 첨자 ${item.value} (${item.x}, ${item.y})가 연결될 대상을 찾지 못했습니다.`);
-    parent.value = `${parent.value.trimEnd()}_{${item.value.trim()}}`;
-    parent.width = item.x + item.width - parent.x;
-    removed.add(item);
-  }
-  return ordered.filter((item) => !removed.has(item));
-}
-
-function recoverSuperscripts(items, baseline) {
-  const ordered = [...items].sort((left, right) => left.x - right.x);
-  const removed = new Set();
-  for (const item of ordered) {
-    if (!item.math || item.y - baseline < 2.3 || item.y - baseline > 8
-      || !/^[A-Za-z0-9]+$/u.test(item.value.trim())) continue;
-    const parent = ordered.filter((candidate) => candidate !== item && candidate.math
-      && candidate.x + candidate.width <= item.x + 1
-      && item.x - candidate.x - candidate.width < 8)
-      .sort((left, right) => right.x - left.x)[0];
-    if (!parent) throw new Error(`수식의 위 첨자 ${item.value} (${item.x}, ${item.y})가 연결될 대상을 찾지 못했습니다.`);
-    parent.value = `${parent.value.trimEnd()}^{${item.value.trim()}}`;
-    parent.width = item.x + item.width - parent.x;
-    removed.add(item);
-  }
-  return ordered.filter((item) => !removed.has(item));
-}
-
 function lineRuns(line) {
-  const items = recoverSuperscripts(recoverSubscripts(
-    recoverNuclearScripts(recoverFractions(line.items), line.y), line.y), line.y)
+  const items = recoverEquationItems(line.items, line.y)
     .sort((left, right) => left.x - right.x || right.y - left.y);
   const runs = [];
   let previous = null;
@@ -157,13 +110,8 @@ function lineRuns(line) {
   return runs;
 }
 
-function appendLine(block, runs) {
-  if (block.runs.length) block.runs.push({ kind: 'text', value: ' ' });
-  block.runs.push(...runs);
-}
-
 export function buildLiveStructure(question, pdf, glyphs) {
-  const lines = findLines(clipItems(question, pdf, glyphs));
+  const lines = findLines(recoverPiecewiseItems(clipItems(question, pdf, glyphs)));
   const blocks = [];
   let role = 'stem';
   let choiceCount = 0;
@@ -193,12 +141,7 @@ export function buildLiveStructure(question, pdf, glyphs) {
         const label = '①②③④⑤'[choiceCount++];
         blocks.push({ role: current, label, runs: currentRuns });
       } else {
-        let block = blocks.at(-1);
-        if (!block || block.role !== current) {
-          block = { role: current, label: '', runs: [] };
-          blocks.push(block);
-        }
-        appendLine(block, currentRuns);
+        blocks.push({ role: current, label: '', runs: currentRuns });
       }
       currentRuns = [];
     };
@@ -216,7 +159,8 @@ export function buildLiveStructure(question, pdf, glyphs) {
     }
     flush();
   }
-  if (choiceCount !== 5 || !blocks.some((block) => block.role === 'stem')) {
+  if ((question.responseType !== 'short_answer' && choiceCount !== 5)
+    || !blocks.some((block) => block.role === 'stem')) {
     throw new Error('원본 PDF에서 본문과 선지 다섯 개를 모두 분리하지 못했습니다.');
   }
   return { schema: 'exam-editable-v1', questionId: question.id,

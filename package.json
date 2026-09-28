@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test_search.mjs test_drive_source.mjs test_expansion.mjs test_subject_hierarchy.mjs test_editable_convert.mjs test_editable_source.mjs test_editable_batch.mjs test_editable_collection.mjs test_question_selection.mjs test_release_data.mjs",
+    "test": "node --test test_search.mjs test_drive_source.mjs test_expansion.mjs test_subject_hierarchy.mjs test_editable_convert.mjs test_editable_source.mjs test_editable_batch.mjs test_editable_collection.mjs test_question_selection.mjs test_release_data.mjs test_live_fonts.mjs test_live_equations.mjs test_pdf_text_geometry.mjs test_live_pdf_fixtures.mjs",
     "qa": "node qa.mjs",
     "qa:editable": "node qa_editable.mjs",
-    "qa:batch": "node qa_batch_editable.mjs"
+    "qa:batch": "node qa_batch_editable.mjs",
+    "qa:formulas": "node qa_formula_corpus.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

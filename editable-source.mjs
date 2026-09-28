@@ -26,7 +26,7 @@ export function preparedParagraphs(question, prepared) {
   if (!Array.isArray(prepared.blocks) || !prepared.blocks.some((block) => block.role === 'stem' && hasContent(block))) throw new Error('본문이 없습니다.');
   if (prepared.blocks.some((block) => block.role === 'choice' && !hasContent(block))) throw new Error('빈 선지입니다.');
   const paragraphs = paragraphsForPrepared(prepared);
-  validateQuestionParagraphs(paragraphs);
+  validateQuestionParagraphs(paragraphs, question);
   return paragraphs;
 }
 

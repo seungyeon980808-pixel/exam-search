@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createEditableBatch, clearEditableBatchCache } from './editable-batch.mjs';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { equationTextItems } from './pdf-text-geometry.mjs';
 
 const getQuestion = async (id) => ({ id, pdfFile: `${id[0]}.pdf` });
 const result = (question) => ({ questionId: question.id, provenance: 'pdf', paragraphs: [] });
@@ -59,7 +60,7 @@ test('PDF bytes remain owned by the pending extraction after another PDF clears 
   const source = await readFile(new URL('./pdf-viewer.mjs', import.meta.url), 'utf8');
   let release; const pending = new Promise((resolve) => { release = resolve; });
   const seen = [], destroyed = [];
-  const context = { URL, Uint8Array, downloadDriveFile: (name) => name === 'A' ? pending : Promise.resolve(Uint8Array.of(2)),
+  const context = { URL, Uint8Array, equationTextItems, downloadDriveFile: (name) => name === 'A' ? pending : Promise.resolve(Uint8Array.of(2)),
     driveFilePath: (name) => name,
     pdfjs: { getDocument: ({ data, fontExtraProperties }) => {
       if (fontExtraProperties) seen.push(data[0]);

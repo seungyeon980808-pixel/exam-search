@@ -38,7 +38,7 @@ export function glyphBytes(fontData, glyphId) {
 
 export async function verifyGlyph(fontData, glyphId, proof) {
   const actual = glyphBytes(fontData, glyphId);
-  if (actual.unitsPerEm !== proof.unitsPerEm
+  if (!actual.raw.length || actual.unitsPerEm !== proof.unitsPerEm
     || actual.metrics[0] !== proof.metrics[0]
     || actual.metrics[1] !== proof.metrics[1]) return false;
   const digest = await crypto.subtle.digest('SHA-256', actual.raw);

@@ -38,7 +38,7 @@ export async function verifiedGlyphMap(question, pdf) {
     const key = `${glyph.fontId}:${glyph.codepoint}`;
     if (!needed.has(key)) continue;
     const font = pdf.fonts[glyph.fontId];
-    const baseName = font?.name?.split('+').at(-1);
+    const baseName = font?.name?.split('+').at(-1)?.split('-Identity-')[0];
     const candidates = fonts.filter((entry) => entry.fontName === baseName)
       .flatMap((entry) => entry.glyphs
         .filter((proof) => proof.codepoint === glyph.codepoint)
@@ -54,7 +54,6 @@ export async function verifiedGlyphMap(question, pdf) {
         if (previous && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
         mapped.set(key, proof.formula);
         matched = true;
-        break;
       }
     }
     if (!matched) rejected.add(key);

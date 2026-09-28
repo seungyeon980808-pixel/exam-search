@@ -9,6 +9,10 @@ import { HwpDocument } from './vendor/rhwp-studio/assets/rhwp-core.js';
 
 const index = JSON.parse(await readFile(new URL('./data/questions.json', import.meta.url), 'utf8'));
 
+test('visible sequence braces remain delimiters, not HWP grouping braces', () => {
+  assert.equal(contentRuns(String.raw`$\{a_{n}\}$`)[0].script, 'LEFT {a_{n}RIGHT }');
+});
+
 test('indexed question separates stem, claims and five inline choices', () => {
   const question = index.items.find((item) => item.id === 'p1_2027_06_01');
   const lines = paragraphsForText(question.text, question.no).map((runs) => runs.map((run) => run.value).join(''));
@@ -117,6 +121,19 @@ test('a question missing a choice cannot become a complete editable document', a
   await assert.rejects(createEditableHwpx({
     no: 6, textQuality: 'text', text: '6. 물체의 운동은?\n① ㄱ ② ㄴ ③ ㄷ ④ ㄱ, ㄴ',
   }), /선지 다섯 개/u);
+});
+
+test('explicit short-answer mathematics preserves an editable equation without fabricated choices', async () => {
+  const bytes = await createEditableHwpx({ no: 16, responseType: 'short_answer',
+    textQuality: 'text', text: String.raw`16. 함수 \수식{f(x)=x^{2}}에 대하여 값을 구하시오.` });
+  const document = new HwpDocument(bytes);
+  try {
+    const controls = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
+    assert.equal(controls.length, 1);
+    assert.doesNotMatch(document.getTextRange(0, 0, 0, 200), /[①②③④⑤]/u);
+    assert.match(JSON.parse(document.getEquationProperties(controls[0].list, controls[0].para,
+      controls[0].controlIndex, -1, -1)).script, /x\^\{2\}/u);
+  } finally { document.free(); }
 });
 
 test('2027 June Physics I question 6 keeps every text-layer formula as editable equations', async () => {

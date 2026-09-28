@@ -40,7 +40,8 @@ function equationScript(source) {
     if (!denominator) break;
     value = `${value.slice(0, match.index)}{${equationScript(numerator[0])}} over {${equationScript(denominator[0])}}${value.slice(denominator[1])}`;
   }
-  return value.replace(/\\([A-Za-z]+)/gu, '$1');
+  return value.replace(/\\\{/gu, 'LEFT {').replace(/\\\}/gu, 'RIGHT }')
+    .replace(/\\([A-Za-z]+)/gu, '$1');
 }
 
 export function contentRuns(text) {
@@ -90,6 +91,7 @@ export function paragraphsForPrepared(question) {
   }
   const paragraphs = [];
   let previousRole = '';
+  let numbered = false;
   for (const block of question.blocks) {
     if (block.role !== previousRole && ['ask', 'bogi', 'choice'].includes(block.role)) {
       paragraphs.push([]);
@@ -97,7 +99,7 @@ export function paragraphsForPrepared(question) {
     if (block.role === 'bogi' && previousRole !== 'bogi') {
       paragraphs.push([{ kind: 'text', value: '<보기>' }]);
     }
-    const label = block.role === 'stem' ? `${question.number}. `
+    const label = block.role === 'stem' && !numbered ? `${question.number}. `
       : block.role === 'choice' ? `${block.label} `
         : block.label ? `${block.label}. ` : '';
     paragraphs.push([
@@ -105,6 +107,7 @@ export function paragraphsForPrepared(question) {
       ...block.runs,
     ]);
     previousRole = block.role;
+    if (block.role === 'stem') numbered = true;
   }
   return paragraphs;
 }
@@ -162,11 +165,11 @@ export function safeTextParagraphs(question) {
   const text = question.text || '';
   const paragraphs = paragraphsForText(text, question.no);
   if (!paragraphs.length) throw new Error('이 문항은 색인 텍스트를 읽을 수 없어 자동 변환할 수 없습니다. PDF 원본을 확인해 주세요.');
-  if (![...'①②③④⑤'].every((label) => paragraphs.some((runs) => runs[0]?.kind === 'text'
+  if (question.responseType !== 'short_answer' && ![...'①②③④⑤'].every((label) => paragraphs.some((runs) => runs[0]?.kind === 'text'
     && runs[0].value.trimStart().startsWith(label)))) {
     throw new Error('이 문항은 선지 다섯 개가 모두 복원되지 않아 편집본을 만들지 않았습니다. PDF 원본을 확인해 주세요.');
   }
-  validateQuestionParagraphs(paragraphs);
+  validateQuestionParagraphs(paragraphs, question);
   return paragraphs;
 }
 
@@ -178,14 +181,16 @@ export function validateParagraphs(paragraphs) {
       const value = run?.kind === 'text' ? run.value : run?.kind === 'equation' ? run.script : null;
       if (typeof value !== 'string' || (run.kind === 'equation' && !value.trim())) throw new Error('잘못된 run 또는 빈 수식입니다.');
       if (/\(cid:\d+\)|[\uE000-\uF8FF]/u.test(value)) throw new Error('복원되지 않은 글자 또는 수식입니다.');
+      if (/\\brace(?:Top|Middle|Bottom|Extender)/u.test(value)) throw new Error('조립되지 않은 수식 괄호입니다.');
     }
   }
 }
 
-export function validateQuestionParagraphs(paragraphs) {
+export function validateQuestionParagraphs(paragraphs, question = {}) {
   validateParagraphs(paragraphs);
   const lines = paragraphs.map((runs) => runs.map((run) => run.kind === 'text' ? run.value : '수식').join('').trim());
   if (!lines.some((line) => line.replace(/^\d+\.\s*/u, '') && !/^[①②③④⑤]/u.test(line))) throw new Error('본문이 없습니다.');
+  if (question.responseType === 'short_answer') return;
   for (const label of '①②③④⑤') {
     if (lines.filter((line) => line.startsWith(label)).length !== 1) throw new Error('선지 다섯 개가 없거나 중복되었습니다.');
   }
@@ -203,7 +208,7 @@ export async function createCollectionHwpx(resolvedItems) {
   if (!Array.isArray(resolvedItems) || !resolvedItems.length) throw new Error('선택한 문항이 없습니다.');
   const paragraphs = [];
   for (const [index, item] of resolvedItems.entries()) {
-    validateQuestionParagraphs(item.paragraphs);
+    validateQuestionParagraphs(item.paragraphs, item.question);
     if (index) paragraphs.push([]);
     paragraphs.push([{ kind: 'text', value: item.sourceLabel || item.question?.title || item.questionId }]);
     paragraphs.push(...item.paragraphs);
@@ -222,6 +227,12 @@ async function createParagraphDocument(paragraphs) {
     for (const [index, runs] of paragraphs.entries()) {
       if (index && !JSON.parse(document.insertParagraph(0, index)).ok) throw new Error('문단을 삽입하지 못했습니다.');
       insertRuns(document, index, runs);
+      const tallEquation = runs.some((run) => run.kind === 'equation'
+        && /\\(?:frac|sum|int)|cases\{/u.test(run.script));
+      const formatted = JSON.parse(document.applyParaFormat(0, index,
+        JSON.stringify({ alignment: 'left', lineSpacing: 180, lineSpacingType: 'Percent',
+          spacingBefore: tallEquation ? 400 : 0, spacingAfter: tallEquation ? 800 : 0 })));
+      if (!formatted.ok) throw new Error('수식 문단의 간격을 설정하지 못했습니다.');
     }
     return document.exportHwpx();
   } finally {

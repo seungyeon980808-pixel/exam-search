@@ -1,6 +1,7 @@
 import * as pdfjs from './vendor/pdfjs/pdf.mjs';
 import { driveFilePath } from './data.mjs';
 import { downloadDriveFile } from './drive-source.mjs';
+import { equationTextItems } from './pdf-text-geometry.mjs';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.mjs', import.meta.url).href;
 
@@ -76,7 +77,8 @@ export async function readQuestionPdf(item) {
     ]);
     const fonts = Object.fromEntries(Object.keys(content.styles).map((key) => {
       const font = page.commonObjs.get(key);
-      return [key, { name: font.name || '', data: font.data ? Uint8Array.from(font.data) : null }];
+      return [key, { name: font.name || '', fontMatrix: font.fontMatrix,
+        data: font.data ? Uint8Array.from(font.data) : null }];
     }));
     const glyphs = [];
     let fontId = '';
@@ -86,13 +88,14 @@ export async function readQuestionPdf(item) {
       if (operation === pdfjs.OPS.setFont) fontId = args[0];
       if (operation !== pdfjs.OPS.showText) continue;
       for (const glyph of args[0]) {
-        if (glyph && typeof glyph === 'object' && /[\uE000-\uF8FF]/u.test(glyph.unicode || '')) {
+        if (glyph && typeof glyph === 'object' && glyph.unicode) {
           glyphs.push({ fontId, codepoint: glyph.unicode.codePointAt(0),
-            glyphId: glyph.originalCharCode });
+            glyphId: glyph.originalCharCode, advance: glyph.width });
         }
       }
     }
-    return { content, fonts, glyphs, pageHeight: page.getViewport({ scale: 1 }).height };
+    return { content, fonts, glyphs, equationItems: equationTextItems(operations, pdfjs.OPS, fonts),
+      pageHeight: page.getViewport({ scale: 1 }).height };
   } finally {
     await task.destroy();
   }
