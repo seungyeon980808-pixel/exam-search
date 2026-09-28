@@ -21,14 +21,19 @@ function openPdf(name) {
     const promise = bytes
       .then((data) => pdfjs.getDocument({ data: new Uint8Array(data.slice(0)), ...options }).promise);
     documentCache.set(name, promise);
-    promise.catch(() => { documentCache.delete(name); byteCache.delete(name); });
+    promise.catch(() => {
+      if (documentCache.get(name) === promise) documentCache.delete(name);
+      if (byteCache.get(name) === bytes) byteCache.delete(name);
+    });
   }
   return documentCache.get(name);
 }
 
 export async function readQuestionPdf(item) {
-  if (!byteCache.has(item.pdfFile)) await openPdf(item.pdfFile);
-  const bytes = await byteCache.get(item.pdfFile);
+  const documentPromise = openPdf(item.pdfFile);
+  const bytesPromise = byteCache.get(item.pdfFile);
+  await documentPromise;
+  const bytes = await bytesPromise;
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)),
     fontExtraProperties: true, ...options });
   try {

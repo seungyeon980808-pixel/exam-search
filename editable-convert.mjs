@@ -110,6 +110,7 @@ export function paragraphsForPrepared(question) {
 }
 
 export function insertRuns(document, paragraphIndex, runs) {
+  validateParagraphs([runs]);
   let text = '';
   const equations = [];
   for (const run of runs) {
@@ -147,7 +148,7 @@ async function core() {
   return corePromise;
 }
 
-export async function createEditableHwpx(question) {
+export function safeTextParagraphs(question) {
   if (question.textQuality === 'unreadable') {
     throw new Error('이 문항은 색인 텍스트를 읽을 수 없어 자동 변환할 수 없습니다. PDF 원본을 확인해 주세요.');
   }
@@ -165,24 +166,53 @@ export async function createEditableHwpx(question) {
     && runs[0].value.trimStart().startsWith(label)))) {
     throw new Error('이 문항은 선지 다섯 개가 모두 복원되지 않아 편집본을 만들지 않았습니다. PDF 원본을 확인해 주세요.');
   }
-  const HwpDocument = await core();
-  const document = HwpDocument.createEmpty();
-  try {
-    const blank = JSON.parse(document.createBlankDocument());
-    if (!blank.sectionCount) throw new Error('rhwp 문서를 생성하지 못했습니다.');
-    configurePage(document);
-    for (const [index, runs] of paragraphs.entries()) {
-      if (index) document.insertParagraph(0, index);
-      insertRuns(document, index, runs);
+  validateQuestionParagraphs(paragraphs);
+  return paragraphs;
+}
+
+export function validateParagraphs(paragraphs) {
+  if (!Array.isArray(paragraphs) || !paragraphs.length) throw new Error('문단이 없습니다.');
+  for (const runs of paragraphs) {
+    if (!Array.isArray(runs)) throw new Error('잘못된 문단입니다.');
+    for (const run of runs) {
+      const value = run?.kind === 'text' ? run.value : run?.kind === 'equation' ? run.script : null;
+      if (typeof value !== 'string' || (run.kind === 'equation' && !value.trim())) throw new Error('잘못된 run 또는 빈 수식입니다.');
+      if (/\(cid:\d+\)|[\uE000-\uF8FF]/u.test(value)) throw new Error('복원되지 않은 글자 또는 수식입니다.');
     }
-    return document.exportHwpx();
-  } finally {
-    document.free();
   }
 }
 
+export function validateQuestionParagraphs(paragraphs) {
+  validateParagraphs(paragraphs);
+  const lines = paragraphs.map((runs) => runs.map((run) => run.kind === 'text' ? run.value : '수식').join('').trim());
+  if (!lines.some((line) => line.replace(/^\d+\.\s*/u, '') && !/^[①②③④⑤]/u.test(line))) throw new Error('본문이 없습니다.');
+  for (const label of '①②③④⑤') {
+    if (lines.filter((line) => line.startsWith(label)).length !== 1) throw new Error('선지 다섯 개가 없거나 중복되었습니다.');
+  }
+}
+
+export async function createEditableHwpx(question) {
+  return createParagraphDocument(safeTextParagraphs(question));
+}
+
 export async function createPreparedHwpx(question) {
-  const paragraphs = paragraphsForPrepared(question);
+  return createParagraphDocument(paragraphsForPrepared(question));
+}
+
+export async function createCollectionHwpx(resolvedItems) {
+  if (!Array.isArray(resolvedItems) || !resolvedItems.length) throw new Error('선택한 문항이 없습니다.');
+  const paragraphs = [];
+  for (const [index, item] of resolvedItems.entries()) {
+    validateQuestionParagraphs(item.paragraphs);
+    if (index) paragraphs.push([]);
+    paragraphs.push([{ kind: 'text', value: item.sourceLabel || item.question?.title || item.questionId }]);
+    paragraphs.push(...item.paragraphs);
+  }
+  return createParagraphDocument(paragraphs);
+}
+
+async function createParagraphDocument(paragraphs) {
+  validateParagraphs(paragraphs);
   const HwpDocument = await core();
   const document = HwpDocument.createEmpty();
   try {
@@ -190,7 +220,7 @@ export async function createPreparedHwpx(question) {
     if (!blank.sectionCount) throw new Error('rhwp 문서를 생성하지 못했습니다.');
     configurePage(document);
     for (const [index, runs] of paragraphs.entries()) {
-      if (index) document.insertParagraph(0, index);
+      if (index && !JSON.parse(document.insertParagraph(0, index)).ok) throw new Error('문단을 삽입하지 못했습니다.');
       insertRuns(document, index, runs);
     }
     return document.exportHwpx();

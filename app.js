@@ -2,6 +2,7 @@ import { driveFilePath, getJson } from './data.mjs';
 import { driveLink } from './drive-source.mjs';
 import { renderFilePages, renderQuestion } from './pdf-viewer.mjs';
 import { openEditable } from './editable-editor.mjs';
+import { createQuestionSelection } from './question-selection.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const shell = $('.app-shell');
@@ -32,6 +33,46 @@ let initialSelectionPending = true;
 let activeQuestionObjectUrl = null;
 let stopFileRendering = null;
 let selectedQuestion = null;
+const selection = createQuestionSelection();
+const selectionLabels = new Map();
+const selectionToolbar = $('#selection-toolbar');
+$('.pane-actions').prepend(selectionToolbar);
+
+function renderSelection() {
+  const ids = selection.snapshot();
+  selectionToolbar.hidden = !ids.length;
+  $('#selection-count').textContent = `선택 ${ids.length}개`;
+  $('#selection-open').disabled = !ids.length;
+  if (!ids.length) $('#selection-toggle').setAttribute('aria-expanded', 'false');
+  $('#selection-tray').hidden = !ids.length || $('#selection-toggle').getAttribute('aria-expanded') !== 'true';
+  for (const checkbox of list.querySelectorAll('.question-selection input')) {
+    checkbox.checked = selection.has(checkbox.closest('.question-item').dataset.id);
+  }
+  $('#detail-selection').disabled = !selectedQuestion;
+  $('#detail-selection').checked = !!selectedQuestion && selection.has(selectedQuestion.id);
+  const items = ids.map((id, index) => {
+    const row = document.createElement('li');
+    row.dataset.id = id;
+    const name = document.createElement('span');
+    name.className = 'selection-name';
+    name.textContent = `${index + 1}. ${selectionLabels.get(id) || id}`;
+    const actions = document.createElement('div');
+    actions.className = 'selection-item-actions';
+    for (const [action, text, disabled] of [['up', '위로', index === 0], ['down', '아래로', index === ids.length - 1], ['remove', '제거', false]]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button secondary';
+      button.dataset.action = action;
+      button.textContent = text;
+      button.disabled = disabled;
+      button.setAttribute('aria-label', `${selectionLabels.get(id) || id} ${text}`);
+      actions.append(button);
+    }
+    row.append(name, actions);
+    return row;
+  });
+  $('#selection-list').replaceChildren(...items);
+}
 
 function setHelp(message, error = false) {
   help.textContent = message;
@@ -144,15 +185,19 @@ function setResultMode(mode) {
 }
 
 function cardFor(item) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'result-item question-item';
+  wrapper.dataset.id = item.id;
+  const labelText = `${item.exam} · ${item.subjectLabel} ${item.no}번`;
+  selectionLabels.set(item.id, labelText);
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'result-card';
-  button.classList.add('result-item');
   button.dataset.id = item.id;
   button.setAttribute('aria-current', String(item.id === state.selectedId));
   const meta = document.createElement('span');
   meta.className = 'result-meta';
-  meta.textContent = `${item.exam} · ${item.subjectLabel} ${item.no}번`;
+  meta.textContent = labelText;
   const preview = document.createElement('span');
   preview.className = 'result-preview is-loading';
   const image = document.createElement('img');
@@ -172,8 +217,18 @@ function cardFor(item) {
   tags.className = 'result-tags';
   tags.textContent = item.tags?.length ? item.tags.slice(0, 3).join(' · ') : '단원 미분류';
   button.append(tags);
-  cardLayoutObserver.observe(button);
-  return button;
+  const label = document.createElement('label');
+  label.className = 'question-selection card-selection';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = selection.has(item.id);
+  checkbox.setAttribute('aria-label', `${labelText} 선택`);
+  const caption = document.createElement('span');
+  caption.textContent = '선택';
+  label.append(checkbox, caption);
+  wrapper.append(button, label);
+  cardLayoutObserver.observe(wrapper);
+  return wrapper;
 }
 
 function fileRowFor(item) {
@@ -285,6 +340,7 @@ async function search(reset = true) {
     shell.classList.remove('is-detail');
     if (shell.classList.contains('is-file-preview')) setFilePreviewMode(false);
     previewToggle.disabled = true;
+    cardLayoutObserver.disconnect();
     list.replaceChildren();
     $('#result-count').textContent = '검색 중…';
   }
@@ -387,6 +443,8 @@ async function selectQuestion(id, openDetail = true) {
     if (selectionRequestId !== state.selectionRequestId) return;
     state.selectedId = id;
     selectedQuestion = item;
+    selectionLabels.set(id, `${item.exam} · ${item.subjectLabel} ${item.no}번`);
+    renderSelection();
     let selectedCard;
     for (const [index, card] of [...list.querySelectorAll('.result-card')].entries()) {
       const selected = card.dataset.id === id;
@@ -510,7 +568,7 @@ async function changePage(direction) {
     updateAddress();
     return;
   }
-  const firstCard = list.querySelector('.result-card:not([hidden])');
+  const firstCard = list.querySelector('.question-item:not([hidden]) .result-card');
   if (shell.classList.contains('is-split') && firstCard) await selectQuestion(firstCard.dataset.id, false);
   else {
     state.selectedId = '';
@@ -583,7 +641,7 @@ previewToggle.addEventListener('click', async () => {
   }
   if (shell.classList.contains('is-split')) { setPreviewMode(false); return; }
   const card = [...list.querySelectorAll('.result-card')].find((entry) => entry.dataset.id === state.selectedId)
-    || list.querySelector('.result-card:not([hidden])');
+    || list.querySelector('.question-item:not([hidden]) .result-card');
   if (!card) return;
   setPreviewMode(true);
   await selectQuestion(card.dataset.id, false);
@@ -591,6 +649,46 @@ previewToggle.addEventListener('click', async () => {
 list.addEventListener('click', (event) => {
   const card = event.target.closest('.result-card');
   if (card) selectQuestion(card.dataset.id, !shell.classList.contains('is-split'));
+});
+list.addEventListener('change', (event) => {
+  const wrapper = event.target.closest('.question-item');
+  if (!wrapper || !event.target.matches('.question-selection input')) return;
+  selection.toggle(wrapper.dataset.id);
+  renderSelection();
+});
+$('#detail-selection').addEventListener('change', () => {
+  if (!selectedQuestion) return;
+  selection.toggle(selectedQuestion.id);
+  renderSelection();
+});
+$('#selection-toggle').addEventListener('click', () => {
+  const expanded = $('#selection-toggle').getAttribute('aria-expanded') === 'true';
+  $('#selection-toggle').setAttribute('aria-expanded', String(!expanded));
+  $('#selection-tray').hidden = expanded;
+});
+$('#selection-clear').addEventListener('click', () => {
+  selection.clear();
+  renderSelection();
+  $('#mode-questions').focus();
+});
+$('#selection-list').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const row = button.closest('li');
+  const id = row.dataset.id;
+  const action = button.dataset.action;
+  const index = selection.snapshot().indexOf(id);
+  if (action === 'remove') selection.remove(id);
+  else selection.move(id, action === 'up' ? -1 : 1);
+  renderSelection();
+  const rows = [...$('#selection-list').children];
+  const target = action === 'remove' ? rows[Math.min(index, rows.length - 1)] : rows.find((item) => item.dataset.id === id);
+  const sameAction = target?.querySelector(`[data-action="${action}"]:not(:disabled)`);
+  (sameAction || target?.querySelector('button:not(:disabled)') || $('#mode-questions')).focus();
+});
+$('#selection-open').addEventListener('click', () => {
+  const ids = selection.snapshot();
+  if (ids.length) document.dispatchEvent(new CustomEvent('open-editable-collection', { detail: { ids } }));
 });
 loadMore.addEventListener('click', () => changePage(1));
 $('#previous-page').addEventListener('click', () => changePage(-1));
@@ -633,7 +731,7 @@ window.addEventListener('keydown', (event) => {
     previewToggle.focus();
     return;
   }
-  if ($('#editable-dialog').open || event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable="true"], dialog')) return;
+  if ($('#editable-dialog').open || event.target instanceof Element && event.target.closest('input, select, textarea, [contenteditable="true"], dialog, .selection-tray, .selection-toolbar')) return;
   if (state.mode === 'files') return;
   const direction = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[event.key];
   if (!direction) return;
