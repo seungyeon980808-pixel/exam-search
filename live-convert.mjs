@@ -1,6 +1,9 @@
 import { readQuestionPdf } from './pdf-viewer.mjs';
 import { inQuestion, verifiedGlyphMap } from './live-fonts.mjs';
-import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems } from './live-equations.mjs';
+import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from './live-equations.mjs';
+import { attachedScript, legacyTable, legacyText } from './legacy-glyphs.mjs';
+import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs';
+import { recoverQuestionRegion } from './question-region.mjs';
 
 function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {
@@ -33,12 +36,60 @@ function clipItems(question, pdf, glyphs) {
   const source = pdf.equationItems ? [...pdf.content.items.filter((item) =>
     !/^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '')),
   ...pdf.equationItems] : pdf.content.items;
-  return attachTextScripts(source.filter((item) => inQuestion(item, question, pdf.pageHeight))
+  const fontOf = (item) => pdf.fonts[item.fontName]?.name;
+  // Labels drawn inside figures (axes, points, captions of drawings) are not question text.
+  let regions = [];
+  if (pdf.operations && pdf.OPS) {
+    try {
+      regions = figureRegions(drawingPrimitives(pdf.operations, pdf.OPS, pdf.pageHeight), pdf.content.items, pdf.pageHeight);
+    } catch { regions = []; }
+  }
+  const inQuestionItems = source.filter((item) => inQuestion(item, question, pdf.pageHeight));
+  const dropped = new Set(regions.length ? inQuestionItems.filter((item) => insideFigure(item, regions, pdf.pageHeight)) : []);
+  // Punctuation and script glyphs left inside a figure whose other labels were dropped
+  // (a lone "(", "₁⁺") belong to those labels, never to running text.
+  if (dropped.size) {
+    const box = (item) => [item.transform[4], pdf.pageHeight - item.transform[5] - (item.height || 0),
+      item.transform[4] + item.width, pdf.pageHeight - item.transform[5]];
+    const labelled = regions.filter((region) => [...dropped].some((item) => {
+      const b = box(item);
+      return b[0] >= region.box[0] - 2 && b[2] <= region.box[2] + 2 && b[1] >= region.box[1] - 2 && b[3] <= region.box[3] + 2;
+    }));
+    for (const item of inQuestionItems) {
+      if (dropped.has(item) || /[\p{L}\p{N}]/u.test(legacyText(fontOf(item), item.str || '').replace(/[\u00b2\u00b3\u00b9\u2070-\u209f]/gu, ''))) continue;
+      const b = box(item);
+      if (labelled.some((region) => b[0] >= region.box[0] - 1 && b[2] <= region.box[2] + 1 && b[1] >= region.box[1] - 1 && b[3] <= region.box[3] + 1)) dropped.add(item);
+    }
+  }
+  const clipped = inQuestionItems.filter((item) => !dropped.has(item));
+  // Lets buildLiveStructure know figure labels were removed from this question.
+  clipItems.lastDropped = dropped.size;
+  // Legacy symbol glyphs double as subscripts and superscripts: the same glyph printed on the
+  // baseline is a subscript and raised it is a superscript. Measure each script-only item
+  // against the nearest item holding ordinary letters or digits.
+  const ordinary = (item) => {
+    const table = legacyTable(fontOf(item));
+    return [...(item.str || '')].some((char) => /[\p{L}\p{N}]/u.test(char) && !(table && Object.hasOwn(table, char)));
+  };
+  const scriptBase = (item) => {
+    if (!legacyTable(fontOf(item)) || ordinary(item)) return null;
+    const [x0, x1] = [item.transform[4], item.transform[4] + item.width];
+    const gap = (other) => Math.max(0, other.transform[4] - x1, x0 - (other.transform[4] + other.width));
+    return clipped.filter((other) => other !== item && other.height > 0 && ordinary(other) && gap(other) <= 3
+      && Math.abs(other.transform[5] - item.transform[5]) < Math.max(other.height, item.height || 0) * 0.9)
+      .sort((a, b) => gap(a) - gap(b) || b.height - a.height
+        || Math.abs(a.transform[5] - item.transform[5]) - Math.abs(b.transform[5] - item.transform[5]))[0] || null;
+  };
+  return attachTextScripts(clipped
     .flatMap((item) => {
+      const scriptOf = scriptBase(item);
+      const offset = scriptOf ? (item.transform[5] - scriptOf.transform[5]) / scriptOf.height : null;
       const base = { x: item.transform[4], y: item.transform[5], width: item.width,
       height: item.height || 0,
-      raw: item.str, value: textFor(item, glyphs),
+      raw: item.str, value: legacyText(fontOf(item), textFor(item, glyphs), offset),
       math: /^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '') };
+      // A raised or lowered script belongs to its base's line.
+      if (scriptOf && attachedScript.test(base.value.trim())) base.y = scriptOf.transform[5];
       if (!base.math || !/[\uE05C\uE06D\uE06E]/u.test(item.str) || [...item.str.trim()].length < 2) return [base];
       const chars = [...item.str];
       const widths = chars.map((char) => advances.get(`${item.fontName}:${char.codePointAt(0)}`)
@@ -67,6 +118,7 @@ function findLines(items) {
     else lines.push({ y: item.y, anchors: [item], items: [] });
   }
   const bars = items.filter((item) => item.math && item.raw === '\uE06D');
+  const anchoredAt = (y) => lines.some((line) => Math.abs(line.y - y) < 2.5);
   // A radical's top bar must stay on the radical's line; it never encloses a fraction's parts.
   const radicalOf = new Map();
   for (const radical of items.filter((item) => item.math && item.raw === '\uE05C')) {
@@ -83,7 +135,9 @@ function findLines(items) {
     if (vectorBars.has(item) || (item.raw === '\uE06E' && heads.includes(item))) return item.y - item.height * 0.45;
     const enclosing = fractionBars.filter((bar) => item === bar || (item.math
       && item.x + item.width / 2 >= bar.x && item.x + item.width / 2 <= bar.x + bar.width
-      && Math.abs(item.y - bar.y) < 18)).sort((a, b) => Math.abs(item.y - a.y) - Math.abs(item.y - b.y)
+      && Math.abs(item.y - bar.y) < 18
+      // A glyph a full text line above a bar belongs to the previous line, not to a numerator.
+      && !(item.y - bar.y >= item.height * 1.3 && anchoredAt(item.y)))).sort((a, b) => Math.abs(item.y - a.y) - Math.abs(item.y - b.y)
         || a.width - b.width)[0];
     return enclosing ? enclosing.y + enclosing.height * 0.35
       : /^\\sum$/u.test(item.value) ? item.y + item.height * 0.17 : item.y;
@@ -116,8 +170,12 @@ function findLines(items) {
 }
 
 function lineRuns(line) {
+  // Stacked legacy scripts share an x position (¹₁H): superscript first, then subscript.
+  const stackRank = (item) => /^[\u00b9\u00b2\u00b3\u2070-\u207f]/u.test(item.value || '') ? 0
+    : /^[\u2080-\u209f]/u.test(item.value || '') ? 1 : 2;
   const items = recoverEquationItems(line.items, line.y)
-    .sort((left, right) => left.x - right.x || right.y - left.y);
+    .sort((left, right) => (Math.abs(left.x - right.x) < 0.6 ? 0 : left.x - right.x)
+      || stackRank(left) - stackRank(right) || right.y - left.y);
   const runs = [];
   let previous = null;
   for (const item of items) {
@@ -129,7 +187,7 @@ function lineRuns(line) {
       const gap = previous ? item.x - previous.x - previous.width : 0;
       if (kind === 'equation' && gap > 5) runs.push({ kind, script: value });
       else if (kind === 'equation') last.script += value;
-      else last.value += gap > 1.5 && !/\s$/u.test(last.value) && !/^\s/u.test(value)
+      else last.value += gap > 1.5 && !/\s$/u.test(last.value) && !/^\s/u.test(value) && !attachedScript.test(value)
         && /[\p{L}\p{N}]$/u.test(last.value) && /^[\p{L}\p{N}]/u.test(value)
         ? ` ${value}` : value;
     } else runs.push(kind === 'equation' ? { kind, script: value } : { kind, value });
@@ -138,17 +196,79 @@ function lineRuns(line) {
   return runs;
 }
 
+/**
+ * Old papers set small fractions in the text font with the rule drawn separately: a numerator
+ * and a denominator of digits/letters stacked on the same x right after a choice marker or in a
+ * row of choices. Two such items with no text between them and a vertical gap of about one
+ * line height become one editable \frac equation.
+ */
+export function stackTextFractions(items) {
+  // Only numbers and single Latin/Greek letters: Hangul stacked this way is a table header or a
+  // vertically written label, and words over words are ratio fractions this rule can't verify.
+  const token = /^(?:\d{1,3}|[A-Za-zα-ωπ])$/u;
+  // A radical glyph printed just before a denominator (1/√2) belongs to it.
+  const radicalBefore = (lower) => items.find((item) => !item.math && item.value.trim() === '√'
+    && Math.abs(item.y - lower.y) < 1 && lower.x - item.x > 0 && lower.x - item.x < 12);
+  const used = new Set();
+  const out = [];
+  const candidates = items.filter((item) => !item.math && token.test(item.value.trim()));
+  for (const upper of candidates) {
+    if (used.has(upper)) continue;
+    const lower = candidates.find((other) => other !== upper && !used.has(other)
+      // Numerator and denominator baselines sit about 1.0~1.35 line heights apart.
+      && upper.y - other.y > other.height * 0.9 && upper.y - other.y < other.height * 1.45
+      // Parts are centred on each other (1 over 16) or start together (9 over 4).
+      && (Math.abs(other.x - upper.x) < 1.2
+        || Math.abs((other.x + other.width / 2) - (upper.x + upper.width / 2)) < 1.2 || (radicalBefore(other)
+        && upper.x >= radicalBefore(other).x - 1 && upper.x + upper.width <= other.x + other.width + 1)));
+    if (!lower) continue;
+    const radical = Math.abs(lower.x - upper.x) < 1.2 ? null : radicalBefore(lower);
+    const middle = (upper.y + lower.y) / 2;
+    // A fraction sits in a row of choices: its line has a choice marker to the left.
+    const marker = items.find((item) => /^[①②③④⑤]/u.test(item.value.trim()) && Math.abs(item.y - middle) < 2.6
+      && item.x < upper.x && upper.x - item.x < 40);
+    if (!marker) continue;
+    // A real stacked fraction has nothing else between its two parts at the same x.
+    if (items.some((item) => item !== upper && item !== lower && item !== radical && item.x < upper.x + upper.width
+      && item.x + item.width > upper.x && item.y < upper.y && item.y > lower.y)) continue;
+    // It sits on the line between its parts: an item on that baseline is to its left or right.
+    if (!items.some((item) => item !== upper && item !== lower && Math.abs(item.y - middle) < 2.6)) continue;
+    used.add(upper); used.add(lower); if (radical) used.add(radical);
+    const x = Math.min(upper.x, lower.x, radical?.x ?? Infinity);
+    const denominator = radical ? `\\sqrt{${lower.value.trim()}}` : lower.value.trim();
+    out.push({ ...upper, x, y: middle, width: Math.max(upper.x + upper.width, lower.x + lower.width) - x, parts: [upper, lower, radical].filter(Boolean),
+      raw: upper.raw + lower.raw, value: `\\frac{${upper.value.trim()}}{${denominator}}`, math: true, recovered: true });
+  }
+  // Accept a row only when every stacked item near its markers became a fraction; a partial
+  // merge means the choices are expressions this rule can't read (m_A+m_B over 2d, V over S).
+  const rows = new Map();
+  for (const fraction of out) {
+    const key = Math.round(fraction.y / 3);
+    rows.set(key, [...(rows.get(key) || []), fraction]);
+  }
+  const leftover = (fraction) => items.some((item) => !item.math && !used.has(item) && item.value.trim()
+    && !/^[①②③④⑤]/u.test(item.value.trim()) && Math.abs(item.y - fraction.y) > 2.6 && Math.abs(item.y - fraction.y) < fraction.height * 1.2
+    && Math.abs(item.x - fraction.x) < 60);
+  const rejected = new Set([...rows.values()].filter((row) => row.some(leftover)).flat());
+  const kept = out.filter((fraction) => !rejected.has(fraction));
+  const restored = new Set(items.filter((item) => used.has(item) && [...rejected].some((fraction) => fraction.parts?.includes(item))));
+  return [...items.filter((item) => !used.has(item) || restored.has(item)), ...kept];
+}
+
 export function buildLiveStructure(question, pdf, glyphs) {
-  const lines = findLines(recoverPiecewiseItems(clipItems(question, pdf, glyphs)));
+  const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(clipItems(question, pdf, glyphs)))));
+  const figureDropped = clipItems.lastDropped > 0;
   const blocks = [];
   let role = 'stem';
   let choiceCount = 0;
   let markers = 0;
   for (const line of lines) {
     if (choiceCount === 5) break;
-    const runs = lineRuns(line);
+    // Old KICE fonts insert a backtick as a thin spacer; it is never printed.
+    const runs = lineRuns(line).map((run) => run.kind === 'text' ? { ...run, value: run.value.replace(/\u0060/gu, '') } : run)
+      .filter((run) => run.kind !== 'text' || run.value);
     const plain = runs.map((run) => run.kind === 'text' ? run.value : '').join('').trim();
-    if (!runs.length || /^<보\s*기>$/u.test(plain)) continue;
+    if (!runs.length || /^[<〈]\s*보\s*기\s*[>〉]$/u.test(plain)) continue;
     if (/저작권은\s*한국교육과정평가원|확인\s*사항|한글과컴퓨터뷰어/u.test(plain) || (/^\d{1,2}$/u.test(plain) && runs.every((run) => run.kind === 'text'))) continue;
     if (/^\d{1,2}\./u.test(plain)) {
       const first = runs.find((run) => run.kind === 'text');
@@ -211,8 +331,19 @@ export function buildLiveStructure(question, pdf, glyphs) {
   // Graph axes add short labels like "x 0 시간 B"; none of them is longer than a word.
   const drawn = (block) => block.runs.every((run) => run.kind === 'text'
     && token(run).split(/\s+/u).every((word) => /^(?:[\d.,()+\-÷*]*|\p{L}|II|Ⅱ|I|Ⅰ|시간|위치|속도|거리)$/u.test(word)));
+  const empty = (block) => block.runs.every((run) => !token(run));
+  // A choice with nothing on its own marker line means the options are drawn; the other
+  // "choices" then only hold leftovers of the drawings (axis names, legend words).
+  const graphicLeftover = (block) => drawn(block) || block.runs.every((run) => run.kind === 'text'
+    && !/[.?!다요]\s*$/u.test(token(run)) && token(run).length <= 40);
+  // Figure-label removal can leave a drawn choice with nothing at all; the others then hold
+  // only the unlabeled leftovers of their charts (short legend words and numbers).
+  const chartLeftover = (block) => block.runs.every((run) => run.kind === 'text'
+    && token(run).split(/\s+/u).every((word) => word.length <= 12 && !/[.?!]$|다$/u.test(word)));
   if (question.responseType !== 'short_answer' && markers === 5 && choices.length === 5
-    && choices.some((block) => block.own && drawn(block)) && choices.every(drawn)) {
+    && ((choices.some((block) => block.own && drawn(block)) && choices.every(drawn))
+      || (choices.filter((block) => block.own && empty(block)).length >= 2 && choices.every(graphicLeftover))
+      || (figureDropped && choices.some(empty) && choices.every(chartLeftover)))) {
     // Graph or diagram choices have only their ①~⑤ labels as text. Keep the editable
     // stem and mark each choice for comparison with the original.
     blocks.splice(0, blocks.length, ...blocks.filter((block) => block.role !== 'choice'),
@@ -269,16 +400,23 @@ function locate(question, pdf) {
 
 export async function convertQuestionNow(question) {
   const pdf = await readQuestionPdf(question);
-  try {
-    const glyphs = await verifiedGlyphMap(question, pdf);
-    return buildLiveStructure(question, pdf, glyphs);
-  } catch (error) {
-    // Older indexes sometimes point at the wrong column or stop before the choices.
-    const located = locate(question, pdf);
-    if (!located) throw error;
-    const glyphs = await verifiedGlyphMap(located, pdf);
-    const structure = buildLiveStructure(located, pdf, glyphs);
-    structure.notes.push('색인의 문항 영역이 원본과 달라 원본 PDF의 문항 번호 위치로 다시 찾았습니다.');
-    return structure;
-  }
+  const primary = async () => {
+    try {
+      const glyphs = await verifiedGlyphMap(question, pdf);
+      return buildLiveStructure(question, pdf, glyphs);
+    } catch (error) {
+      // Older indexes sometimes point at the wrong column or stop before the choices.
+      const located = locate(question, pdf);
+      if (!located) throw error;
+      const glyphs = await verifiedGlyphMap(located, pdf);
+      const structure = buildLiveStructure(located, pdf, glyphs);
+      structure.notes.push('색인의 문항 영역이 원본과 달라 원본 PDF의 문항 번호 위치로 다시 찾았습니다.');
+      return structure;
+    }
+  };
+  // --- question-region hook: continuation into the next column/page, extended boxes and
+  // picture choices, tried only when the primary result fails to split or has an empty choice.
+  return recoverQuestionRegion(question, pdf, primary, { build: buildLiveStructure, glyphMap: verifiedGlyphMap,
+    readPage: (page) => readQuestionPdf({ ...question, page }) });
+  // --- end question-region hook
 }

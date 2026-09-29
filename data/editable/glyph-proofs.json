@@ -1715,6 +1715,251 @@
         }
       ],
       "evidence": "PDF render crops: p2_2024_11_15 G, p2_2019_09_10 U_0, p2_2019_06_09 kappa, p2_2019_09_14 psi_A, p2_2019_06_14 and p2_2025_11_17 omega"
+    },
+    {
+      "fontName": "HyhwpEQ",
+      "unitsPerEm": 1024,
+      "glyphs": [
+        {
+          "codepoint": 57368,
+          "glyphId": 178,
+          "formula": "Y",
+          "glyfSha256": "09fcc06811b80252fe708d72ab77f7896da8cd7484959796ead4071be4655ede",
+          "metrics": [
+            768,
+            11
+          ],
+          "evidence": "2017_09_math_na_single_05 f:X→Y; 2017_11_math_ga_even_13 overline Y"
+        },
+        {
+          "codepoint": 57518,
+          "glyphId": 328,
+          "formula": "\\sigma",
+          "glyfSha256": "f6f6d96a67a5bde6430912b1bfb2ab5b9ee1084378a26094954a82c9808c4521",
+          "metrics": [
+            585,
+            39
+          ],
+          "evidence": "2018_09_math_ga_single_12/26 표준편차가 σ"
+        },
+        {
+          "codepoint": 57358,
+          "glyphId": 168,
+          "formula": "O",
+          "glyfSha256": "786bc4d40fa5550b4d66d9405cbe54fdfcd6c4f0e43ad21c0cd4ef84916702c5",
+          "metrics": [
+            795,
+            57
+          ],
+          "evidence": "2017_11_math_na_even_17 원 O, even_21 O_n"
+        },
+        {
+          "codepoint": 57512,
+          "glyphId": 322,
+          "formula": "\\mu",
+          "glyfSha256": "21d790360e54124c0574b6f88635c07fb2aa493b22003bd3d1c21beaaf16c56a",
+          "metrics": [
+            616,
+            30
+          ],
+          "evidence": "b2_2019_06_02 10 μm, b2_2019_06_19 μmol/mL"
+        },
+        {
+          "codepoint": 57406,
+          "glyphId": 216,
+          "formula": "!",
+          "glyfSha256": "c84b2d71fdef9c08a68fc36456a21159970bf2f8ec7d23712e275a54b9627e1d",
+          "metrics": [
+            283,
+            86
+          ],
+          "evidence": "2017_11_math_ga_even_17 4!/3!"
+        },
+        {
+          "codepoint": 57503,
+          "glyphId": 408,
+          "formula": "\\gamma",
+          "glyfSha256": "23f8a865ac6084b817eef3bb63a5560c3fb7b8445d72ed545edc9eefbd16f546",
+          "metrics": [
+            529,
+            15
+          ],
+          "evidence": "c1_2022_06_04 α~γ, e2_2021_11_17 감률 γ"
+        },
+        {
+          "codepoint": 57500,
+          "glyphId": 405,
+          "formula": "\\Omega",
+          "glyfSha256": "d216e36d41b29db339a81c3642b95730c44481e7f156f5cdd2e64f4bca994e6e",
+          "metrics": [
+            790,
+            81
+          ],
+          "evidence": "e2_2024_06_20 2Ω sinφ"
+        },
+        {
+          "codepoint": 57593,
+          "glyphId": 403,
+          "formula": "u",
+          "glyfSha256": "4cc3ddc156d8233e47d110decfb19a93eafb3db0672ecba07f630cf572d743d4",
+          "metrics": [
+            585,
+            29
+          ],
+          "evidence": "2018_06_math_ga_single_25 벡터 u, 2023_09 geometry_30 u=(1,0)"
+        },
+        {
+          "codepoint": 57544,
+          "glyphId": 354,
+          "formula": "\\angle",
+          "glyfSha256": "a7e68dc141ec7953cc86d180e3d0b1d1a4f01b743b95018abf810ff09ab2b2d1",
+          "metrics": [
+            768,
+            285
+          ],
+          "evidence": "2018_09_math_ga_single_25 ∠ACB"
+        },
+        {
+          "codepoint": 57487,
+          "glyphId": 297,
+          "formula": "\\Lambda",
+          "glyfSha256": "b798a2470173507c21e646a4e9fc7f6360fecf36490e41127dec72cc5320b04f",
+          "metrics": [
+            711,
+            36
+          ],
+          "evidence": "e2_2019_09_05 ρ_Λ subscript"
+        },
+        {
+          "codepoint": 57498,
+          "glyphId": 403,
+          "formula": "\\chi",
+          "glyfSha256": "a6371660505cda7c1e00522ca92eedfa8815f5aa40ec29d4f0ae307e9d7d22f5",
+          "metrics": [
+            848,
+            27
+          ],
+          "evidence": "c2_2022_09_18 몰 분율 (X_C) printed as chi"
+        }
+      ],
+      "evidence": "Rendered original-PDF crops in tools evidence missing-eq.png (2026-09-29)"
+    },
+    {
+      "fontName": "HyhwpEQ",
+      "unitsPerEm": 1024,
+      "glyphs": [
+        {
+          "codepoint": 57600,
+          "glyphId": 504,
+          "formula": "\\bracketTopLeft",
+          "glyfSha256": "9396fdc46f739aae50903b02b9fa7f55c482017ea730c80b71a3e2df721ad71f",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2023_11_math_common_odd_09, 2023_11_math_common_even_09"
+        },
+        {
+          "codepoint": 57600,
+          "glyphId": 409,
+          "formula": "\\bracketTopLeft",
+          "glyfSha256": "a8ac16e155c43e9d1fc357e0e91a25c647937e8386ec43d5ec4f41226ccd766a",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2017_06_math_ga_single_30"
+        },
+        {
+          "codepoint": 57602,
+          "glyphId": 506,
+          "formula": "\\bracketTopRight",
+          "glyfSha256": "a75915adc9109bcc6b8cc26b46c79e515774fc9de6979ed4e49bda2809f3bd50",
+          "metrics": [
+            506,
+            61
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2023_11_math_common_odd_09, 2023_11_math_common_even_09"
+        },
+        {
+          "codepoint": 57602,
+          "glyphId": 411,
+          "formula": "\\bracketTopRight",
+          "glyfSha256": "b3ec2ffb0e9fe7d52aad5485ef088878b805091ef8eb4b3d5c95afebb0422f06",
+          "metrics": [
+            506,
+            61
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2017_06_math_ga_single_30"
+        },
+        {
+          "codepoint": 57603,
+          "glyphId": 507,
+          "formula": "\\bracketBottomLeft",
+          "glyfSha256": "b601680403956479ae4c63add2c7ca5c6575cd06d42a88ea1721a71c10366ba1",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2023_11_math_common_odd_09, 2023_11_math_common_even_09"
+        },
+        {
+          "codepoint": 57603,
+          "glyphId": 412,
+          "formula": "\\bracketBottomLeft",
+          "glyfSha256": "4c07a12603320ce966e5eddda46691b46e7f29f3f9f958c97b1afa1ea6de15cf",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2017_06_math_ga_single_30"
+        },
+        {
+          "codepoint": 57604,
+          "glyphId": 508,
+          "formula": "\\bracketBottomRight",
+          "glyfSha256": "b4b20a7da095d4247571e05ba3cdc20b5a4c1a286e4613c5e0267b5865c28bf4",
+          "metrics": [
+            506,
+            61
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2023_11_math_common_odd_09, 2023_11_math_common_even_09"
+        },
+        {
+          "codepoint": 57604,
+          "glyphId": 413,
+          "formula": "\\bracketBottomRight",
+          "glyfSha256": "8852f5d389523e74372af5cf6690e44f7791f3b2ea1c783c072c7e3f9e08e901",
+          "metrics": [
+            506,
+            61
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2017_06_math_ga_single_30"
+        },
+        {
+          "codepoint": 57605,
+          "glyphId": 509,
+          "formula": "\\bracketRightExtender",
+          "glyfSha256": "a8851d3957faf3250315b456a5b91a8d30de4551dcedbbe1bfa550a913bc96da",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2023_11_math_common_odd_09, 2023_11_math_common_even_09"
+        },
+        {
+          "codepoint": 57605,
+          "glyphId": 414,
+          "formula": "\\bracketRightExtender",
+          "glyfSha256": "847732d77193bcb6fd8640e9495ef8aad2d7101d20e3f0a0f7661b9faf3c8a99",
+          "metrics": [
+            506,
+            225
+          ],
+          "evidence": "stretchy square bracket piece; rendered crops of 2017_06_math_ga_single_30"
+        }
+      ],
+      "evidence": "Closed-interval brackets [−π/6, b] and [0, a/2] rendered in missing-eq.png"
     }
   ]
 }

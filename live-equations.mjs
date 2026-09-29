@@ -47,13 +47,17 @@ function bindScripts(items, baseline) {
     .sort((a, b) => Number(isLimit(b)) - Number(isLimit(a)) || a.x - b.x);
   for (const base of bases) {
     const limit = isLimit(base);
+    // Integral limits sit at the upper/lower right and may run several characters (x+a).
+    const integral = limit && /^\\int(?:\s|$)/u.test(base.value.trim());
     const peers = bases.filter((item) => item !== base && item.x > base.x);
     const boundary = Math.min(...peers.map((item) => item.x), Infinity);
     const candidates = result.filter((item) => item !== base && item.math && !consumed.has(item)
       && !structural(item) && Math.abs(item.y - baseline) >= 2.3
       && Math.abs(item.y - baseline) <= Math.max(12, base.height * 1.5)
+      // A delimiter stretched around a fraction sits low but is never a script.
+      && !(/^[()[\]|]$/u.test(item.value.trim()) && item.height > Math.max(base.height, 11) * 1.6)
       && item.x < boundary && (limit
-        ? center(item) >= base.x - 4 && item.x <= right(base) + 5
+        ? center(item) >= base.x - 4 && (item.x <= right(base) + 5 || integral)
         : item.x >= right(base) - 1 && item.x - right(base) <= Math.max(8, base.height * 2.5)));
     for (const side of [-1, 1]) {
       const row = ordered(candidates.filter((item) => Math.sign(item.y - baseline) === side));
@@ -61,7 +65,7 @@ function bindScripts(items, baseline) {
       const selected = [];
       let edge = right(base);
       for (const item of row) {
-        if (!limit && item.x - edge > 5) break;
+        if ((!limit || integral) && item.x - edge > (integral ? 3 : 5)) break;
         if (selected.length && Math.abs(item.y - selected[0].y) > Math.max(2, item.height * 0.35)) break;
         selected.push(item);
         edge = Math.max(edge, right(item));
@@ -141,6 +145,16 @@ export function recoverEquationItems(items, baseline) {
     if (nearby.some((item) => structural(item))) fail(bar, 'overlapping structures');
     const above = nearby.filter((item) => item.y > bar.y + 2.3);
     const below = nearby.filter((item) => item.y < bar.y - 2.3);
+    // A segment overline (PR̅) sits right on its letters: the bar baseline is only ~0.3 em above
+    // theirs, while a fraction bar sits ~0.3 em above the numerator's baseline and ~0.8 em above
+    // the denominator's. A glyph over it that belongs to the previous text line (over 1.3 em
+    // higher) must not turn the overline into a fraction.
+    const hugged = below.filter((item) => bar.y - item.y <= item.height * 0.4);
+    const previousLine = above.filter((item) => item.y - bar.y >= item.height * 1.3);
+    // Only letters (segment names) take an overline; a numerator's digits or operators never do.
+    if (!radical && !heads.length && hugged.length && hugged.length === below.length
+      && hugged.every((item) => /^[A-Za-z](?:_\{[A-Za-z0-9]+\})?$/u.test(item.value.trim()))
+      && above.length && previousLine.length === above.length) above.length = 0;
     if (!radical && !above.length && !heads.length) {
       // Segment names such as S₁S₂ often use the text font under an equation-font overbar.
       for (const item of work) {
@@ -202,6 +216,47 @@ export function recoverEquationItems(items, baseline) {
 const braceKind = (item) => ({ '\ue078': 'top', '\ue079': 'middle', '\ue07a': 'bottom', '\ue07b': 'extender',
   '\\braceTop': 'top', '\\braceMiddle': 'middle', '\\braceBottom': 'bottom', '\\braceExtender': 'extender' })[item.raw] ||
   ({ '\\braceTop': 'top', '\\braceMiddle': 'middle', '\\braceBottom': 'bottom', '\\braceExtender': 'extender' })[item.value];
+
+// Tall square brackets are drawn from corner pieces joined by vertical extenders.
+const bracketPiece = (item) => ({ '\\bracketTopLeft': ['left', 'top'], '\\bracketBottomLeft': ['left', 'bottom'],
+  '\\bracketTopRight': ['right', 'top'], '\\bracketBottomRight': ['right', 'bottom'],
+  '\\bracketRightExtender': ['right', 'extender'] })[item.value?.trim()];
+
+/** Joins stretchy bracket pieces into one LEFT [ ... RIGHT ] equation spanning the enclosed items. */
+export function recoverStretchyBrackets(items) {
+  let work = items.map((item) => ({ ...item }));
+  const tops = work.filter((item) => bracketPiece(item)?.join() === 'left,top').sort((a, b) => a.x - b.x);
+  for (const top of tops) {
+    if (!work.includes(top)) continue;
+    const leftColumn = work.filter((item) => Math.abs(item.x - top.x) < 0.8 && item.y <= top.y + 0.5
+      && (bracketPiece(item)?.[0] === 'left' || (item.math && item.value.trim() === '|')));
+    const bottom = leftColumn.filter((item) => bracketPiece(item)?.join() === 'left,bottom').sort((a, b) => b.y - a.y)[0];
+    if (!bottom) fail(top, 'incomplete square bracket');
+    const rightTop = work.filter((item) => bracketPiece(item)?.join() === 'right,top' && item.x > top.x
+      && Math.abs(item.y - top.y) < 0.8).sort((a, b) => a.x - b.x)[0];
+    if (!rightTop) fail(top, 'unmatched square bracket');
+    const rightColumn = work.filter((item) => Math.abs(item.x - rightTop.x) < 0.8 && bracketPiece(item)?.[0] === 'right');
+    const rightBottom = rightColumn.find((item) => bracketPiece(item)?.join() === 'right,bottom' && Math.abs(item.y - bottom.y) < 0.8);
+    if (!rightBottom) fail(rightTop, 'incomplete square bracket');
+    const low = bottom.y - bottom.height * 0.4;
+    const high = top.y + top.height * 0.4;
+    const pieces = new Set([...leftColumn.filter((item) => item.y >= bottom.y - 0.5), ...rightColumn]);
+    const inner = work.filter((item) => !pieces.has(item) && item.x > top.x + 0.5 && item.x < rightTop.x - 0.5
+      && item.y >= low && item.y <= high);
+    if (!inner.length || inner.some((item) => !item.math)) fail(top, 'square bracket contents');
+    if (inner.some((item) => bracketPiece(item))) fail(top, 'nested square brackets');
+    const heights = inner.map((item) => item.height).sort((a, b) => a - b);
+    const middle = (top.y + bottom.y) / 2;
+    const baseline = [...inner].sort((a, b) => Math.abs(a.y - middle) - Math.abs(b.y - middle))[0].y;
+    const body = join(recoverEquationItems(inner, baseline));
+    const removed = new Set([...pieces, ...inner]);
+    work = [...work.filter((item) => !removed.has(item)), combined([...pieces, ...inner],
+      { ...top, y: baseline, height: heights[Math.floor(heights.length / 2)] }, `LEFT [ ${body} RIGHT ]`)];
+  }
+  const orphan = work.find((item) => bracketPiece(item) && !item.recovered);
+  if (orphan) fail(orphan, 'orphan square bracket');
+  return work;
+}
 
 /** Bind multiline left-brace fragments before normal line assignment. */
 export function recoverPiecewiseItems(items) {
