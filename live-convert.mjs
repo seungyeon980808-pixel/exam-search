@@ -149,7 +149,7 @@ export function buildLiveStructure(question, pdf, glyphs) {
     const runs = lineRuns(line);
     const plain = runs.map((run) => run.kind === 'text' ? run.value : '').join('').trim();
     if (!runs.length || /^<보\s*기>$/u.test(plain)) continue;
-    if (/저작권은\s*한국교육과정평가원/u.test(plain) || (/^\d{1,2}$/u.test(plain) && runs.every((run) => run.kind === 'text'))) continue;
+    if (/저작권은\s*한국교육과정평가원|확인\s*사항|한글과컴퓨터뷰어/u.test(plain) || (/^\d{1,2}$/u.test(plain) && runs.every((run) => run.kind === 'text'))) continue;
     if (/^\d{1,2}\./u.test(plain)) {
       const first = runs.find((run) => run.kind === 'text');
       first.value = first.value.replace(/^\s*\d{1,2}\.\s*/u, '');
@@ -231,8 +231,54 @@ export function buildLiveStructure(question, pdf, glyphs) {
     notes };
 }
 
+/** Finds the question on its page from the printed number when the indexed box is wrong. */
+export function questionBoxFromPage(question, pdf) {
+  const height = pdf.pageHeight;
+  const items = pdf.content.items.filter((item) => item.str?.trim() && item.transform
+    && !/^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || ''));
+  const top = (item) => height - item.transform[5];
+  const starts = items.map((item) => ({ item, no: Number(item.str.match(/^\s*(\d{1,2})\.(?!\d)/u)?.[1]) }))
+    .filter(({ item, no }) => no >= 1 && no <= 45 && !items.some((other) => other !== item
+      && Math.abs(other.transform[5] - item.transform[5]) < 2.5
+      && other.transform[4] < item.transform[4] - 1 && other.transform[4] > item.transform[4] - 90));
+  const lefts = [];
+  for (const x of starts.map(({ item }) => item.transform[4]).sort((a, b) => a - b)) {
+    if (!lefts.length || x - lefts.at(-1) > 40) lefts.push(x);
+  }
+  const width = pdf.pageWidth || Math.max(...items.map((item) => item.transform[4] + item.width));
+  const column = (x) => lefts.findLastIndex((left) => x >= left - 20);
+  const matches = starts.filter(({ no }) => no === question.no);
+  if (!matches.length) return null;
+  const [x0, y0] = question.box || [0, 0];
+  const { item } = [...matches].sort((a, b) => Math.hypot(a.item.transform[4] - x0, top(a.item) - y0)
+    - Math.hypot(b.item.transform[4] - x0, top(b.item) - y0))[0];
+  const index = column(item.transform[4]);
+  const left = lefts[index];
+  const right = lefts[index + 1] ? lefts[index + 1] - 8 : width;
+  const below = starts.filter((entry) => entry.item !== item && column(entry.item.transform[4]) === index
+    && top(entry.item) > top(item) + 5).map((entry) => top(entry.item));
+  const bottom = below.length ? Math.min(...below) - 12 : height - 30;
+  return [left - 6, top(item) - 12, right, bottom];
+}
+
+function locate(question, pdf) {
+  const box = questionBoxFromPage(question, pdf);
+  if (!box || box.every((value, index) => Math.abs(value - (question.box?.[index] ?? NaN)) < 2)) return null;
+  return { ...question, box };
+}
+
 export async function convertQuestionNow(question) {
   const pdf = await readQuestionPdf(question);
-  const glyphs = await verifiedGlyphMap(question, pdf);
-  return buildLiveStructure(question, pdf, glyphs);
+  try {
+    const glyphs = await verifiedGlyphMap(question, pdf);
+    return buildLiveStructure(question, pdf, glyphs);
+  } catch (error) {
+    // Older indexes sometimes point at the wrong column or stop before the choices.
+    const located = locate(question, pdf);
+    if (!located) throw error;
+    const glyphs = await verifiedGlyphMap(located, pdf);
+    const structure = buildLiveStructure(located, pdf, glyphs);
+    structure.notes.push('색인의 문항 영역이 원본과 달라 원본 PDF의 문항 번호 위치로 다시 찾았습니다.');
+    return structure;
+  }
 }

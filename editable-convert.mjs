@@ -216,6 +216,88 @@ export async function createCollectionHwpx(resolvedItems) {
   return createParagraphDocument(paragraphs);
 }
 
+const plainText = (runs) => runs.map((run) => run.kind === 'text' ? run.value : '').join('').trim();
+
+/** Groups a <보기> title and the ㄱ/ㄴ/ㄷ lines after it into one boxed segment. */
+export function documentSegments(paragraphs) {
+  const segments = [];
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const runs = paragraphs[index];
+    if (!/^<\s*보\s*기\s*>$/u.test(plainText(runs).replace(/`/gu, ''))) {
+      segments.push({ kind: 'paragraph', runs });
+      continue;
+    }
+    const rows = [];
+    let next = index + 1;
+    while (next < paragraphs.length && paragraphs[next].length && !/^[①②③④⑤]/u.test(plainText(paragraphs[next]))) {
+      rows.push(paragraphs[next]);
+      next += 1;
+    }
+    if (!rows.some((row) => /^[ㄱ-ㅎ]\./u.test(plainText(row)))) {
+      segments.push({ kind: 'paragraph', runs });
+      continue;
+    }
+    segments.push({ kind: 'box', title: '<보기>', rows });
+    index = next - 1;
+  }
+  return segments;
+}
+
+const tall = (runs) => runs.some((run) => run.kind === 'equation' && /\\(?:frac|sum|int)|cases\{/u.test(run.script));
+const spacing = (runs) => JSON.stringify({ alignment: 'left', lineSpacing: 180, lineSpacingType: 'Percent',
+  spacingBefore: tall(runs) ? 400 : 0, spacingAfter: tall(runs) ? 800 : 0 });
+
+function ensureParagraph(document, index) {
+  if (document.getParagraphCount(0) > index) return;
+  if (!JSON.parse(document.insertParagraph(0, index)).ok) throw new Error('문단을 삽입하지 못했습니다.');
+}
+
+function insertCellRuns(document, table, cellPara, runs) {
+  let text = '';
+  const equations = [];
+  for (const run of runs) {
+    if (run.kind === 'equation') equations.push({ offset: text.length, script: run.script });
+    else text += run.value;
+  }
+  if (text && !JSON.parse(document.insertTextInCell(0, table, 0, 0, cellPara, 0, text)).ok) {
+    throw new Error('보기 칸에 글자를 넣지 못했습니다.');
+  }
+  // rhwp has no direct cell equation API; build each equation in a scratch paragraph and paste it.
+  for (const equation of equations.reverse()) {
+    const scratch = table + 1;
+    if (!JSON.parse(document.insertParagraph(0, scratch)).ok) throw new Error('수식 작업 문단을 만들지 못했습니다.');
+    try {
+      const made = JSON.parse(document.insertEquation(0, scratch, 0, groupFractions(equationScript(equation.script)), 1200, 0));
+      if (!made.ok) throw new Error('보기 칸의 수식을 만들지 못했습니다.');
+      JSON.parse(document.copySelection(0, scratch, 0, scratch, 1));
+      if (!JSON.parse(document.pasteInternalInCell(0, table, 0, 0, cellPara, equation.offset)).ok) {
+        throw new Error('보기 칸에 수식을 넣지 못했습니다.');
+      }
+    } finally {
+      document.deleteParagraph(0, scratch);
+    }
+  }
+}
+
+function insertBox(document, index, segment) {
+  const created = JSON.parse(document.createTableEx(JSON.stringify({ sectionIdx: 0, paraIdx: index, charOffset: 0,
+    rowCount: 1, colCount: 1, treatAsChar: false })));
+  if (!created.ok) throw new Error('보기 상자를 만들지 못했습니다.');
+  const table = created.paraIdx;
+  if (!JSON.parse(document.insertTextInCell(0, table, 0, 0, 0, 0, segment.title)).ok) throw new Error('보기 제목을 넣지 못했습니다.');
+  document.applyParaFormatInCell(0, table, 0, 0, 0, JSON.stringify({ alignment: 'center', lineSpacing: 160, lineSpacingType: 'Percent' }));
+  // Create every empty row from the plain title first: equation controls shift split offsets.
+  const titleLength = document.getCellParagraphLength(0, table, 0, 0, 0);
+  for (let count = 0; count < segment.rows.length; count += 1) {
+    if (!JSON.parse(document.splitParagraphInCell(0, table, 0, 0, 0, titleLength)).ok) throw new Error('보기 줄을 나누지 못했습니다.');
+  }
+  for (const [row, runs] of segment.rows.entries()) {
+    insertCellRuns(document, table, row + 1, runs);
+    document.applyParaFormatInCell(0, table, 0, 0, row + 1, spacing(runs));
+  }
+  return table;
+}
+
 async function createParagraphDocument(paragraphs) {
   validateParagraphs(paragraphs);
   const HwpDocument = await core();
@@ -224,15 +306,17 @@ async function createParagraphDocument(paragraphs) {
     const blank = JSON.parse(document.createBlankDocument());
     if (!blank.sectionCount) throw new Error('rhwp 문서를 생성하지 못했습니다.');
     configurePage(document);
-    for (const [index, runs] of paragraphs.entries()) {
-      if (index && !JSON.parse(document.insertParagraph(0, index)).ok) throw new Error('문단을 삽입하지 못했습니다.');
-      insertRuns(document, index, runs);
-      const tallEquation = runs.some((run) => run.kind === 'equation'
-        && /\\(?:frac|sum|int)|cases\{/u.test(run.script));
-      const formatted = JSON.parse(document.applyParaFormat(0, index,
-        JSON.stringify({ alignment: 'left', lineSpacing: 180, lineSpacingType: 'Percent',
-          spacingBefore: tallEquation ? 400 : 0, spacingAfter: tallEquation ? 800 : 0 })));
+    let index = 0;
+    for (const segment of documentSegments(paragraphs)) {
+      ensureParagraph(document, index);
+      if (segment.kind === 'box') {
+        index = insertBox(document, index, segment) + 1;
+        continue;
+      }
+      insertRuns(document, index, segment.runs);
+      const formatted = JSON.parse(document.applyParaFormat(0, index, spacing(segment.runs)));
       if (!formatted.ok) throw new Error('수식 문단의 간격을 설정하지 못했습니다.');
+      index += 1;
     }
     return document.exportHwpx();
   } finally {

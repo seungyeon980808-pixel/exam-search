@@ -36823,11 +36823,11 @@ class PartialEvaluator {
     if (!properties.composite) {
       return new ToUnicodeMap(this._simpleFontToUnicode(properties));
     }
-    if (properties.composite && (properties.cMap.builtInCMap && !(properties.cMap instanceof IdentityCMap) || properties.cidSystemInfo?.registry === "Adobe" && (properties.cidSystemInfo.ordering === "GB1" || properties.cidSystemInfo.ordering === "CNS1" || properties.cidSystemInfo.ordering === "Japan1" || properties.cidSystemInfo.ordering === "Korea1"))) {
-      const {
-        registry,
-        ordering
-      } = properties.cidSystemInfo;
+    // exam-search patch: old KICE PDFs label Adobe-Korea1 CIDs as "Unidocs-Korea1".
+    const cidRegistry = properties.cidSystemInfo?.registry === "Unidocs" && properties.cidSystemInfo.ordering === "Korea1" ? "Adobe" : properties.cidSystemInfo?.registry;
+    if (properties.composite && (properties.cMap.builtInCMap && !(properties.cMap instanceof IdentityCMap) || cidRegistry === "Adobe" && (properties.cidSystemInfo.ordering === "GB1" || properties.cidSystemInfo.ordering === "CNS1" || properties.cidSystemInfo.ordering === "Japan1" || properties.cidSystemInfo.ordering === "Korea1"))) {
+      const registry = cidRegistry;
+      const { ordering } = properties.cidSystemInfo;
       const ucs2CMapName = Name.get(`${registry}-${ordering}-UCS2`);
       const ucs2CMap = await CMapFactory.create({
         encoding: ucs2CMapName,

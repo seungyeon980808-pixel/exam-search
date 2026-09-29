@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { buildLiveStructure } from './live-convert.mjs';
 import { createPreparedHwpx } from './editable-convert.mjs';
 import { HwpDocument } from './vendor/rhwp-studio/assets/rhwp-core.js';
+import { documentScripts } from './test-hwpx-content.mjs';
 
 const { fixtures } = JSON.parse(await readFile(new URL('./test-fixtures/live-formulas.json', import.meta.url)));
 const expected = {
@@ -19,15 +20,13 @@ for (const { question, pdf, glyphMap } of fixtures) {
     const scripts = structure.blocks.flatMap((block) => block.runs).filter((run) => run.kind === 'equation').map((run) => run.script);
     for (const script of expected[question.id] || []) assert.ok(scripts.includes(script), `${script}\nActual: ${JSON.stringify(scripts)}`);
     if (question.responseType !== 'short_answer') assert.equal(structure.blocks.filter((block) => block.role === 'choice').length, 5);
-    const document = new HwpDocument(await createPreparedHwpx(structure));
-    try {
-      const equations = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
-      assert.equal(equations.length, scripts.length);
-      for (const control of equations) {
-        const { script } = JSON.parse(document.getEquationProperties(control.list, control.para, control.controlIndex, -1, -1));
-        assert.ok(script.trim());
-        assert.doesNotMatch(script, /[\uE000-\uF8FF]|brace(?:Top|Middle|Bottom|Extender)/u);
-      }
-    } finally { document.free(); }
+    const bytes = await createPreparedHwpx(structure);
+    const saved = documentScripts(bytes);
+    assert.equal(saved.length, scripts.length);
+    for (const script of saved) {
+      assert.ok(script.trim());
+      assert.doesNotMatch(script, /[\uE000-\uF8FF]|brace(?:Top|Middle|Bottom|Extender)/u);
+    }
+    new HwpDocument(bytes).free();
   });
 }

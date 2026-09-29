@@ -96,7 +96,7 @@ export async function readQuestionPdf(item) {
       }
     }
     return { content, fonts, glyphs, equationItems: equationTextItems(operations, pdfjs.OPS, fonts),
-      pageHeight: page.getViewport({ scale: 1 }).height };
+      pageHeight: page.getViewport({ scale: 1 }).height, pageWidth: page.getViewport({ scale: 1 }).width };
   } finally {
     await task.destroy();
   }

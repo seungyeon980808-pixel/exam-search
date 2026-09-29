@@ -5,13 +5,15 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createCollectionHwpx, paragraphsForPrepared } from './editable-convert.mjs';
 import { HwpDocument } from './vendor/rhwp-studio/assets/rhwp-core.js';
+import { documentScripts, inlineContent } from './test-hwpx-content.mjs';
 
 const evidence = process.env.EVIDENCE_DIR || '.omo/evidence/multi-question-rhwp';
 const fixtures = await Promise.all(['p1_2027_06_06', 'p1_2027_06_18', 'p1_2027_06_06'].map(async (id, index) => {
   const source = JSON.parse(await readFile(new URL(`./data/editable/prepared/${id}.json`, import.meta.url)));
   return { questionId: `${id}-${index}`, sourceLabel: `출처 ${index + 1}: ${source.title}`, paragraphs: paragraphsForPrepared(source) };
 }));
-const controls = (doc) => JSON.parse(doc.getControls()).filter((control) => control.ctrlId === 'eqed');
+// Body equations only; equations inside the <보기> table cells live in other control lists.
+const controls = (doc) => JSON.parse(doc.getControls()).filter((control) => control.ctrlId === 'eqed' && control.list === 0);
 const script = (doc, control) => JSON.parse(doc.getEquationProperties(control.list, control.para, control.controlIndex, -1, -1)).script;
 
 test('collection reopens with ordered sources, original numbers, inline equations and editable first/last equations', async () => {
@@ -24,16 +26,16 @@ test('collection reopens with ordered sources, original numbers, inline equation
   const doc = new HwpDocument(bytes);
   try {
     const equations = controls(doc);
-    assert.equal(equations.length, fixtures.flatMap((item) => item.paragraphs.flat()).filter((run) => run.kind === 'equation').length);
-    const scripts = equations.map((control) => script(doc, control));
+    const scripts = documentScripts(bytes);
+    assert.equal(scripts.length, fixtures.flatMap((item) => item.paragraphs.flat()).filter((run) => run.kind === 'equation').length);
     const six = ['S_{1}', 'S_{2}', 't = 0', 'T_{0}', 't = {{T_{0}} over {4}}', 'bar {PR}', '2'];
     assert.deepEqual(scripts, [...six, '2m', '2m', '3m', 't', 't = t_{0}', 't = 2t_{0}',
       't = {{3} over {2}}t_{0}', 't = {{5} over {2}}t_{0}', '4', 'g',
       'v_{0} = {{1} over {14}}gt_{0}', 't = {{1} over {2}}t_{0}', '{{25} over {14}}mg',
       't = {{3} over {2}}t_{0}', 't = {{5} over {2}}t_{0}', '2', ...six]);
     assert.ok(scripts.some((value) => value.includes('over')));
-    const inline = [...xml.matchAll(/<hp:t[^>]*>([\s\S]*?)<\/hp:t>|<hp:script>([\s\S]*?)<\/hp:script>/gu)]
-      .map((match) => match[2] === undefined ? match[1] : `[${match[2]}]`).join('');
+    assert.ok(xml.includes('<hp:tbl'), '<보기>가 표 상자로 들어가야 합니다.');
+    const inline = inlineContent(bytes);
     assert.ok(inline.indexOf('출처 1:') < inline.indexOf('출처 2:') && inline.indexOf('출처 2:') < inline.indexOf('출처 3:'));
     assert.equal((inline.match(/6\. 그림은/gu) || []).length, 2);
     assert.match(inline, /두 지점 \[S_\{1\}\], \[S_\{2\}\]에서/u);
