@@ -28,3 +28,52 @@ test('확장 과목 PDF는 독립 공개 폴더로 라우팅하고 기존 과탐
   assert.throws(() => driveLink('기출문제/기출확장_국영수사탐'), /경로/);
   assert.throws(() => driveLink('기출문제/기출확장_국영수사탐/../x.pdf'), /경로/);
 });
+
+// The public gateway sometimes never answers; a stalled request must be abandoned and retried.
+test('응답하지 않는 다운로드는 새 주소로 다시 시도해 PDF를 받는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = (url, { signal }) => {
+    urls.push(String(url));
+    if (urls.length === 1) {
+      return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+    }
+    return Promise.resolve(new Response(new Uint8Array([37, 80, 68, 70])));
+  };
+  try {
+    const pending = downloadDriveFile('기출문제/물리2/p2_2018_06.pdf');
+    await Promise.resolve();
+    t.mock.timers.tick(12000);
+    assert.deepEqual([...new Uint8Array(await pending)], [37, 80, 68, 70]);
+    assert.equal(urls.length, 2);
+    assert.notEqual(urls[1], urls[0]);
+    assert.ok(urls[1].startsWith(urls[0] + '?retry='));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('없는 시험지(404)는 다시 시도하지 않고 바로 알린다', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response('{}', { status: 404 }); };
+  try {
+    await assert.rejects(downloadDriveFile('기출문제/물리2/p2_2018_06.pdf'), /찾지 못했습니다/);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('서버 오류(5xx)는 다시 시도하고, 계속 실패하면 이유를 알린다', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response('{}', { status: 502 }); };
+  try {
+    await assert.rejects(downloadDriveFile('기출문제/물리2/p2_2018_06.pdf'), /HTTP 502/);
+    assert.equal(calls, 6);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
