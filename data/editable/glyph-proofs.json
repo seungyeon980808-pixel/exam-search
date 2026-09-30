@@ -1960,6 +1960,44 @@
         }
       ],
       "evidence": "Closed-interval brackets [−π/6, b] and [0, a/2] rendered in missing-eq.png"
+    },
+    {
+      "fontName": "*¸íÁ¶",
+      "unitsPerEm": 1000,
+      "glyphs": [
+        {
+          "codepoint": 57396,
+          "glyphId": 34245,
+          "renderedCodepoint": 57349,
+          "formula": "",
+          "cffSha256": "80c01963155a9e3a8719ebe08014bd488b9f1dfbf6163b5be84c04be8578f352",
+          "cmapSha256": "22aa77566cf45bf6d6cd9e6a76742f4839c54c21f60577b6e95d228f008088af"
+        },
+        {
+          "codepoint": 57396,
+          "glyphId": 34245,
+          "renderedCodepoint": 57349,
+          "formula": "",
+          "cffSha256": "3a15d63c0c6872dc5963982c6d12e420d201daddb6efc4a9b9d21287938517c5",
+          "cmapSha256": "055d6c845b795f389919c9db407be4d78bd698ff4c327d63c725d1c125260854"
+        },
+        {
+          "codepoint": 57397,
+          "glyphId": 34246,
+          "renderedCodepoint": 57347,
+          "formula": "",
+          "cffSha256": "5fd45886244675f642a76ce1969ba6cd6c34d58de15bcf893d25840faaeb37ac",
+          "cmapSha256": "0c451e18ae9a8b3171baf456654a5ccdb2be8d43721628146c50e163c03f2702"
+        },
+        {
+          "codepoint": 57399,
+          "glyphId": 34248,
+          "renderedCodepoint": 57352,
+          "formula": "",
+          "cffSha256": "6f80397dfc6b8382bb4c3f9547290d7e4290b11680b5dc1bb88bc05c8bbf735e",
+          "cmapSha256": "53d5e20e01ca8c6c28469cb8753b2cabb415f7dc5bdd49a8d3941c518f4965d5"
+        }
+      ]
     }
   ]
 }

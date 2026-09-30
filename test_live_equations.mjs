@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { recoverEquationItems, recoverPiecewiseItems } from './live-equations.mjs';
+import { buildLiveStructure } from './live-convert.mjs';
 
 const item = (value, x, y, width = 5, height = 10) => ({ value, raw: value, x, y, width, height, math: true });
 const bar = (x, y, width) => ({ ...item('\\frac', x, y, width, 1), raw: '\ue06d' });
 const root = (x, y) => ({ ...item('\\sqrt', x, y), raw: '\ue05c' });
 const head = (x, y) => ({ ...item('\\vec', x, y), raw: '\ue06e' });
 const scenarios = [
+  ['captured 2021 September ga25 adjacent lim and sum own separate lower limits', [item('lim', 115.4, 531.9, 18.7, 13.2), item('n', 114.1, 523.3, 4.5, 7.5), item('→', 119.6, 523.3, 7.4, 7.5), item('∞', 128, 523.3, 7.4, 7.5), item('\\sum', 138.1, 529.3, 14.3, 19.8), item('k', 136.9, 522.7, 3.9, 7.5), item('=', 142.1, 523.1, 5.8, 7.5), item('1', 149.7, 522.7, 3.7, 7.5), item('n', 142.9, 544.8, 4.5, 7.5), item('a', 154.6, 532.5, 6, 11)], 532.5, '\\lim_{n→∞}\\sum_{k=1}^{n}a'],
+  ['captured 2020 November ga30 exponent overlaps the tall closing brace advance', [item('\\{', 540.1, 966.8, 6.4, 25.8), item('f', 545.4, 970.9, 5.4, 11), { ...item('′', 552, 970.9, 3, 11), math: false }, item('(', 555, 966.8, 4.3, 25.8), { ...bar(559.9, 967.4, 8.8), height: 11 }, item('1', 561.7, 978.1, 5.5, 11), item('3', 561.7, 963.6, 5.5, 11), item(')', 569.8, 966.8, 4.3, 25.8), item('\\}', 573.5, 966.8, 6.4, 25.8), item('2', 578.8, 983, 3.7, 7.5)], 970.6, '\\{f′(\\frac{1}{3})\\}^{2}'],
+  ['captured 2021 November na20 integral cannot claim the preceding square', [item('x', 510.5, 921, 6.3, 11), item('2', 517.4, 925.9, 3.7, 7.5), item('\\int', 521.2, 917.9, 13.5, 22), item('x', 535.3, 931.7, 4.2, 7.5), item('0', 532.5, 911.3, 3.7, 7.5), item('f(t)dt', 539.9, 921, 29.3, 11)], 921.5, 'x^{2}\\int_{0}^{x}f(t)dt'],
+  ['captured 2020 November ga08 integral bound retains its own exponent', [item('\\int', 107.3, 1010.6, 13.5, 22), item('e', 118.6, 1003.9, 3.5, 7.5), item('e', 121.4, 1024.4, 3.5, 7.5), item('2', 125.1, 1027.9, 2.5, 5.1), item('f(x)dx', 130, 1013.6, 45, 11)], 1013.3, '\\int_{e}^{e^{2}}f(x)dx'],
+  ['captured 2017 November na28 text-font lim owns its lower condition', [{ ...item('lim', 449.7, 968.8, 18.7, 13.2), math: false }, item('n', 448.4, 960.1, 4.5, 7.5), item('→', 453.8, 960.1, 7.4, 7.5), item('∞', 462.2, 960.1, 7.4, 7.5), item('x', 473, 969.4, 6.3, 11)], 969.4, '\\lim_{n→∞}x'],
+  ['captured 2017 November ga23 exponent belongs after tall closing parenthesis', [item('(', 499.7, 550.1, 4.3, 25.8), { ...bar(504.6, 550.7, 8.8), height: 11 }, item('1', 506.4, 561.4, 5.5, 11), item('2', 506.4, 546.8, 5.5, 11), item(')', 514.5, 550.1, 4.3, 25.8), item('x', 518.2, 566.3, 4.2, 7.5), item('-', 523.8, 566.6, 5.6, 7.5), item('5', 530.8, 566.3, 3.7, 7.5)], 553.8, '(\\frac{1}{2})^{x-5}'],
   ['captured 2017 June q18 primed text-font segment', [bar(556.86, 937.32, 18.6), { ...item('PF ′', 556.8, 933.42, 18.64, 10.98), math: false }], 933.42, '\\bar{PF′}'],
   ['captured 2017 November q29 text-font vector', [bar(135.9, 962.34, 15.78), head(148.8, 962.34), { ...item('OP', 136.2, 957.3, 15.12, 10.98), math: false }], 957.3, '\\vec{OP}'],
   ['captured 2025 June geometry q23 zero vector', [bar(259.14, 844.2, 7.98), head(264.24, 844.2), item('0', 260.76, 839.16, 5.52, 10.98)], 838.9791, '\\vec{0}'],
@@ -45,6 +52,31 @@ const rejected = [
   ['ambiguous radical bar', [root(0, 8), bar(5, 8, 10), bar(5, 9, 12), item('a', 6, 0)]],
 ];
 const results = [];
+const placementScenarios = [
+  ['captured 2020 November ga30 prime before a tall argument preserves one balanced equation', scenarios.find(([name]) => name.includes('exponent overlaps the tall closing brace'))[1], ['\\{f′(\\frac{1}{3})\\}^{2}']],
+  ['captured 2019 November ga14 a long superscript cannot outvote the relation baseline', [item('(', 477.1, 959.3, 4.3, 25.8), { ...bar(482, 959.8, 8.8), height: 11 }, item('1', 483.7, 970.6, 5.5, 11), item('2', 483.7, 956, 5.5, 11), item(')', 491.9, 959.3, 4.3, 25.8), ...[...'f(x)g(x)'].map((value, index) => item(value, 495.6 + index * 3.8, 975.4, 3.5, 7.5)), item('≥', 529.4, 963.2, 9.3, 11)], ['(\\frac{1}{2})^{f(x)g(x)}≥']],
+  ['captured 2019 November ga16 numerator ln is followed by its argument', [{ ...bar(669.8, 881.9, 17.6), height: 11 }, { ...item('ln', 671.5, 892.6, 9, 11), math: false }, item('2', 680.5, 892.6, 5.5, 11), item('3', 676, 878.1, 5.5, 11)], ['\\frac{\\ln 2}{3}']],
+  ['captured 2018 September ga08 numerator ln cannot split integral upper limit', [item('\\int', 107.3, 1010.7, 13.5, 22), item('e', 121.4, 1024.5, 3.5, 7.5), item('1', 118.6, 1004, 3.7, 7.5), { ...bar(126.3, 1010.3, 37.6), height: 11 }, item('3', 129.4, 1021, 5.5, 11), item('(', 136, 1021.3, 4.3, 11.3), { ...item('ln', 139.7, 1021, 9, 11), math: false }, item('x', 148.7, 1021, 6.3, 11), item(')', 154.7, 1021.3, 4.3, 11.3), item('2', 158.5, 1025.9, 3.7, 7.5), item('x', 142.1, 1006.4, 6.3, 11), item('dx', 166.3, 1013.7, 11.6, 11)], ['\\int_{1}^{e}\\frac{3(\\ln x)^{2}}{x}dx']],
+  ['captured 2024 November calculus25 denominator prime cannot anchor the equation line', [{ ...bar(147.5, 916.3, 64.9), height: 11 }, item('1', 177.3, 927, 5.5, 11), item('g', 149.1, 912.4, 5.3, 11), { ...item('′', 155.8, 912.4, 3, 11), math: false }, item('(f(x))f(x)', 158.8, 912.4, 52.5, 11), item('dx', 214.9, 919.7, 11.5, 11), item('=', 228.4, 920.2, 8.6, 11), item('2', 239, 919.7, 5.5, 11)], ['\\frac{1}{g′(f(x))f(x)}dx=2']],
+  ['captured 2024 September calculus28 tall absolute delimiters never become integral limits', [item('g(x)=', 477.1, 879.5, 31.5, 11), item('|', 510.5, 874.2, 5.5, 28), item('\\int', 515.8, 876.5, 13.5, 22), item('x', 529.8, 890.3, 4.2, 7.5), item('-', 527.1, 870.2, 5.6, 7.5), item('a', 534.1, 869.8, 3.9, 7.5), item('{\\pi}', 537.9, 869.8, 4.2, 7.5), item('f(t)dt', 543.8, 879.5, 29.3, 11), item('|', 572.8, 874.2, 5.5, 28)], ['g(x)=|\\int_{-a{\\pi}}^{x}f(t)dt|']],
+  ['captured 2023 June calculus27 sum limits cannot outvote a baseline operator', [item('\\sum', 130, 971.6, 14.3, 19.8), item('∞', 133.4, 987.2, 7.4, 7.5), item('n', 128.5, 965, 4.5, 7.5), item('=', 134.5, 965.4, 5.8, 7.5), item('1', 142, 965, 3.7, 7.5), item('(', 145.8, 971.4, 4.3, 28.1), { ...bar(150.7, 971.6, 14), height: 11 }, item('a', 152.3, 984.5, 5.8, 11), item('n', 158.5, 981.5, 4.5, 7.5), item('n', 154.6, 967.7, 6.6, 11), item('-', 167.1, 975.5, 8.3, 11), { ...bar(178, 971.6, 31.1), height: 11 }, item('3n+7', 179.6, 982.3, 28.1, 11), item('n+2', 182.3, 967.7, 22.8, 11), item(')', 210.2, 971.4, 4.3, 28.1)], ['\\sum_{n=1}^{∞}(\\frac{a_{n}}{n}-\\frac{3n+7}{n+2})']],
+  ['captured 2018 June na26 denominator row cannot define a fraction equation baseline', [{ ...bar(478.2, 976.4, 13.3), height: 11 }, item('a', 479.9, 989.3, 5.8, 11), item('3', 486.1, 986.3, 3.7, 7.5), item('a', 479.9, 972.5, 5.8, 11), item('2', 486.1, 969.5, 3.7, 7.5), item('-', 495.4, 980.3, 8.3, 11), { ...bar(507.7, 976.4, 13.3), height: 11 }, item('a', 509.3, 989.3, 5.8, 11), item('6', 515.5, 986.3, 3.7, 7.5), item('a', 509.3, 972.5, 5.8, 11), item('4', 515.5, 969.5, 3.7, 7.5), item('=', 525.7, 980.3, 8.6, 11), { ...bar(538.7, 976.4, 8.8), height: 11 }, item('1', 540.5, 987.1, 5.5, 11), item('4', 540.5, 972.5, 5.5, 11)], ['\\frac{a_{3}}{a_{2}}-\\frac{a_{6}}{a_{4}}=\\frac{1}{4}']],
+  ['captured 2021 June na17 integral upper limit and preceding cubic stay on their equation line', [item('f(x)=4', 128.5, 981.5, 39.1, 11), item('x', 167.6, 981.5, 6.3, 11), item('3', 173.6, 986.5, 3.7, 7.5), item('+', 179.6, 982.1, 8.6, 11), item('x', 189.4, 981.5, 6.3, 11), item('\\int', 195.4, 978.5, 13.5, 22), item('0', 206.6, 971.8, 3.7, 7.5), item('1', 209.4, 992.3, 3.7, 7.5), item('f(t)dt', 213.3, 981.5, 29.4, 11)], ['f(x)=4x^{3}+x\\int_{0}^{1}f(t)dt']],
+  ['captured 2019 November ga16 tall parentheses cannot define standalone baseline', [item('f', 530.6, 983.5, 5.4, 11), item('(', 537.2, 979.5, 4.3, 25.8), { ...bar(542, 980, 9.3), height: 11 }, item('1', 544.1, 990.8, 5.5, 11), item('x', 543.7, 976.3, 6.3, 11), item(')', 552.5, 979.5, 4.3, 25.8), item('=', 559.9, 984.1, 8.6, 11), { ...bar(572.9, 980, 9.3), height: 11 }, item('1', 575, 990.8, 5.5, 11), item('x', 574.6, 976.3, 6.3, 11), item('+', 583.3, 984.1, 8.6, 11), item('1', 594.2, 983.5, 5.5, 11)], ['f(\\frac{1}{x})=\\frac{1}{x}+1']],
+];
+for (const [name, input, expected] of placementScenarios) {
+  try {
+    const glyphs = new Map(input.map((part, index) => [`eq:${part.raw === '\ue06d' ? 0xe06d : 0xe800 + index}`, part.value]));
+    const pdf = { pageHeight: 1100, pageWidth: 800, fonts: { eq: { name: 'HyhwpEQ' }, text: { name: 'HYSinMyeongJo' } }, glyphs: [],
+      content: { items: [{ str: '1. 구하시오.', transform: [11, 0, 0, 11, 20, 1050], width: 60, height: 11, fontName: 'text' },
+        ...input.filter((part) => !part.math).map((part) => ({ str: part.value, transform: [part.height, 0, 0, part.height, part.x, part.y], width: part.width, height: part.height, fontName: 'text' }))] },
+      equationItems: input.map((part, index) => ({ ...part, str: part.raw === '\ue06d' ? part.raw : String.fromCodePoint(0xe800 + index), transform: [part.height, 0, 0, part.height, part.x, part.y], width: part.width, height: part.height, fontName: 'eq' })).filter((part) => part.math) };
+    const question = { id: 'captured-placement', no: 1, page: 1, box: [0, 0, 800, 300], responseType: 'short_answer', text: '1. 구하시오.' };
+    const actual = buildLiveStructure(question, pdf, glyphs).blocks.flatMap((block) => block.runs || []).filter((run) => run.kind === 'equation').map((run) => run.script);
+    assert.deepEqual(actual, expected);
+    results.push({ scenario: name, pass: true, expected, actual });
+  } catch (error) { results.push({ scenario: name, pass: false, error: error.message }); }
+}
 for (const [name, input, baseline, expected] of scenarios) {
   const before = structuredClone(input);
   try {

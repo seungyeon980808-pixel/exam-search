@@ -11,7 +11,7 @@ function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {
     if (!/[\uE000-\uF8FF]/u.test(char)) return char;
     const formula = glyphs.get(`${item.fontName}:${char.codePointAt(0)}`);
-    if (!formula) throw new Error('검증되지 않은 수식 글자가 남았습니다.');
+    if (formula === undefined) throw new Error('검증되지 않은 수식 글자가 남았습니다.');
     return formula;
   });
   return decoded.reduce((result, value) => {
@@ -33,22 +33,59 @@ export function attachTextScripts(items, recoverBases = true) {
   if (!recoverBases) return textScripts;
   const consumed = new Set();
   const promoted = new Map();
-  for (const base of items.filter((item) => !item.math && /^[A-Za-z]{1,4}$/u.test(item.value.trim()))) {
-    const scripts = items.filter((item) => item.math && /^[A-Za-z0-9+−-]{1,3}$/u.test(item.value.trim())
+  // Chemical formulas such as NaHCO or KMnO are longer than a variable name.
+  for (const base of items.filter((item) => !item.math && /^(?:[A-Za-z]{1,4}|(?:[A-Z][a-z]?){1,6})$/u.test(item.value.trim()))) {
+    const first = items.filter((item) => item.math && /^[A-Za-z0-9+−-]{1,3}$/u.test(item.value.trim())
       && item.height > 0 && item.height <= base.height * 0.82
       && item.x - (base.x + base.width) >= -1 && item.x - (base.x + base.width) <= Math.max(1.5, base.height * 0.22)
       && Math.abs(item.y - base.y) >= Math.max(1.8, base.height * 0.2)
       && Math.abs(item.y - base.y) <= base.height * 0.7);
+    // A charge or index runs on at the same small size and height (A²⁺, C₆₀, PM₂.₅, CO₃²⁻):
+    // keep every touching glyph of that run in one script.
+    const scripts = first.map((start) => {
+      const run = [start];
+      for (;;) {
+        const last = run.at(-1);
+        const next = items.find((item) => item.math && !run.includes(item) && !first.includes(item)
+          && /^[A-Za-z0-9+−.-]$/u.test(item.value.trim())
+          && Math.abs(item.y - start.y) < 1 && Math.abs(item.height - start.height) < 0.5
+          && item.x - (last.x + last.width) >= -1 && item.x - (last.x + last.width) <= 1.6);
+        if (!next) break;
+        run.push(next);
+      }
+      return run;
+    });
+    // A charge printed after the subscript (CO₃²⁻) starts where that subscript ends.
+    for (const sub of scripts.filter((run) => run[0].y < base.y)) {
+      if (scripts.some((run) => run[0].y > base.y)) break;
+      const end = sub.at(-1);
+      const start = items.find((item) => item.math && !scripts.flat().includes(item)
+        && /^[0-9+−-]$/u.test(item.value.trim()) && item.y - base.y >= Math.max(1.8, base.height * 0.2)
+        && item.y - base.y <= base.height * 0.7 && Math.abs(item.height - end.height) < 0.5
+        && item.x - (end.x + end.width) >= -2 && item.x - (end.x + end.width) <= 1.6);
+      if (!start) continue;
+      const run = [start];
+      for (;;) {
+        const last = run.at(-1);
+        const next = items.find((item) => item.math && !run.includes(item) && /^[0-9+−-]$/u.test(item.value.trim())
+          && Math.abs(item.y - start.y) < 1 && Math.abs(item.height - start.height) < 0.5
+          && item.x - (last.x + last.width) >= -1 && item.x - (last.x + last.width) <= 1.6);
+        if (!next) break;
+        run.push(next);
+      }
+      scripts.push(run);
+    }
     const bracket = items.some((item) => item.math && item.value.trim() === '('
       && Math.abs(item.y - base.y) < 1.5 && item.x - base.x - base.width >= -1
       && item.x - base.x - base.width <= 1.5);
     if (!scripts.length && !bracket) continue;
     const upright = /HaansoftBatang/u.test(base.font || '') && !/It|Italic/iu.test(base.font || '');
     const value = upright ? `{rm ${base.value.trim()}}` : base.value.trim();
+    const text = (run) => run.map((item) => item.value.trim()).join('');
     promoted.set(base, { ...base, math: true, recovered: true,
-      width: Math.max(base.x + base.width, ...scripts.map((item) => item.x + item.width)) - base.x,
-      value: value + scripts.sort((a, b) => b.y - a.y).map((item) => `${item.y < base.y ? '_' : '^'}{${item.value.trim()}}`).join('') });
-    scripts.forEach((item) => consumed.add(item));
+      width: Math.max(base.x + base.width, ...scripts.flat().map((item) => item.x + item.width)) - base.x,
+      value: value + scripts.sort((a, b) => b[0].y - a[0].y).map((run) => `${run[0].y < base.y ? '_' : '^'}{${text(run)}}`).join('') });
+    scripts.flat().forEach((item) => consumed.add(item));
   }
   // Left indices of permutations/combinations are lowered just like the right index.
   for (const [base, replacement] of promoted) {
@@ -175,6 +212,19 @@ function clipItems(question, pdf, glyphs) {
 }
 
 function findLines(items) {
+  items = items.map((item) => !item.math && /^(?:[′']|ln)$/u.test(item.value.trim())
+    && (items.some((bar) => bar.math && bar.raw === '\uE06D'
+      && item.x >= bar.x && item.x + item.width <= bar.x + bar.width
+      && Math.abs(item.y - bar.y) < 18)
+      || (/^[′']$/u.test(item.value.trim()) && items.some((next) => next.math
+        && next.value.trim() === '(' && next.height > 18
+        && next.x - item.x - item.width >= -1 && next.x - item.x - item.width < 1
+        && Math.abs(next.y + next.height * 0.17 - item.y) < 1.5)))
+    && items.some((base) => base.math && Math.abs(base.y - item.y) < 1
+      && ((item.x - base.x - base.width >= -1 && item.x - base.x - base.width < 3)
+        || (item.value.trim() === 'ln' && base.x - item.x - item.width >= -1
+          && base.x - item.x - item.width < 3)))
+    ? { ...item, math: true, value: item.value.trim() === 'ln' ? '\\ln' : item.value } : item);
   const lines = [];
   for (const item of items.filter((value) => !value.math && value.raw.trim())
     .sort((left, right) => right.y - left.y)) {
@@ -195,6 +245,10 @@ function findLines(items) {
   const vectorBars = new Set(bars.filter((bar) => heads.some((head) =>
     Math.abs(head.x - (bar.x + bar.width)) <= 3 && Math.abs(head.y - bar.y) <= 3)));
   const fractionBars = bars.filter((bar) => !radicalOf.has(bar) && !vectorBars.has(bar));
+  const tallDelimiter = (item) => item.math && /^\\?[()[\]|{}]$/u.test(item.value.trim()) && item.height > 18
+    && (!/^\\[{}]$/u.test(item.value.trim()) || items.some((other) => other !== item
+      && other.value.trim() === (item.value.trim() === '\\{' ? '\\}' : '\\{')
+      && Math.abs(other.y - item.y) < 2.3 && Math.abs(other.height - item.height) < 2.3));
   const placement = (item) => {
     if (radicalOf.has(item)) return placement(radicalOf.get(item));
     if (vectorBars.has(item) || (item.raw === '\uE06E' && heads.includes(item))) return item.y - item.height * 0.45;
@@ -205,7 +259,9 @@ function findLines(items) {
       && !(item.y - bar.y >= item.height * 1.3 && anchoredAt(item.y)))).sort((a, b) => Math.abs(item.y - a.y) - Math.abs(item.y - b.y)
         || a.width - b.width)[0];
     return enclosing ? enclosing.y + enclosing.height * 0.35
-      : /^\\sum$/u.test(item.value) ? item.y + item.height * 0.17 : item.y;
+      : /^\\(?:sum|prod)$/u.test(item.value)
+        || tallDelimiter(item) ? item.y + item.height * 0.17
+        : /^\\int$/u.test(item.value) ? item.y + item.height * 0.14 : item.y;
   };
   for (const item of [...items].sort((a, b) => Number(b.raw === '\uE06D') - Number(a.raw === '\uE06D')
     || b.height - a.height)) {
@@ -216,8 +272,18 @@ function findLines(items) {
     else if (item.math) lines.push({ y: placementY, anchors: [], items: [{ ...item }] });
   }
   for (const line of lines.filter((entry) => !entry.anchors.length)) {
+    const limits = line.items.filter((item) => /^\\(?:sum|int|prod)$/u.test(item.value));
+    const fractionHeight = Math.max(0, ...line.items.filter((item) => item.raw === '\uE06D').map((item) => item.height));
     const candidates = line.items.filter((item) => !/[\uE05C\uE06D\uE06E]/u.test(item.raw)
+      && !tallDelimiter(item) && item.height >= fractionHeight * 0.85
+      && Math.abs(placement(item) - item.y) < 2.3
+      && !limits.some((limit) => item.height < limit.height * 0.7
+        && Math.abs(item.y - placement(limit)) > 2.3
+        && Math.abs(item.y - placement(limit)) < limit.height
+        && item.x + item.width / 2 >= limit.x - 4 && item.x <= limit.x + limit.width + 5)
       && !/^\\(?:sum|int|prod)/u.test(item.value));
+    if (!candidates.length && line.items.some((item) => fractionBars.some((bar) =>
+      item.raw === bar.raw && item.x === bar.x && item.y === bar.y))) continue;
     const score = (item) => candidates.filter((other) => Math.abs(other.height - item.height) < 1
       && Math.abs(other.y - item.y) < 1.5).length * Math.max(1, item.height) ** 2;
     const ranked = [...(candidates.length ? candidates : line.items)].sort((left, right) => score(right) - score(left)
@@ -227,6 +293,13 @@ function findLines(items) {
       && score(item) === score(primary) && Math.abs(item.height - primary.height) < 0.5
       && Math.abs(item.width - primary.width) < 0.5
       && Math.abs(item.y - primary.y) > 2.3)) {
+      const equalities = line.items.filter((item) => item.math && item.value.trim() === '='
+        && !fractionBars.some((bar) => line.items.includes(bar)
+          && item.x + item.width / 2 >= bar.x && item.x + item.width / 2 <= bar.x + bar.width));
+      if (equalities.length && equalities.every((item) => Math.abs(item.y - equalities[0].y) < 1.5)) {
+        line.y = equalities[0].y;
+        continue;
+      }
       throw new Error('독립 수식 줄의 기준선을 확인할 수 없습니다.');
     }
     line.y = primary.y;
@@ -355,6 +428,12 @@ export function buildLiveStructure(question, pdf, glyphs) {
   const sourceLines = lines.filter((line) => line.items.length).map((line) => ({ line,
     plain: [...line.items].sort((a, b) => a.x - b.x).map((item) => item.value).join('') }));
   const allMarkers = sourceLines.map(({ plain }) => (plain.match(/[①②③④⑤]/gu) || []).join('')).join('');
+  // A circled endpoint pair belongs to the displayed sequence, not the answers.
+  // Require a separate complete answer row and no earlier higher-numbered labels.
+  const answerRow = /^[①②]+①②③④⑤$/u.test(allMarkers)
+    && sourceLines.some(({ plain }) => /^\s*①-.*-②\s*$/u.test(plain))
+    ? sourceLines.findLast(({ plain }) => /^\s*①/u.test(plain)
+      && (plain.match(/[①②③④⑤]/gu) || []).join('') === '①②③④⑤')?.line : null;
   const inlineChoices = question.responseType !== 'short_answer'
     && (question.subject === 'eng' || /_eng_/u.test(question.id || ''))
     && allMarkers === '①②③④⑤'
@@ -430,6 +509,12 @@ export function buildLiveStructure(question, pdf, glyphs) {
     }
     let current = role;
     let currentRuns = [];
+    if (answerRow && line.y > answerRow.y) {
+      if (/^[①②③④⑤]/u.test(plain) && blocks.at(-1)?.role === role) {
+        blocks.at(-1).runs.push({ kind: 'text', value: ' ' }, ...runs);
+      } else blocks.push({ role, label: '', runs });
+      continue;
+    }
     const lineHasMarker = runs.some((run) => run.kind === 'text' && /[①②③④⑤]/u.test(run.value));
     if (role === 'choice' && !lineHasMarker) {
       // Wrapped choice text or figure labels continue the previous choice.

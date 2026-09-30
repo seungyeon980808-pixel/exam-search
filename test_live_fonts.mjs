@@ -36,6 +36,35 @@ globalThis.fetch = async () => ({ ok: true, json: async () => ({ fonts: [
   { fontName: 'Conflicting', unitsPerEm: 1024, glyphs: [proof, { ...proof, formula: 'B' }] },
 ] }) });
 const { verifiedGlyphMap } = await import('./live-fonts.mjs');
+const blankCff = JSON.parse(await readFile(new URL('./test-fixtures/blank-cff-glyphs.json', import.meta.url)));
+for (const { id, data, proof: cffProof } of blankCff.filter(({ id }) => ['c1_2022_11_04', 'c2_2020_11_01', 'c2_2027_06_08', 'e1_2025_09_08'].includes(id))) {
+  test(`drops only a verified empty source glyph: ${id}`, async () => {
+    const pdf = { pageHeight: 100, fonts: { f: { name: '*¸íÁ¶', data: Buffer.from(data, 'base64') } },
+      content: { items: [{ str: String.fromCodePoint(cffProof.codepoint), fontName: 'f', transform: [11.5, 0, 0, 11.5, 10, 50], width: 5.4625, height: 11.5 }] },
+      glyphs: [{ fontId: 'f', codepoint: cffProof.codepoint, glyphId: cffProof.glyphId }], OPS: { setFont: 37, showText: 44 },
+      operations: { fnArray: [37, 44], argsArray: [['f', 11.5], [[{ unicode: String.fromCodePoint(cffProof.codepoint), originalCharCode: cffProof.glyphId, fontChar: String.fromCodePoint(cffProof.renderedCodepoint) }]]] } };
+    assert.equal((await verifiedGlyphMap({ box: [0, 0, 100, 100] }, pdf)).get(`f:${cffProof.codepoint}`), '');
+    pdf.operations.argsArray[1][0][0].fontChar = String.fromCodePoint(cffProof.renderedCodepoint + 1);
+    await assert.rejects(verifiedGlyphMap({ box: [0, 0, 100, 100] }, pdf), /모양을 검증하지 못했습니다/u);
+  });
+}
+for (const { id, data, proof: cffProof } of blankCff) {
+  test(`verifies the captured invisible CFF spacer and its rendering map: ${id}`, async () => {
+    const bytes = Buffer.from(data, 'base64');
+    assert.equal(await verifyGlyph(bytes, cffProof.glyphId, cffProof, cffProof.renderedCodepoint), true);
+    assert.equal(await verifyGlyph(bytes, cffProof.glyphId + 1, cffProof, cffProof.renderedCodepoint), false);
+    assert.equal(await verifyGlyph(bytes, cffProof.glyphId, cffProof, cffProof.renderedCodepoint + 1), false);
+    for (const tag of ['CFF ', 'cmap']) {
+      const altered = Buffer.from(bytes);
+      const view = new DataView(altered.buffer, altered.byteOffset, altered.byteLength);
+      for (let i = 0; i < view.getUint16(4); i += 1) {
+        const at = 12 + 16 * i;
+        if (altered.subarray(at, at + 4).toString() === tag) altered[view.getUint32(at + 8) + view.getUint32(at + 12) - 1] ^= 1;
+      }
+      assert.equal(await verifyGlyph(altered, cffProof.glyphId, cffProof, cffProof.renderedCodepoint), false);
+    }
+  });
+}
 const question = { box: [0, 0, 100, 100] };
 function page(fontName = 'ABCDEF+HyhwpEQ-Identity-H') {
   return { pageHeight: 100, content: { items: [{ str: '\uE000', fontName: 'font1', width: 10,

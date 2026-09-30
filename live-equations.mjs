@@ -14,7 +14,8 @@ const fail = (item, reason) => {
 };
 const join = (items) => ordered(items).reduce((text, item) => {
   const value = item.value.trim();
-  return text + (/\\[A-Za-z]+$/u.test(text) && /^[A-Za-z]/u.test(value) ? ' ' : '') + value;
+  return text + ((/\\[A-Za-z]+$/u.test(text) && /^[A-Za-z]/u.test(value))
+    || (/\\ln$/u.test(text) && /^\d/u.test(value)) ? ' ' : '') + value;
 }, '');
 const rowBaseline = (items) => [...items].sort((a, b) => b.height - a.height || b.y - a.y)[0].y;
 const covered = (item, bar) => item.recovered && item.value.startsWith('\\frac{')
@@ -42,23 +43,31 @@ function combined(parts, anchor, value) {
 function bindScripts(items, baseline) {
   const result = ordered(items);
   const consumed = new Set();
+  const tallDelimiter = (item) => /^\\?[()[\]|{}]$/u.test(item.value.trim()) && item.height > 18
+    && (item.value.trim() !== '\\{' || items.some((other) => other !== item
+      && other.value.trim() === (item.value.trim() === '\\{' ? '\\}' : '\\{')
+      && Math.abs(other.y - item.y) < 2.3 && Math.abs(other.height - item.height) < 2.3));
   const bases = result.filter((item) => item.math && (Math.abs(item.y - baseline) < 2.3
-    || (isLimit(item) && Math.abs(item.y - baseline) <= item.height * 0.45)))
+    || ((isLimit(item) || tallDelimiter(item))
+      && Math.abs(item.y - baseline) <= item.height * 0.45)))
     .sort((a, b) => Number(isLimit(b)) - Number(isLimit(a)) || a.x - b.x);
   for (const base of bases) {
     const limit = isLimit(base);
     // Integral limits sit at the upper/lower right and may run several characters (x+a).
     const integral = limit && /^\\int(?:\s|$)/u.test(base.value.trim());
     const peers = bases.filter((item) => item !== base && item.x > base.x);
-    const boundary = Math.min(...peers.map((item) => item.x), Infinity);
+    const boundary = Math.min(...peers.map((item) => item.x
+      - (limit && /^\\(?:sum|prod|lim)(?:\s|$)/u.test(item.value.trim()) ? 4 : 0)), Infinity);
     const candidates = result.filter((item) => item !== base && item.math && !consumed.has(item)
       && !structural(item) && Math.abs(item.y - baseline) >= 2.3
       && Math.abs(item.y - baseline) <= Math.max(12, base.height * 1.5)
       // A delimiter stretched around a fraction sits low but is never a script.
-      && !(/^[()[\]|]$/u.test(item.value.trim()) && item.height > Math.max(base.height, 11) * 1.6)
+      && !tallDelimiter(item)
+      && (!integral || item.x >= base.x)
       && item.x < boundary && (limit
         ? center(item) >= base.x - 4 && (item.x <= right(base) + 5 || integral)
-        : item.x >= right(base) - 1 && item.x - right(base) <= Math.max(8, base.height * 2.5)));
+        : item.x >= right(base) - (tallDelimiter(base) ? base.height * 0.06 : 1)
+          && item.x - right(base) <= Math.max(8, base.height * 2.5)));
     for (const side of [-1, 1]) {
       const row = ordered(candidates.filter((item) => Math.sign(item.y - baseline) === side));
       if (!row.length) continue;
@@ -66,7 +75,10 @@ function bindScripts(items, baseline) {
       let edge = right(base);
       for (const item of row) {
         if ((!limit || integral) && item.x - edge > (integral ? 3 : 5)) break;
-        if (selected.length && Math.abs(item.y - selected[0].y) > Math.max(2, item.height * 0.35)) break;
+        if (selected.length && Math.abs(item.y - selected[0].y) > Math.max(2, item.height * 0.35)
+          && !(limit && selected.some((parent) => parent.height > item.height * 1.2
+            && item.x - right(parent) >= -1 && item.x - right(parent) <= 3
+            && Math.abs(item.y - parent.y) >= 2.3 && Math.abs(item.y - parent.y) <= parent.height))) break;
         selected.push(item);
         edge = Math.max(edge, right(item));
       }
@@ -106,8 +118,12 @@ function bindNuclearScripts(items, baseline) {
  * Split multi-glyph structural runs using actual glyph advances before calling this API.
  */
 export function recoverEquationItems(items, baseline, fractionHeightScale = 2) {
-  let work = items.map((item) => ({ ...item,
-    value: item.math && item.value.trim() === 'lim' ? '\\lim' : item.value }));
+  let work = items.map((item) => {
+    const limit = item.value.trim() === 'lim' && (item.math || items.some((part) => part.math
+      && /→/u.test(part.value) && part.y < item.y - 2.3 && part.y > item.y - item.height
+      && center(part) >= item.x - 3 && center(part) <= right(item) + 3));
+    return { ...item, math: item.math || limit, value: limit ? '\\lim' : item.value };
+  });
   const letters = ordered(work.filter((item) => item.math && Math.abs(item.y - baseline) < 2.3));
   for (let index = 0; index < letters.length - 2; index++) {
     const parts = letters.slice(index, index + 3);

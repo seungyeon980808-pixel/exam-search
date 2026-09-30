@@ -38,6 +38,19 @@ export async function verifiedGlyphMap(question, pdf) {
   }
   if (!needed.size) return mapped;
   const { fonts } = await registry();
+  const rendered = new Map();
+  let renderingFont = '';
+  for (let index = 0; index < (pdf.operations?.fnArray.length || 0); index += 1) {
+    const op = pdf.operations.fnArray[index], args = pdf.operations.argsArray[index];
+    if (op === pdf.OPS?.setFont) renderingFont = args[0];
+    if (op !== pdf.OPS?.showText) continue;
+    for (const glyph of args[0]) {
+      if (!glyph?.unicode || !glyph.fontChar) continue;
+      const key = `${renderingFont}:${glyph.unicode.codePointAt(0)}:${glyph.originalCharCode}`;
+      if (!rendered.has(key)) rendered.set(key, new Set());
+      rendered.get(key).add(glyph.fontChar.codePointAt(0));
+    }
+  }
   const checked = new Set();
   const rejected = new Set();
   for (const glyph of pdf.glyphs) {
@@ -55,9 +68,13 @@ export async function verifiedGlyphMap(question, pdf) {
     checked.add(identity);
     let matched = false;
     for (const proof of candidates) {
-      if (await verifyGlyph(font.data, glyph.glyphId, proof)) {
+      const renderings = rendered.get(identity);
+      const verified = proof.cffSha256
+        ? renderings?.size === 1 && await verifyGlyph(font.data, glyph.glyphId, proof, [...renderings][0])
+        : await verifyGlyph(font.data, glyph.glyphId, proof);
+      if (verified) {
         const previous = mapped.get(key);
-        if (previous && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
+        if (mapped.has(key) && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
         mapped.set(key, proof.formula);
         matched = true;
       }

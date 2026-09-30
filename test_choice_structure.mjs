@@ -5,7 +5,24 @@ import { preparedParagraphs, resolveEditableContent } from './editable-source.mj
 import { createCollectionHwpx, validateQuestionParagraphs } from './editable-convert.mjs';
 import { hasEmptyChoice, recoverQuestionRegion } from './question-region.mjs';
 import { inlineContent } from './test-hwpx-content.mjs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+
+const markerFixtures = JSON.parse(await readFile(new URL('./test-fixtures/stem-choice-markers.json', import.meta.url)));
+for (const { question, pdf, glyphMap } of markerFixtures.fixtures) {
+  test(`keeps circled DNA labels in the stem before the five answer choices: ${question.id}`, () => {
+    if (question.id === 'b2_2019_09_17') {
+      assert.throws(() => buildLiveStructure(question, pdf, new Map(glyphMap)), /본문과 선지/u);
+      return;
+    }
+    const result = buildLiveStructure(question, pdf, new Map(glyphMap));
+    assert.deepEqual(result.blocks.filter(b => b.role === 'choice').map(b => b.label), [...'①②③④⑤']);
+    assert.deepEqual(result.blocks.filter(b => b.role === 'choice').map(b => b.runs.map(r => r.value || r.script).join('').trim()), ['ㄱ', 'ㄴ', 'ㄱ, ㄷ', 'ㄴ, ㄷ', 'ㄱ, ㄴ, ㄷ']);
+    const stem = result.blocks.filter(b => b.role !== 'choice').flatMap(b => b.runs).map(r => r.value || r.script).join('');
+    assert.match(stem, /①/u);
+    assert.match(stem, /②/u);
+    assert.doesNotThrow(() => preparedParagraphs(question, result));
+  });
+}
 
 const text = (structure) => structure.blocks.map((block) => (block.label || '') + block.runs.map((run) => run.value || run.script).join('')).join('\n');
 function convert(rows, extra = {}) {

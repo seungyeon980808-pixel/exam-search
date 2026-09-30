@@ -88,3 +88,25 @@ test('text-font state parentheses join a chemical formula without losing a print
     item('(', 10.2, false, 100, 11, 4), item('g', 14.3, false, 100, 11, 5), item(') ＋', 19.4)];
   assert.deepEqual(runs(attachTextScripts(source)), [{ kind: 'equation', script: '{rm H}_{2}(g)~＋' }]);
 });
+
+// Coordinates captured from c1_2019_11_13 (A²⁺), c1_2020_09_06 (C₆₀), e1_2020_06_18 (PM₂.₅)
+// and c1_2020_11_12 (CO₃²⁻): every glyph of a multi-character charge or index stays in one script.
+test('a multi-character charge or index is one script, never a script plus a baseline glyph', () => {
+  const batang = 'HaansoftBatang';
+  const charge = [item('A', 188.6, false, 753.9, 11, 8.3, batang), item('2', 198.5, true, 758.8, 7.5, 3.7),
+    item('+', 203.3, true, 759.1, 7.5, 5.8)];
+  assert.equal(runs(attachTextScripts(charge))[0].script, '{rm A}^{2+}');
+  const fullerene = [item('C', 633.9, false, 347.4, 11, 7.4, batang), item('6', 641.4, true, 344.4, 7.5, 3.7),
+    item('0', 645.1, true, 344.4, 7.5, 3.7)];
+  assert.equal(runs(attachTextScripts(fullerene))[0].script, '{rm C}_{60}');
+  const dust = [item('PM', 319.3, false, 502.9, 11, 17.6, batang), item('2', 336.5, true, 499.9, 7.5, 3.7),
+    item('.', 340.3, true, 500.3, 7.5, 2.1), item('5', 342.5, true, 499.9, 7.5, 3.7)];
+  assert.equal(runs(attachTextScripts(dust))[0].script, '{rm PM}_{2.5}');
+  const carbonate = [item('CO', 249.6, false, 967.9, 11, 15.3, batang), item('3', 265.3, true, 964.9, 7.5, 3.7),
+    item('2', 267.9, true, 972.8, 7.5, 3.7), item('-', 272.7, true, 973.1, 7.5, 5.6)];
+  assert.equal(runs(attachTextScripts(carbonate))[0].script, '{rm CO}^{2-}_{3}');
+  // A sentence period is printed in the text font on the baseline and stays text.
+  const sentence = [item('PM', 0, false, 100, 11, 17.6, batang), item('1', 17.2, true, 97, 7.5, 3.7),
+    item('0', 20.9, true, 97, 7.5, 3.7), item('.', 24.9, false, 100, 11.5, 2.7)];
+  assert.deepEqual(runs(attachTextScripts(sentence)), [{ kind: 'equation', script: '{rm PM}_{10}' }, { kind: 'text', value: '.' }]);
+});

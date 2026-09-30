@@ -36,12 +36,27 @@ export function glyphBytes(fontData, glyphId) {
     unitsPerEm, metrics: [advance, bearing] };
 }
 
-export async function verifyGlyph(fontData, glyphId, proof) {
+const digestHex = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+  .map((part) => part.toString(16).padStart(2, '0')).join('');
+
+export async function verifyGlyph(fontData, glyphId, proof, renderedCodepoint) {
+  if (proof.cffSha256) {
+    if (glyphId !== proof.glyphId || renderedCodepoint !== proof.renderedCodepoint) return false;
+    const data = new Uint8Array(fontData);
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    if (view.getUint16(table(view, 'head').offset + 18) !== proof.unitsPerEm) return false;
+    // Bind the entire CFF program (including subroutines) and its actual rendering cmap.
+    // A source CID alone is not a glyph index in a subset CFF font.
+    for (const [tag, expected] of [['CFF ', proof.cffSha256], ['cmap', proof.cmapSha256]]) {
+      const { offset, length } = table(view, tag);
+      if (!length || offset + length > data.length
+        || await digestHex(data.subarray(offset, offset + length)) !== expected) return false;
+    }
+    return true;
+  }
   const actual = glyphBytes(fontData, glyphId);
   if (!actual.raw.length || actual.unitsPerEm !== proof.unitsPerEm
     || actual.metrics[0] !== proof.metrics[0]
     || actual.metrics[1] !== proof.metrics[1]) return false;
-  const digest = await crypto.subtle.digest('SHA-256', actual.raw);
-  const hex = [...new Uint8Array(digest)].map((part) => part.toString(16).padStart(2, '0')).join('');
-  return hex === proof.glyfSha256;
+  return await digestHex(actual.raw) === proof.glyfSha256;
 }
