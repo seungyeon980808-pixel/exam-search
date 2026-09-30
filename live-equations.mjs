@@ -105,7 +105,7 @@ function bindNuclearScripts(items, baseline) {
 /** Returns cloned items. Structural ambiguity throws; callers must surface it to users.
  * Split multi-glyph structural runs using actual glyph advances before calling this API.
  */
-export function recoverEquationItems(items, baseline) {
+export function recoverEquationItems(items, baseline, fractionHeightScale = 2) {
   let work = items.map((item) => ({ ...item,
     value: item.math && item.value.trim() === 'lim' ? '\\lim' : item.value }));
   const letters = ordered(work.filter((item) => item.math && Math.abs(item.y - baseline) < 2.3));
@@ -140,7 +140,7 @@ export function recoverEquationItems(items, baseline) {
     const enclosing = bars.filter((other) => other !== bar && other.width > bar.width
       && other.x <= bar.x && right(other) >= right(bar));
     const nearby = work.filter((item) => item !== bar && item !== radical && !heads.includes(item)
-      && item.math && covered(item, bar) && Math.abs(item.y - bar.y) <= Math.max(18, bar.height * 2)
+      && item.math && covered(item, bar) && Math.abs(item.y - bar.y) <= Math.max(18, bar.height * (radical ? 2 : fractionHeightScale))
       && enclosing.every((outer) => (item.y - outer.y) * (bar.y - outer.y) > 0));
     if (nearby.some((item) => structural(item))) fail(bar, 'overlapping structures');
     const above = nearby.filter((item) => item.y > bar.y + 2.3);
@@ -155,12 +155,12 @@ export function recoverEquationItems(items, baseline) {
     if (!radical && !heads.length && hugged.length && hugged.length === below.length
       && hugged.every((item) => /^[A-Za-z](?:_\{[A-Za-z0-9]+\})?$/u.test(item.value.trim()))
       && above.length && previousLine.length === above.length) above.length = 0;
-    if (!radical && !above.length && !heads.length) {
+    if (!radical && !above.length) {
       // Segment names such as S₁S₂ often use the text font under an equation-font overbar.
       for (const item of work) {
-        if (item.math || !/^[A-Za-z]+$/u.test(item.value.trim()) || !covered(item, bar)
+        if (item.math || !/^(?:[A-Za-z][′']?){1,4}$/u.test(item.value.replace(/\s/gu, '')) || !covered(item, bar)
           || item.y >= bar.y - 2.3 || bar.y - item.y > Math.max(8, bar.height)) continue;
-        const letter = { ...item, value: item.value.trim(), math: true };
+        const letter = { ...item, value: item.value.replace(/\s/gu, ''), math: true };
         work = work.map((entry) => entry === item ? letter : entry);
         below.push(letter);
         nearby.push(letter);
@@ -168,7 +168,8 @@ export function recoverEquationItems(items, baseline) {
     }
     const onAxis = nearby.filter((item) => Math.abs(item.y - bar.y) <= 2.3);
     if (!radical && above.length && below.length) {
-      for (const script of onAxis) {
+      const assigned = new Map();
+      for (const script of ordered(onAxis)) {
         let parents = [...above, ...below].filter((candidate) => candidate.height > script.height * 1.2
           && script.x - right(candidate) >= -1 && script.x - right(candidate) <= Math.max(3, candidate.height * 0.4)
           && Math.abs(script.y - candidate.y) >= 2.3 && Math.abs(script.y - candidate.y) <= 10);
@@ -178,8 +179,16 @@ export function recoverEquationItems(items, baseline) {
           const nearest = Math.min(...parents.map(gap));
           if (nearest <= 3) parents = parents.filter((candidate) => gap(candidate) - nearest < 0.5);
         }
-        if (parents.length !== 1) fail(script, 'fraction script baseline collision');
-        (above.includes(parents[0]) ? above : below).push(script);
+        let row = parents.length === 1 ? (above.includes(parents[0]) ? above : below) : null;
+        if (!parents.length) {
+          const neighbors = [...assigned.keys()].filter((part) => Math.abs(part.y - script.y) < 0.8
+            && Math.abs(part.height - script.height) < 0.8
+            && script.x - right(part) >= -0.5 && script.x - right(part) <= 3);
+          if (neighbors.length === 1) row = assigned.get(neighbors[0]);
+        }
+        if (!row) fail(script, 'fraction script baseline collision');
+        row.push(script);
+        assigned.set(script, row);
       }
     }
     let parts, anchor, value;
@@ -200,7 +209,8 @@ export function recoverEquationItems(items, baseline) {
       value = `\\frac{${join(bindScripts(above, rowBaseline(above)))}}{${join(bindScripts(below, rowBaseline(below)))}}`;
     } else if (!above.length && below.length) {
       const text = join(bindScripts(below, rowBaseline(below)));
-      if (!/^(?:[A-Za-z](?:_\{[A-Za-z0-9]+\})?){1,4}$/u.test(text)) fail(bar, 'ambiguous overbar');
+      if (!/^(?:[A-Za-z](?:_\{[A-Za-z0-9]+\})?[′']?){1,4}$/u.test(text)
+        && !(heads.length === 1 && text === '0')) fail(bar, 'ambiguous overbar');
       parts = [bar, ...heads, ...below];
       anchor = { ...below[0], y: rowBaseline(below) };
       value = `\\${heads.length ? 'vec' : 'bar'}{${text}}`;
@@ -275,41 +285,54 @@ export function recoverPiecewiseItems(items) {
         braceKind(item) === 'extender' && item.y < upper.y && item.y > lower.y)) fail(top, 'incomplete brace connector');
     }
     const candidates = work.filter((item) => !braceKind(item) && item.value.trim()
+      && !(!item.math && /^[,.;]$/u.test(item.value.trim()) && Math.abs(item.y - middle[0].y) < 2.3)
       && item.x >= right(top) - 0.8 && item.y <= top.y + top.height * 0.7
       && item.y >= bottom.y - bottom.height * 0.7);
     if (!candidates.length) fail(top, 'empty piecewise expression');
-    const composed = recoverEquationItems(candidates, middle[0].y);
+    // The brace center is between rows; each row supplies its own script baseline below.
+    const composed = recoverEquationItems(candidates, NaN, 1.5);
     const heights = composed.filter((item) => item.height > 0).map((item) => item.height).sort((a, b) => a - b);
     const height = heights[Math.floor(heights.length / 2)];
     const rows = [];
-    for (const item of [...composed].filter((item) => item.height >= height * 0.85).sort((a, b) => b.y - a.y)) {
-      const row = rows.find((entry) => Math.abs(entry.y - item.y) < 2.3);
+    for (const item of [...composed].filter((item) => item.height >= height * 0.85
+      && item.height <= height * 1.6 && !isLimit(item)).sort((a, b) => b.y - a.y)) {
+      const row = rows.find((entry) => Math.abs(entry.y - item.y) < height * 0.3);
       if (!row) rows.push({ y: item.y, items: [] });
     }
     if (rows.length < 2 || rows.length > 8) fail(top, 'piecewise row count');
     for (const item of composed) {
       const row = [...rows].sort((a, b) => Math.abs(a.y - item.y) - Math.abs(b.y - item.y))[0];
-      if (Math.abs(row.y - item.y) > Math.max(8, height * 0.8)) fail(item, 'ambiguous piecewise row');
+      const limit = composed.find((part) => isLimit(part) && Math.abs(part.y - row.y) < part.height * 0.45
+        && center(item) >= part.x - 4 && item.x <= right(part) + 8);
+      if (Math.abs(row.y - item.y) > Math.max(8, height * 0.8, limit ? limit.height * 0.65 : 0)) {
+        fail(item, 'ambiguous piecewise row');
+      }
       row.items.push(item);
     }
     const splitCandidates = rows.map((row) => {
       row.items = ordered(row.items);
-      if (row.items.some((item, index) => index > 0 && item.x - right(row.items[index - 1]) > height * 4.5)) {
-        fail(top, 'disconnected piecewise row');
-      }
       return row.items.filter((item, index) => index > 0
-        && item.x - right(row.items[index - 1]) > height * 0.65);
+        && item.x - right(row.items[index - 1]) > height * 0.5);
     });
     const splits = splitCandidates[0].filter((item) => splitCandidates.every((parts) =>
-      parts.some((part) => Math.abs(part.x - item.x) < 2)));
+      parts.some((part) => Math.abs(part.x - item.x) < 2.3)));
     if (splits.length !== 1) fail(top, 'ambiguous piecewise condition column');
     const splitX = splits[0].x;
     const values = rows.map((row) => {
-      const expression = row.items.filter((item) => item.x < splitX - 2);
-      const condition = row.items.filter((item) => item.x >= splitX - 2);
+      const rowSplit = splitCandidates[rows.indexOf(row)].find((part) => Math.abs(part.x - splitX) < 2.3).x;
+      if (row.items.some((item, index) => index > 0 && Math.abs(item.x - rowSplit) >= 2.3
+        && item.x - right(row.items[index - 1]) > height * 4.5)) fail(top, 'disconnected piecewise row');
+      const expression = row.items.filter((item) => item.x < rowSplit);
+      const condition = row.items.filter((item) => item.x >= rowSplit);
       if (!expression.length || !condition.length) fail(top, 'incomplete piecewise row');
-      const render = (parts) => join(recoverEquationItems(parts, row.y).map((item) => ({ ...item,
-        value: !item.math && /[가-힣]/u.test(item.value) ? `\\text{${item.value}}` : item.value })));
+      const render = (parts) => {
+        const anchors = parts.filter((item) => item.height >= height * 0.85
+          && item.height <= height * 1.6 && !isLimit(item)
+          && !/^[()[\]|]$/u.test(item.value.trim())).map((item) => item.y).sort((a, b) => a - b);
+        const formula = parts.map((item) => ({ ...item, math: item.math || /^(?:sin|cos|tan|ln|log|lim)$/u.test(item.value.trim()) }));
+        return join(recoverEquationItems(formula, anchors[Math.floor(anchors.length / 2)] ?? row.y).map((item) => ({ ...item,
+          value: !item.math && /[가-힣]/u.test(item.value) ? `\\text{${item.value}}` : item.value })));
+      };
       return `${render(expression)} & ${render(condition)}`;
     });
     const removed = new Set([...fragments, ...candidates]);

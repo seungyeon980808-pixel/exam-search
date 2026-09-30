@@ -1,3 +1,5 @@
+// --- data-table hook
+import { insertDataTable, validateDataTable } from './hwp-tables.mjs';
 let corePromise;
 
 export function groupFractions(script) {
@@ -27,7 +29,7 @@ function balancedFormula(text, opening) {
   return null;
 }
 
-function equationScript(source) {
+export function equationScript(source) {
   let value = source.trim();
   for (let count = 0; count < 12; count += 1) {
     const match = /\\?frac\s*\{/u.exec(value);
@@ -40,8 +42,31 @@ function equationScript(source) {
     if (!denominator) break;
     value = `${value.slice(0, match.index)}{${equationScript(numerator[0])}} over {${equationScript(denominator[0])}}${value.slice(denominator[1])}`;
   }
-  return value.replace(/\\\{/gu, 'LEFT {').replace(/\\\}/gu, 'RIGHT }')
-    .replace(/\\([A-Za-z]+)/gu, '$1');
+  for (const match of [...value.matchAll(/\\(text|mathrm|mathbf|mathit)\s*\{/gu)].reverse()) {
+    const group = balancedFormula(value, match.index + match[0].length - 1);
+    if (!group) continue;
+    const replacement = match[1] === 'text' ? ` "${group[0]}"`
+      : `{${{ mathrm: 'rm', mathbf: 'bold', mathit: 'it' }[match[1]]} ${equationScript(group[0])}}`;
+    value = value.slice(0, match.index) + replacement + value.slice(group[1]);
+  }
+  value = value.replace(/>=/gu, '≥').replace(/<=/gu, '≤')
+    .replace(/([A-Za-z0-9])\\([{}])/gu, '$1 \\$2')
+    .replace(/\\\{/gu, 'LEFT {').replace(/\\\}/gu, 'RIGHT }')
+    .replace(/\\([A-Za-z]+)/gu, (match, command, offset, text) =>
+      `${offset && /[A-Za-z0-9]/u.test(text[offset - 1]) ? ' ' : ''}${command}`)
+    .replace(/\s+/gu, ' ').trim();
+  // Hancom otherwise attaches the script to the decorated argument, not the whole accent.
+  return value.split(/("[^"]*")/u).map((part, index) => {
+    if (index % 2) return part;
+    for (const match of [...part.matchAll(/\b(?:bar|vec)\s*\{/gu)].reverse()) {
+      const group = balancedFormula(part, match.index + match[0].length - 1);
+      if (group && /^\s*[_^]/u.test(part.slice(group[1]))) {
+        part = `${part.slice(0, match.index)}{${part.slice(match.index, group[1])}}${part.slice(group[1])}`;
+      }
+    }
+    return part.replace(/(?:LEFT\s+)?\|([^|]+?)(?:RIGHT\s+)?\|\s*(?=[_^])/gu,
+      (_, argument) => `{LEFT | ${argument.trim()} RIGHT |}`);
+  }).join('');
 }
 
 export function contentRuns(text) {
@@ -93,6 +118,12 @@ export function paragraphsForPrepared(question) {
   let previousRole = '';
   let numbered = false;
   for (const block of question.blocks) {
+    // --- data-table hook
+    if (block.kind === 'table') {
+      if (block.role === 'choice') throw new Error('선지 안의 표는 변환할 수 없습니다.');
+      paragraphs.push([{ kind: 'table', table: block }]);
+      continue;
+    }
     if (block.role !== previousRole && ['ask', 'bogi', 'choice'].includes(block.role)) {
       paragraphs.push([]);
     }
@@ -178,6 +209,12 @@ export function validateParagraphs(paragraphs) {
   for (const runs of paragraphs) {
     if (!Array.isArray(runs)) throw new Error('잘못된 문단입니다.');
     for (const run of runs) {
+      // --- data-table hook
+      if (run?.kind === 'table') {
+        if (runs.length !== 1) throw new Error('표는 독립 문단이어야 합니다.');
+        validateDataTable(run.table, validateParagraphs);
+        continue;
+      }
       const value = run?.kind === 'text' ? run.value : run?.kind === 'equation' ? run.script : null;
       if (typeof value !== 'string' || (run.kind === 'equation' && !value.trim())) throw new Error('잘못된 run 또는 빈 수식입니다.');
       if (/\(cid:\d+\)|[\uE000-\uF8FF]/u.test(value)) throw new Error('복원되지 않은 글자 또는 수식입니다.');
@@ -191,6 +228,12 @@ export function validateQuestionParagraphs(paragraphs, question = {}) {
   const lines = paragraphs.map((runs) => runs.map((run) => run.kind === 'text' ? run.value : '수식').join('').trim());
   if (!lines.some((line) => line.replace(/^\d+\.\s*/u, '') && !/^[①②③④⑤]/u.test(line))) throw new Error('본문이 없습니다.');
   if (question.responseType === 'short_answer') return;
+  if (question.inlineChoices === true) {
+    if ((lines.join('\n').match(/[①②③④⑤]/gu) || []).join('') !== '①②③④⑤') {
+      throw new Error('선지 다섯 개가 없거나 중복되었습니다.');
+    }
+    return;
+  }
   for (const label of '①②③④⑤') {
     if (lines.filter((line) => line.startsWith(label)).length !== 1) throw new Error('선지 다섯 개가 없거나 중복되었습니다.');
   }
@@ -207,11 +250,19 @@ export async function createPreparedHwpx(question) {
 export async function createCollectionHwpx(resolvedItems) {
   if (!Array.isArray(resolvedItems) || !resolvedItems.length) throw new Error('선택한 문항이 없습니다.');
   const paragraphs = [];
+  let previousPassage = '';
   for (const [index, item] of resolvedItems.entries()) {
-    validateQuestionParagraphs(item.paragraphs, item.question);
+    validateParagraphs(item.paragraphs);
+    const start = Number.isInteger(item.questionParagraphStart) && item.questionParagraphStart > 0
+      && item.questionParagraphStart < item.paragraphs.length ? item.questionParagraphStart : 0;
+    const own = item.paragraphs.slice(start);
+    validateQuestionParagraphs(own, item.question);
+    // Questions of one [n～m] set share a passage: print it once, before the first of them.
+    const repeated = start && item.passageKey && item.passageKey === previousPassage;
+    previousPassage = start ? item.passageKey || '' : '';
     if (index) paragraphs.push([]);
     paragraphs.push([{ kind: 'text', value: item.sourceLabel || item.question?.title || item.questionId }]);
-    paragraphs.push(...item.paragraphs);
+    paragraphs.push(...(repeated ? own : item.paragraphs));
   }
   return createParagraphDocument(paragraphs);
 }
@@ -223,13 +274,15 @@ export function documentSegments(paragraphs) {
   const segments = [];
   for (let index = 0; index < paragraphs.length; index += 1) {
     const runs = paragraphs[index];
+    // --- data-table hook
+    if (runs[0]?.kind === 'table') { segments.push({ kind: 'table', table: runs[0].table }); continue; }
     if (!/^<\s*보\s*기\s*>$/u.test(plainText(runs).replace(/`/gu, ''))) {
       segments.push({ kind: 'paragraph', runs });
       continue;
     }
     const rows = [];
     let next = index + 1;
-    while (next < paragraphs.length && paragraphs[next].length && !/^[①②③④⑤]/u.test(plainText(paragraphs[next]))) {
+    while (next < paragraphs.length && paragraphs[next].length && paragraphs[next][0]?.kind !== 'table' && !/^[①②③④⑤]/u.test(plainText(paragraphs[next]))) {
       rows.push(paragraphs[next]);
       next += 1;
     }
@@ -309,6 +362,11 @@ async function createParagraphDocument(paragraphs) {
     let index = 0;
     for (const segment of documentSegments(paragraphs)) {
       ensureParagraph(document, index);
+      // --- data-table hook
+      if (segment.kind === 'table') {
+        index = insertDataTable(document, index, segment.table, (script) => groupFractions(equationScript(script))) + 1;
+        continue;
+      }
       if (segment.kind === 'box') {
         index = insertBox(document, index, segment) + 1;
         continue;

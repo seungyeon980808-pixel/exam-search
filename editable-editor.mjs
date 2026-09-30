@@ -4,6 +4,7 @@ import { editableEntries, resolveEditableContent } from './editable-source.mjs';
 import { createEditableBatch } from './editable-batch.mjs';
 import { createPreparedHwpx, createCollectionHwpx } from './editable-convert.mjs';
 import { renderQuestion } from './pdf-viewer.mjs';
+import { passageKey, sharedPassageRegions } from './shared-passage.mjs';
 
 const dialog = document.querySelector('#editable-dialog');
 const host = document.querySelector('#editable-host');
@@ -54,6 +55,9 @@ function clearReference() {
   original.hidden = true;
 }
 async function showReference(value, question) {
+  if (sharedPassageRegions(question).length) {
+    return showCollectionReference(value, [{ question }]);
+  }
   try {
     const url = await renderQuestion(question, 2);
     if (!active(value)) { URL.revokeObjectURL(url); return; }
@@ -72,11 +76,21 @@ async function showReference(value, question) {
 async function showCollectionReference(value, items) {
   referenceImage.hidden = true;
   referenceMessage.hidden = true;
-  const slots = items.map((item) => {
+  let previousPassage = '';
+  const entries = items.flatMap((item) => {
+    const regions = sharedPassageRegions(item.question);
+    const key = passageKey(item.question);
+    const passages = key && key !== previousPassage ? regions.map((region) => ({
+      question: { ...item.question, ...region, displayBox: region.box }, passage: true,
+    })) : [];
+    previousPassage = key;
+    return [...passages, item];
+  });
+  const slots = entries.map((item) => {
     const figure = document.createElement('figure');
     figure.className = 'editable-reference-item';
     const caption = document.createElement('figcaption');
-    caption.textContent = `${item.question.exam} ${item.question.subjectLabel} ${item.question.no}번`;
+    caption.textContent = `${item.question.exam} ${item.question.subjectLabel} ${item.passage ? '공통 지문' : `${item.question.no}번`}`;
     const note = document.createElement('p');
     note.textContent = '원본 문항을 불러오는 중입니다.';
     figure.append(caption, note);
@@ -90,9 +104,13 @@ async function showCollectionReference(value, items) {
       if (!active(value)) { URL.revokeObjectURL(url); return; }
       referenceUrls.push(url);
       const image = document.createElement('img');
-      image.alt = `${item.question.exam} ${item.question.subjectLabel} ${item.question.no}번 PDF 원본 문항`;
+      image.alt = `${item.question.exam} ${item.question.subjectLabel} ${item.passage ? '공통 지문' : `${item.question.no}번`} PDF 원본`;
       image.src = url;
       note.replaceWith(image);
+      if (!value.collection && !item.passage) {
+        original.href = url;
+        original.hidden = false;
+      }
     } catch {
       if (active(value)) note.textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
     }
@@ -191,8 +209,13 @@ async function loadDocument(value, bytes, filename) {
       host.style.visibility = 'hidden';
       await new Promise((resolve) => window.setTimeout(resolve, 160));
       if (!active(value)) return;
-      // rhwp는 좁은 임베드에서도 종이를 가운데 정렬한다. 첫 문장이 잘리지 않도록 왼쪽부터 연다.
       const editorScroll = instance.element.contentDocument?.getElementById('scroll-container');
+      // 노트북 화면의 절반에서는 A4 100%가 넘쳐 오른쪽이 잘린다. 넘칠 때만 폭 맞춤으로 연다.
+      if (editorScroll && editorScroll.scrollWidth > editorScroll.clientWidth + 1) {
+        await instance.commands.execute('view:zoom-fit-width').catch(() => null);
+        if (!active(value)) return;
+      }
+      // rhwp는 좁은 임베드에서도 종이를 가운데 정렬한다. 첫 문장이 잘리지 않도록 왼쪽부터 연다.
       if (editorScroll) editorScroll.scrollLeft = 0;
       host.style.visibility = '';
       download.disabled = false;

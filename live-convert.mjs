@@ -4,6 +4,8 @@ import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStre
 import { attachedScript, legacyTable, legacyText } from './legacy-glyphs.mjs';
 import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs';
 import { recoverQuestionRegion } from './question-region.mjs';
+// --- data-table hook
+import { extractTables, tableFlow, restoreTableBlocks } from './live-tables.mjs';
 
 function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {
@@ -19,15 +21,78 @@ function textFor(item, glyphs) {
 }
 
 /** KICE often sets subscripts such as U_A in the text font beside an equation-font base. */
-export function attachTextScripts(items) {
+export function attachTextScripts(items, recoverBases = true) {
   const bases = items.filter((item) => item.math && /^[A-Za-z\\]/u.test(item.value.trim()));
-  return items.map((item) => {
+  const textScripts = items.map((item) => {
     if (item.math || !/^[A-Za-z0-9]{1,3}$/u.test(item.value.trim())) return item;
     const base = bases.find((candidate) => item.height > 0 && item.height <= candidate.height * 0.8
       && item.x - (candidate.x + candidate.width) >= -1 && item.x - (candidate.x + candidate.width) <= 1.5
       && Math.abs(item.y - candidate.y) >= 2.3 && Math.abs(item.y - candidate.y) <= candidate.height * 0.7);
     return base ? { ...item, value: item.value.trim(), math: true } : item;
   });
+  if (!recoverBases) return textScripts;
+  const consumed = new Set();
+  const promoted = new Map();
+  for (const base of items.filter((item) => !item.math && /^[A-Za-z]{1,4}$/u.test(item.value.trim()))) {
+    const scripts = items.filter((item) => item.math && /^[A-Za-z0-9+−-]{1,3}$/u.test(item.value.trim())
+      && item.height > 0 && item.height <= base.height * 0.82
+      && item.x - (base.x + base.width) >= -1 && item.x - (base.x + base.width) <= Math.max(1.5, base.height * 0.22)
+      && Math.abs(item.y - base.y) >= Math.max(1.8, base.height * 0.2)
+      && Math.abs(item.y - base.y) <= base.height * 0.7);
+    const bracket = items.some((item) => item.math && item.value.trim() === '('
+      && Math.abs(item.y - base.y) < 1.5 && item.x - base.x - base.width >= -1
+      && item.x - base.x - base.width <= 1.5);
+    if (!scripts.length && !bracket) continue;
+    const upright = /HaansoftBatang/u.test(base.font || '') && !/It|Italic/iu.test(base.font || '');
+    const value = upright ? `{rm ${base.value.trim()}}` : base.value.trim();
+    promoted.set(base, { ...base, math: true, recovered: true,
+      width: Math.max(base.x + base.width, ...scripts.map((item) => item.x + item.width)) - base.x,
+      value: value + scripts.sort((a, b) => b.y - a.y).map((item) => `${item.y < base.y ? '_' : '^'}{${item.value.trim()}}`).join('') });
+    scripts.forEach((item) => consumed.add(item));
+  }
+  // Left indices of permutations/combinations are lowered just like the right index.
+  for (const [base, replacement] of promoted) {
+    const before = items.find((item) => item.math && !consumed.has(item) && /^[A-Za-z0-9]{1,3}$/u.test(item.value.trim())
+      && item.height > 0 && item.height <= base.height * 0.82
+      && base.x - item.x - item.width >= -1 && base.x - item.x - item.width <= 1.5
+      && Math.abs(item.y - base.y) >= Math.max(1.8, base.height * 0.2)
+      && Math.abs(item.y - base.y) <= base.height * 0.7);
+    if (!before) continue;
+    promoted.set(base, { ...replacement, x: before.x, width: replacement.x + replacement.width - before.x,
+      value: `{}${before.y < base.y ? '_' : '^'}{${before.value.trim()}}${replacement.value}` });
+    consumed.add(before);
+  }
+  // Continue a formula across text-font element tails and parentheses without crossing a word gap.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const item of items.filter((entry) => !entry.math && !promoted.has(entry)
+      && /^(?:(?:[A-Z][a-z]?){1,4}|\(|\)\s*[＋+]?)$/u.test(entry.value.trim()))) {
+      const neighbour = [...items.filter((entry) => entry.math && !consumed.has(entry)), ...promoted.values()]
+        .some((other) => Math.abs(item.y - other.y) < 1.5
+          && Math.max(item.x - other.x - other.width, other.x - item.x - item.width) >= -1
+          && Math.max(item.x - other.x - other.width, other.x - item.x - item.width) <= 1.5);
+      if (!neighbour) continue;
+      const upright = /HaansoftBatang/u.test(item.font || '') && !/It|Italic/iu.test(item.font || '')
+        && /^[A-Za-z]+$/u.test(item.value.trim());
+      promoted.set(item, { ...item, math: true, value: upright ? `{rm ${item.value.trim()}}` : item.value.trim().replace(/\s+/gu, '~') });
+      changed = true;
+    }
+  }
+  // A state/variable printed in the text font between equation parentheses belongs to them.
+  for (const item of items.filter((entry) => !entry.math && /^[A-Za-z]{1,3}$/u.test(entry.value.trim()))) {
+    const left = items.find((other) => (other.math || promoted.has(other)) && other.value.trim() === '('
+      && Math.abs(other.y - item.y) < 1.5 && item.x - other.x - other.width >= -1
+      && item.x - other.x - other.width <= 1.5);
+    const right = items.find((other) => /^\)\s*[＋+]?$/u.test(other.value.trim())
+      && Math.abs(other.y - item.y) < 1.5 && other.x - item.x - item.width >= -1
+      && other.x - item.x - item.width <= 1.5);
+    if (left && right) {
+      promoted.set(item, { ...item, value: item.value.trim(), math: true });
+      promoted.set(right, { ...right, value: right.value.trim().replace(/\s+/gu, '~'), math: true });
+    }
+  }
+  return items.flatMap((item, index) => consumed.has(item) ? [] : [promoted.get(item) || textScripts[index]]);
 }
 
 function clipItems(question, pdf, glyphs) {
@@ -85,7 +150,7 @@ function clipItems(question, pdf, glyphs) {
       const scriptOf = scriptBase(item);
       const offset = scriptOf ? (item.transform[5] - scriptOf.transform[5]) / scriptOf.height : null;
       const base = { x: item.transform[4], y: item.transform[5], width: item.width,
-      height: item.height || 0,
+      height: item.height || 0, font: fontOf(item),
       raw: item.str, value: legacyText(fontOf(item), textFor(item, glyphs), offset),
       math: /^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '') };
       // A raised or lowered script belongs to its base's line.
@@ -106,7 +171,7 @@ function clipItems(question, pdf, glyphs) {
         x += width;
         return part;
       });
-    }));
+    }), false);
 }
 
 function findLines(items) {
@@ -169,11 +234,11 @@ function findLines(items) {
   return lines.sort((left, right) => right.y - left.y);
 }
 
-function lineRuns(line) {
+export function lineRuns(line) {
   // Stacked legacy scripts share an x position (¹₁H): superscript first, then subscript.
   const stackRank = (item) => /^[\u00b9\u00b2\u00b3\u2070-\u207f]/u.test(item.value || '') ? 0
     : /^[\u2080-\u209f]/u.test(item.value || '') ? 1 : 2;
-  const items = recoverEquationItems(line.items, line.y)
+  const items = attachTextScripts(recoverEquationItems(line.items, line.y))
     .sort((left, right) => (Math.abs(left.x - right.x) < 0.6 ? 0 : left.x - right.x)
       || stackRank(left) - stackRank(right) || right.y - left.y);
   const runs = [];
@@ -182,14 +247,17 @@ function lineRuns(line) {
     if (!item.value) continue;
     const kind = item.math ? 'equation' : 'text';
     const value = item.value;
+    const gap = previous ? item.x - previous.x - previous.width : 0;
+    const spaced = previous && gap > (previous.math && item.math ? 5 : Math.max(1.5, Math.min(previous.height, item.height) * 0.2))
+      && !attachedScript.test(value) && !/\s$/u.test(previous.value) && !/^\s/u.test(value);
+    if (spaced) {
+      if (runs.at(-1)?.kind === 'text') runs.at(-1).value += ' ';
+      else runs.push({ kind: 'text', value: ' ' });
+    }
     const last = runs.at(-1);
     if (last?.kind === kind) {
-      const gap = previous ? item.x - previous.x - previous.width : 0;
-      if (kind === 'equation' && gap > 5) runs.push({ kind, script: value });
-      else if (kind === 'equation') last.script += value;
-      else last.value += gap > 1.5 && !/\s$/u.test(last.value) && !/^\s/u.test(value) && !attachedScript.test(value)
-        && /[\p{L}\p{N}]$/u.test(last.value) && /^[\p{L}\p{N}]/u.test(value)
-        ? ` ${value}` : value;
+      if (kind === 'equation') last.script += (/\\[A-Za-z]+$/u.test(last.script) && /^[A-Za-z]/u.test(value) ? ' ' : '') + value;
+      else last.value += value;
     } else runs.push(kind === 'equation' ? { kind, script: value } : { kind, value });
     previous = item;
   }
@@ -256,24 +324,101 @@ export function stackTextFractions(items) {
 }
 
 export function buildLiveStructure(question, pdf, glyphs) {
-  const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(clipItems(question, pdf, glyphs)))));
+  // --- data-table hook: keep cell equations out of the surrounding line grouping.
+  const flow = tableFlow(extractTables(clipItems(question, pdf, glyphs), pdf, question), pdf.pageHeight,
+    (items) => findLines(recoverStretchyBrackets(recoverPiecewiseItems(items))).flatMap((line, index) =>
+      [...(index ? [{ kind: 'text', value: '\n' }] : []), ...lineRuns(line)]));
+  const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(flow.items))));
   const figureDropped = clipItems.lastDropped > 0;
   const blocks = [];
   let role = 'stem';
   let choiceCount = 0;
   let markers = 0;
+  const compact = (value) => value.normalize('NFC').replace(/[\s`]/gu, '');
+  const indexText = compact(question.questionText || question.text || '');
+  const markerItems = lines.flatMap((line) => line.items.filter((item) => !item.math && /^[①②③④⑤]$/u.test(item.value.trim())));
+  const centeredMarkers = markerItems.filter((marker) => lines.find((line) => line.items.includes(marker))
+    .items.every((item) => item === marker || !item.value.trim()));
+  // Table options center their marker between two text baselines. Move only the marker
+  // to the immediately preceding indented line, leaving every text item in reading order.
+  if ((question.subject === 'kor' || /_kor_/u.test(question.id || '')) && centeredMarkers.length >= 2) {
+    for (const marker of markerItems) {
+      const at = lines.findIndex((line) => line.items.includes(marker));
+      const upper = lines[at - 1];
+      if (!upper || upper.items.some((item) => /[①②③④⑤]/u.test(item.value))
+        || upper.y - marker.y > marker.height * 1.05 || upper.y - marker.y < 3
+        || upper.items.some((item) => item.x < marker.x + marker.width - 1)) continue;
+      lines[at].items = lines[at].items.filter((item) => item !== marker);
+      upper.items.push({ ...marker, y: upper.y });
+    }
+  }
+  const sourceLines = lines.filter((line) => line.items.length).map((line) => ({ line,
+    plain: [...line.items].sort((a, b) => a.x - b.x).map((item) => item.value).join('') }));
+  const allMarkers = sourceLines.map(({ plain }) => (plain.match(/[①②③④⑤]/gu) || []).join('')).join('');
+  const inlineChoices = question.responseType !== 'short_answer'
+    && (question.subject === 'eng' || /_eng_/u.test(question.id || ''))
+    && allMarkers === '①②③④⑤'
+    && sourceLines.some(({ plain }) => /^[^①②③④⑤]*[A-Za-z][^①②③④⑤]*[①②③④⑤]/u.test(plain)
+      && (plain.split(/[①②③④⑤]/u)[0].match(/[A-Za-z]/gu) || []).length >= 8);
+  if (inlineChoices) {
+    let afterFifth = false;
+    for (let at = 0; at < lines.length - 1; at += 1) {
+      const line = lines[at], next = lines[at + 1];
+      if (line.items.some((item) => item.value.includes('⑤'))) afterFifth = true;
+      if (!afterFifth || !line.items.length || !next.items.length) continue;
+      const items = [...line.items, ...next.items].sort((a, b) => a.x - b.x);
+      // Glossary stars and Korean definitions can have slightly different baselines.
+      // Rejoin only the printed order corroborated by the question's index text.
+      if (items.some((item) => item.math) || line.y - next.y > Math.max(...items.map((item) => item.height)) * 0.35
+        || !indexText.includes(compact(items.map((item) => item.value).join('')))) continue;
+      line.items = items;
+      next.items = [];
+    }
+  }
+  let previousLine = null;
+  let fifthX = null;
+  let inlineFifthSeen = false;
+  const ownNumber = new RegExp(`^\\s*${question.no}\\.(?!\\d)`, 'u');
+  const opening = sourceLines.find(({ plain }) => ownNumber.test(plain));
+  const questionLeft = opening ? Math.min(...opening.line.items.map((item) => item.x)) : question.box?.[0];
   for (const line of lines) {
-    if (choiceCount === 5) break;
+    if (!line.items.length) continue;
     // Old KICE fonts insert a backtick as a thin spacer; it is never printed.
     const runs = lineRuns(line).map((run) => run.kind === 'text' ? { ...run, value: run.value.replace(/\u0060/gu, '') } : run)
       .filter((run) => run.kind !== 'text' || run.value);
     const plain = runs.map((run) => run.kind === 'text' ? run.value : '').join('').trim();
     if (!runs.length || /^[<〈]\s*보\s*기\s*[>〉]$/u.test(plain)) continue;
+    if ((choiceCount === 5 || inlineFifthSeen) && /\d\s*권\s*중\s*\d\s*권/u.test(plain)) break;
+    const nextNumber = plain.match(/^(\d{1,2})\.(?!\d)/u)?.[1]
+      || plain.match(/^\[\s*(\d{1,2})\s*[～~∼〜-]\s*\d{1,2}\s*\]/u)?.[1];
+    if ((choiceCount === 5 || inlineFifthSeen) && Number(nextNumber) === Number(question.no) + 1
+      && Math.abs(Math.min(...line.items.map((item) => item.x)) - questionLeft) <= 4
+      && !indexText.includes(compact(plain))) break;
+    if (choiceCount === 5) {
+      const last = blocks.findLast((block) => block.role === 'choice');
+      const prior = compact(last.runs.map((run) => run.value || run.script).join(''));
+      const next = compact(plain);
+      const suffix = indexText.slice(indexText.lastIndexOf('⑤') + 1);
+      const x = Math.min(...line.items.map((item) => item.x));
+      const h = Math.max(...line.items.map((item) => item.height));
+      if (!next || /[①②③④⑤]/u.test(plain) || !previousLine || previousLine.y - line.y > h * 2.6
+        || x < fifthX - 2 || !indexText.includes('⑤')
+        || !(suffix.includes(prior + next) || suffix.startsWith(next))) break;
+    }
     if (/저작권은\s*한국교육과정평가원|확인\s*사항|한글과컴퓨터뷰어/u.test(plain) || (/^\d{1,2}$/u.test(plain) && runs.every((run) => run.kind === 'text'))) continue;
-    if (/^\d{1,2}\./u.test(plain)) {
+    const indexedList = blocks.length && /^\d{1,2}\.(?!\d)/u.test(plain)
+      && !ownNumber.test(plain) && indexText.includes(compact(plain));
+    if (/^\d{1,2}\./u.test(plain) && !indexedList) {
       const first = runs.find((run) => run.kind === 'text');
       first.value = first.value.replace(/^\s*\d{1,2}\.\s*/u, '');
     }
+    if (inlineChoices) {
+      if (plain.includes('⑤')) inlineFifthSeen = true;
+      blocks.push({ role: 'stem', label: '', runs });
+      continue;
+    }
+    previousLine = line;
+    if (plain.includes('⑤')) fifthX = Math.min(...line.items.filter((item) => item.value.includes('⑤')).map((item) => item.x));
     if (/^이에 대한|^이에 관한|^이에 대해/u.test(plain)) role = 'ask';
     if (/^[ㄱㄴㄷ]\./u.test(plain)) {
       role = 'bogi';
@@ -352,14 +497,16 @@ export function buildLiveStructure(question, pdf, glyphs) {
     choiceCount = 5;
     notes.push('선지가 그림이거나 자동으로 옮길 수 없어 선지 자리에는 원본 참고 표시만 넣었습니다.');
   }
-  if ((question.responseType !== 'short_answer' && choiceCount !== 5)
+  if ((question.responseType !== 'short_answer' && !inlineChoices && choiceCount !== 5)
     || !blocks.some((block) => block.role === 'stem')) {
     throw new Error('원본 PDF에서 본문과 선지 다섯 개를 모두 분리하지 못했습니다.');
   }
+  // --- data-table hook
+  blocks.splice(0, blocks.length, ...restoreTableBlocks(blocks, flow.tables));
   return { schema: 'exam-editable-v1', questionId: question.id,
     title: question.title, number: question.no, sourcePdf: question.pdfFile,
     page: question.page, status: 'needs_review', blocks,
-    notes };
+    notes, ...(inlineChoices ? { inlineChoices: true } : {}) };
 }
 
 /** Finds the question on its page from the printed number when the indexed box is wrong. */

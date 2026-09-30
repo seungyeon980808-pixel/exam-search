@@ -7,6 +7,10 @@ const bar = (x, y, width) => ({ ...item('\\frac', x, y, width, 1), raw: '\ue06d'
 const root = (x, y) => ({ ...item('\\sqrt', x, y), raw: '\ue05c' });
 const head = (x, y) => ({ ...item('\\vec', x, y), raw: '\ue06e' });
 const scenarios = [
+  ['captured 2017 June q18 primed text-font segment', [bar(556.86, 937.32, 18.6), { ...item('PF ′', 556.8, 933.42, 18.64, 10.98), math: false }], 933.42, '\\bar{PF′}'],
+  ['captured 2017 November q29 text-font vector', [bar(135.9, 962.34, 15.78), head(148.8, 962.34), { ...item('OP', 136.2, 957.3, 15.12, 10.98), math: false }], 957.3, '\\vec{OP}'],
+  ['captured 2025 June geometry q23 zero vector', [bar(259.14, 844.2, 7.98), head(264.24, 844.2), item('0', 260.76, 839.16, 5.52, 10.98)], 838.9791, '\\vec{0}'],
+  ['captured 2018 September q21 denominator exponent spans the bar axis', [bar(236.2, 979.3, 25.9), item('1', 246.5, 990, 5.5, 11), item('2', 237.8, 973.6, 5.5, 11), item('n', 244, 978.4, 4.5, 7.5), item('-', 249.6, 978.8, 5.6, 7.5), item('2', 256.6, 978.4, 3.7, 7.5)], 982.7, '\\frac{1}{2^{n-2}}'],
   ['simple fraction', [bar(0, 0, 15), item('a', 3, 6), item('b', 3, -6)], 0, '\\frac{a}{b}'],
   ['fraction numerator suffix excluded', [bar(0, 0, 10), item('a', 2, 6), item('b', 2, -6), item('z', 15, 0)], 0, '\\frac{a}{b}z'],
   ['radical measured extent', [root(0, 8), bar(5, 8, 15), item('a', 6, 0), item('+', 11, 0, 3), item('b', 14, 0), item('+c', 22, 0)], 0, '\\sqrt{a+b}+c'],
@@ -61,6 +65,8 @@ const piecewise = [brace('\\braceTop', 20), brace('\\braceMiddle', 10), brace('\
   item('x', 10, 20), item('(x<0)', 35, 20, 30), item('-x', 10, 0, 12), item('(x≥0)', 35, 0, 30)];
 for (const [name, input, expected] of [
   ['complete piecewise rows', piecewise, 'cases{x & (x<0) # -x & (x≥0)}'],
+  ['centered punctuation outside piecewise stays outside', [...piecewise, { ...item(',', 70, 10, 3, 11), math: false }], ',cases{x & (x<0) # -x & (x≥0)}'],
+  ['wide gap before aligned piecewise condition', [brace('\\braceTop', 20), brace('\\braceMiddle', 10), brace('\\braceBottom', 0), item('a+(-1)^{n}×2', 10, 20, 67), item('(n is not a multiple of 3)', 89, 20, 100), item('a+1', 10, 0, 27), item('(n is a multiple of 3)', 89, 0, 80)], 'cases{a+(-1)^{n}×2 & (n is not a multiple of 3) # a+1 & (n is a multiple of 3)}'],
   ['incomplete piecewise brace rejected', piecewise.filter((part) => part.value !== '\\braceBottom'), null],
   ['orphan piecewise extender rejected', [brace('\\braceExtender', 8)], null],
   ['disconnected piecewise neighbor rejected', [...piecewise, item('unrelated', 200, 20, 40)], null],
@@ -72,6 +78,22 @@ for (const [name, input, expected] of [
     assert.deepEqual(input, before);
     results.push({ scenario: name, pass: true, expected });
   } catch (error) { results.push({ scenario: name, pass: false, error: error.message }); }
+}
+const capturedFixtures = [];
+for (const file of ['equations-round2.json', 'equations-round2-alignment.json']) {
+  capturedFixtures.push(...JSON.parse(await readFile(new URL(`./test-fixtures/${file}`, import.meta.url), 'utf8')));
+}
+for (const fixture of capturedFixtures) {
+  const input = fixture.items.map(([value, x, y, width, height, math]) => ({ ...item(value, x, y, width, height), math }));
+  const before = structuredClone(input);
+  try {
+    const actual = fixture.kind === 'equation'
+      ? recoverEquationItems(input, fixture.baseline).map((part) => part.value).join('')
+      : recoverPiecewiseItems(input).find((part) => part.value.startsWith('cases{'))?.value;
+    assert.equal(actual, fixture.expected);
+    assert.deepEqual(input, before);
+    results.push({ scenario: fixture.id, pass: true, expected: fixture.expected, actual });
+  } catch (error) { results.push({ scenario: fixture.id, pass: false, error: error.message }); }
 }
 if (process.env.EQUATION_CORPUS_DIR) {
   const registry = JSON.parse(await readFile(new URL('./data/editable/glyph-proofs.json', import.meta.url), 'utf8'));
@@ -102,8 +124,8 @@ if (process.env.EQUATION_CORPUS_DIR) {
 const evidence = process.env.EQUATION_EVIDENCE_DIR || '/tmp/exam-formula-geometry-tests';
 await mkdir(evidence, { recursive: true });
 await writeFile(`${evidence}/geometry-tests.json`, JSON.stringify({
-  invocation: `${process.env.EQUATION_CORPUS_DIR ? `EQUATION_CORPUS_DIR=${process.env.EQUATION_CORPUS_DIR} ` : ''}EQUATION_EVIDENCE_DIR=${evidence} node /private/tmp/exam-search-release/test_live_equations.mjs`,
-  surface: 'pure geometry API; synthetic adversarial PDF-coordinate fixtures',
+  invocation: `${process.env.EQUATION_CORPUS_DIR ? `EQUATION_CORPUS_DIR=${process.env.EQUATION_CORPUS_DIR} ` : ''}EQUATION_EVIDENCE_DIR=${evidence} node ${process.argv[1]}`,
+  surface: 'pure geometry API; captured and synthetic adversarial PDF-coordinate fixtures',
   browserCorpusValidated: false, results,
 }, null, 2));
 console.log(JSON.stringify({ passed: results.filter((result) => result.pass).length,

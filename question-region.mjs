@@ -29,8 +29,22 @@ const PAPER_END = /확인\s*사항/u;
 
 const equationFont = (pdf, item) => /^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts?.[item.fontName]?.name?.split('+').at(-1) || '');
 const hasContent = (block) => block.runs?.some((run) => (run.kind === 'equation' ? run.script?.trim() : run.value?.trim()));
-export const hasEmptyChoice = (structure) => structure.blocks.some((block) => block.role === 'choice' && !hasContent(block));
+export const hasEmptyChoice = (structure) => structure.inlineChoices === true
+  ? structure.blocks.flatMap((block) => (block.runs || []).filter((run) => run.kind === 'text')
+    .flatMap((run) => run.value.match(/[①②③④⑤]/gu) || [])).join('') !== LABELS.join('')
+  : structure.blocks.some((block) => block.role === 'choice' && !hasContent(block));
 const blockText = (block) => block.runs.map((run) => (run.kind === 'equation' ? run.script : run.value)).join('');
+const compact = (value) => value.normalize('NFC').replace(/[\s`]/gu, '');
+const fifthText = (structure) => structure.inlineChoices === true
+  ? structure.blocks.filter((block) => Array.isArray(block.runs)).map(blockText).join(' ').split('⑤').at(-1)
+  : structure.blocks.filter((block) => block.role === 'choice' && block.label === '⑤').map(blockText).join(' ');
+
+function incompleteFifth(question, structure) {
+  const source = question.questionText || question.text || '';
+  if (!source.includes('⑤')) return false;
+  const actual = compact(fifthText(structure)), expected = compact(source.split('⑤').at(-1));
+  return actual.length > 0 && expected.startsWith(actual) && expected.length > actual.length;
+}
 
 /** The page column [left, right] that holds a box, or null when the box spans both columns. */
 export function columnOf(pdf, box) {
@@ -217,7 +231,8 @@ async function recover(question, pdf, deps) {
   let note = NOTES.extended;
   // A question that reaches the end of its column may continue in the next column or page.
   const reachesEnd = !own.stop || (FOOTER.test(own.stop.text) && !PAPER_END.test(own.stop.text));
-  const tail = reachesEnd && markersOf(own.lines) !== '①②③④⑤'
+  const ownStructure = reachesEnd && markersOf(own.lines) === '①②③④⑤' ? await buildRegion(question, region, deps) : null;
+  const tail = reachesEnd && (markersOf(own.lines) !== '①②③④⑤' || (ownStructure && incompleteFifth(question, ownStructure)))
     ? await continuationRegion(question, pdf, own.column, deps.readPage) : null;
   if (tail) {
     if (markersOf([...own.lines, ...tail.lines]) !== '①②③④⑤') return null;
@@ -247,10 +262,19 @@ export async function recoverQuestionRegion(question, pdf, primary, deps) {
   let structure = null;
   let failure = null;
   try { structure = await primary(); } catch (error) { failure = error; }
-  if (structure && !hasEmptyChoice(structure)) return structure;
+  if (structure && !hasEmptyChoice(structure) && !incompleteFifth(question, structure)) return structure;
   if (failure && failure.message !== SPLIT_FAILURE) throw failure;
   let recovered = null;
   try { recovered = await recover(question, pdf, deps); } catch { recovered = null; }
+  if (recovered && structure && !hasEmptyChoice(structure)) {
+    const before = compact(fifthText(structure)), after = compact(fifthText(recovered));
+    if (!after.startsWith(before) || after.length <= before.length) return structure;
+    const text = (value) => compact(value.blocks.filter((block) => Array.isArray(block.runs)).map(blockText).join(''));
+    const existing = [...text(structure)];
+    let at = 0;
+    for (const char of text(recovered)) if (char === existing[at]) at += 1;
+    if (at !== existing.length) return structure;
+  }
   if (recovered) return recovered;
   if (failure) throw failure;
   return structure;
