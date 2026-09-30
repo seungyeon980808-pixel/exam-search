@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveEditableContent } from './editable-source.mjs';
+import { DriveError } from './drive-source.mjs';
 
 const question = { id: 'a', no: 1, pdfFile: 'a.pdf', page: 1,
   text: '1. 본문\n① 가 ② 나 ③ 다 ④ 라 ⑤ 마' };
@@ -26,6 +27,14 @@ test('safe index fallback carries the PDF failure warning', async () => {
   const deps = options(); deps.convert = async () => { throw new Error('offline'); };
   const result = await resolveEditableContent(question, deps);
   assert.equal(result.provenance, 'index-draft'); assert.match(result.warnings[0], /offline/u);
+});
+test('an undownloadable PDF is reported as a download problem, not as an index draft', async () => {
+  const deps = options();
+  deps.convert = async () => { throw new DriveError('시험지 서버가 응답하지 않아 PDF를 내려받지 못했습니다. 잠시 후 다시 시도해 주세요.'); };
+  await assert.rejects(resolveEditableContent(question, deps), /응답하지 않아/u);
+  // A missing file (404) is permanent and keeps the index draft so the text is still usable.
+  deps.convert = async () => { throw new DriveError('공유 폴더에서 이 시험지를 찾지 못했습니다.', 404); };
+  assert.equal((await resolveEditableContent(question, deps)).provenance, 'index-draft');
 });
 for (const field of ['questionId', 'number', 'sourcePdf', 'page']) {
   test(`mismatched prepared ${field} rejects`, async () => {

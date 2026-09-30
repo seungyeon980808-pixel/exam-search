@@ -66,6 +66,9 @@ export async function resolveEditableContent(question, dependencies = {}) {
   } catch (error) {
     check();
     if (entry?.status === 'unavailable' || (entry?.file && !entry.source)) throw error;
+    // A PDF that could not be downloaded says nothing about the question; say so plainly
+    // instead of presenting an index draft as if the conversion itself had failed.
+    if (error?.name === 'DriveError' && !error.status) throw error;
     return result(safeTextParagraphs({ ...question, text: question.questionText || question.text }), 'index-draft', [
       `원본 PDF 분석 실패: ${error instanceof Error ? error.message : String(error)}`,
       '색인 텍스트 초안입니다. 수식·선지를 원본 PDF와 확인하세요.',
