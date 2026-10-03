@@ -1,7 +1,9 @@
 import { driveFilePath, getJson } from './data.mjs';
 import { driveLink } from './drive-source.mjs';
-import { renderFilePages, renderQuestion } from './pdf-viewer.mjs';
-import { openEditable } from './editable-editor.mjs';
+import { renderFilePages, renderFileThumbnail, renderQuestion } from './pdf-viewer.mjs?v=preview-crop-20261004-1';
+import { trackLabels, variantLabels } from './paper-profile.mjs';
+import { curriculumDisplayState } from './search.mjs';
+import { openEditable, openEditableCollection } from './editable-editor.mjs?v=readability-20261004-4';
 import { createQuestionSelection } from './question-selection.mjs';
 
 const $ = (selector) => document.querySelector(selector);
@@ -21,9 +23,19 @@ const cardLayoutObserver = new ResizeObserver((entries) => {
 });
 const loadMore = $('#load-more');
 const previewToggle = $('#preview-toggle');
+const group = $('#group-filter');
 const subject = $('#subject-filter');
 const year = $('#year-filter');
 const month = $('#month-filter');
+const track = $('#track-filter');
+const variant = $('#variant-filter');
+const allProfiles = $('#profile-all');
+let paperOptions = [];
+const savedProfiles = (() => { try { return JSON.parse(localStorage.getItem('exam-paper-profiles') || '{}'); } catch { return {}; } })();
+const framework = $('#framework-filter');
+const unit = $('#unit-filter');
+const standard = $('#standard-filter');
+const answerToggle = $('#answer-toggle');
 const viewer = $('#image-viewer');
 const pageSize = 9;
 const filePageSize = 12;
@@ -32,6 +44,246 @@ const initialParams = new URLSearchParams(location.search);
 let initialSelectionPending = true;
 let activeQuestionObjectUrl = null;
 let stopFileRendering = null;
+let answerRequestId = 0;
+let availableSubjects = [];
+const previewUrls = new Map();
+const previewQueue = [];
+let activePreviews = 0;
+const previewObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting || entry.target.hidden) continue;
+    previewObserver.unobserve(entry.target);
+    const task = entry.target.previewTask;
+    if (task) {
+      previewQueue.push(task);
+      runPreviewQueue();
+    }
+  }
+}, { rootMargin: '200px 0px' });
+
+function runPreviewQueue() {
+  while (activePreviews < 2 && previewQueue.length) {
+    const task = previewQueue.shift();
+    if (!task.element.isConnected) continue;
+    activePreviews += 1;
+    void task.render().then((url) => {
+      if (!task.element.isConnected) { URL.revokeObjectURL(url); return; }
+      previewUrls.set(task.element, url);
+      task.image.onload = () => {
+        if (!task.element.isConnected) return;
+        task.placeholder?.remove();
+        task.preview.classList.remove('is-loading', 'is-error');
+      };
+      task.image.onerror = () => {
+        if (!task.element.isConnected) return;
+        task.preview.classList.remove('is-loading');
+        task.preview.classList.add('is-error');
+        task.preview.textContent = '원본 PDF에서 확인';
+      };
+      task.image.hidden = false;
+      task.image.src = url;
+    }).catch(() => {
+      if (task.element.isConnected) {
+        // A prebuilt card stays usable while the source PDF is temporarily unavailable.
+        if (task.fallback) return;
+        task.preview.classList.remove('is-loading');
+        task.preview.classList.add('is-error');
+        task.preview.textContent = '원본 PDF에서 확인';
+      }
+    }).finally(() => { activePreviews -= 1; runPreviewQueue(); });
+  }
+}
+
+function clearPreviews() {
+  previewObserver.disconnect();
+  previewQueue.length = 0;
+  for (const url of previewUrls.values()) URL.revokeObjectURL(url);
+  previewUrls.clear();
+}
+
+const toolbar = $('.topbar');
+const filterToggle = $('#filter-toggle');
+const toolbarActions = $('#toolbar-inline-actions');
+const compactToolbar = matchMedia('(max-width: 1180px)');
+const mobileWorkspace = matchMedia('(max-width: 820px)');
+const minimalWorkspace = matchMedia('(max-width: 420px)');
+const fileTools = $('#file-workspace-tools');
+let fileItems = [];
+let fileConversionReady = false;
+let activeFilePage = 0;
+const filterMeasure = document.createElement('canvas').getContext('2d');
+const toolbarDetails = [...toolbar.querySelectorAll('details')];
+
+function closeToolbarPopovers() {
+  toolbar.classList.remove('is-filters-open');
+  filterToggle.setAttribute('aria-expanded', 'false');
+  for (const detail of toolbarDetails) detail.open = false;
+}
+
+function syncToolbar() {
+  toolbar.dataset.group = group.value;
+  const previewParent = minimalWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
+  if (previewToggle.parentElement !== previewParent) {
+    if (minimalWorkspace.matches) previewParent.prepend(previewToggle);
+    else previewParent.insertBefore(previewToggle, $('#file-workspace-tools').parentElement === previewParent ? $('#file-workspace-tools') : null);
+  }
+  const fileParent = mobileWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
+  if (fileTools.parentElement !== fileParent) fileParent.append(fileTools);
+  const description = [group, subject, year, month, track, variant]
+    .filter((control) => !control.disabled && !control.closest('[hidden]'))
+    .map((control) => control.selectedOptions[0]?.textContent).filter(Boolean).join(' · ');
+  filterToggle.title = description || '검색 조건';
+  for (const control of [group, subject, year, month, track, variant]) {
+    const text = control.selectedOptions[0]?.textContent || '';
+    control.title = control === year && control.value ? `${control.value}학년도` : text;
+    if (filterMeasure) {
+      filterMeasure.font = getComputedStyle(control).font;
+      control.style.width = `${Math.ceil(filterMeasure.measureText(text).width) + 32}px`;
+    }
+  }
+  const parent = compactToolbar.matches ? $('#toolbar-menu-panel') : $('.search-panel');
+  if (toolbarActions.parentElement !== parent) {
+    if (compactToolbar.matches) parent.prepend(toolbarActions);
+    else parent.insertBefore(toolbarActions, $('#toolbar-actions-anchor'));
+  }
+}
+
+minimalWorkspace.addEventListener('change', () => { closeToolbarPopovers(); syncToolbar(); });
+mobileWorkspace.addEventListener('change', () => { closeToolbarPopovers(); syncToolbar(); });
+compactToolbar.addEventListener('change', () => { closeToolbarPopovers(); syncToolbar(); });
+filterToggle.addEventListener('click', () => {
+  const open = !toolbar.classList.contains('is-filters-open');
+  closeToolbarPopovers();
+  toolbar.classList.toggle('is-filters-open', open);
+  filterToggle.setAttribute('aria-expanded', String(open));
+});
+for (const detail of toolbarDetails) detail.addEventListener('toggle', () => {
+  if (!detail.open) return;
+  toolbar.classList.remove('is-filters-open');
+  filterToggle.setAttribute('aria-expanded', 'false');
+  for (const other of toolbarDetails) {
+    if (other !== detail && !other.contains(detail) && !detail.contains(other)) other.open = false;
+  }
+});
+document.addEventListener('pointerdown', (event) => {
+  if (!toolbar.contains(event.target)) closeToolbarPopovers();
+});
+toolbar.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || (!toolbar.classList.contains('is-filters-open') && !toolbarDetails.some((detail) => detail.open))) return;
+  const opener = toolbar.classList.contains('is-filters-open') ? filterToggle
+    : toolbarDetails.find((detail) => detail.open && detail.contains(document.activeElement))?.querySelector('summary');
+  closeToolbarPopovers();
+  event.preventDefault();
+  event.stopPropagation();
+  opener?.focus();
+});
+syncToolbar();
+
+function updateSubjectOptions(selected = '') {
+  const details = group.value === 'science' || group.value === 'social' || group.value === 'other';
+  const control = $('#subject-filter-control');
+  control.hidden = !details;
+  $('#search-form').classList.toggle('has-details', details);
+  subject.replaceChildren(new Option('전체 세부과목', ''));
+  if (details) {
+    for (const entry of availableSubjects.filter((item) => item.group === group.value)) {
+      subject.add(new Option(entry.label, entry.value));
+    }
+  }
+  subject.disabled = !details;
+  subject.value = [...subject.options].some((option) => option.value === selected) ? selected : '';
+  syncToolbar();
+}
+
+function updatePaperOptions(preferredTrack = track.value, preferredVariant = variant.value) {
+  const applicable = ['math', 'kor'].includes(group.value);
+  const entries = paperOptions.filter((entry) => entry.subject === group.value
+    && (!year.value || entry.year === Number(year.value)) && (!month.value || entry.month === Number(month.value)));
+  const tracks = [...new Set(entries.map((entry) => entry.track))].filter((value) => !['common', 'all'].includes(value));
+  const variants = [...new Set(entries.map((entry) => entry.variant))].filter((value) => value && value !== 'single');
+  const modern = entries.some((entry) => entry.track === 'common');
+  $('#track-filter-control .filter-label').textContent = modern ? '선택과목' : '수학 유형';
+  $('#track-filter-control').hidden = !applicable || !tracks.length;
+  $('#variant-filter-control').hidden = !applicable || !variants.length;
+  $('#profile-all-control').hidden = !applicable;
+  track.replaceChildren(new Option(modern ? '선택과목 선택' : '유형 선택', ''));
+  for (const value of tracks) track.add(new Option(trackLabels[value] || value, value));
+  track.value = tracks.includes(preferredTrack) ? preferredTrack : modern ? '' : tracks[0] || '';
+  variant.replaceChildren(...variants.map((value) => new Option(variantLabels[value] || value, value)));
+  variant.value = variants.includes(preferredVariant) ? preferredVariant : variants.includes('odd') ? 'odd' : variants[0] || '';
+  track.disabled = variant.disabled = allProfiles.checked;
+  $('#profile-summary').textContent = !applicable ? '' : allProfiles.checked ? '모든 과목·유형 포함'
+    : modern && !track.value ? '공통 문항만 표시 · 전체 변환은 선택과목을 고른 뒤 사용할 수 있습니다.'
+      : [trackLabels[track.value], variantLabels[variant.value]].filter(Boolean).join(' · ');
+  $('#advanced-count').textContent = [framework, unit, standard].filter((control) => control.value).length
+    ? ` ${[framework, unit, standard].filter((control) => control.value).length}` : '';
+  $('#filter-details summary').setAttribute('aria-label', `상세 조건${$('#advanced-count').textContent ? ` · ${$('#advanced-count').textContent.trim()}개 적용` : ''}`);
+  syncToolbar();
+}
+
+function rememberProfile() {
+  if (!['math', 'kor'].includes(group.value)) return;
+  savedProfiles[group.value] = { track: track.value, variant: variant.value };
+  try { localStorage.setItem('exam-paper-profiles', JSON.stringify(savedProfiles)); } catch { /* Storage may be unavailable. */ }
+}
+
+function profileParams() {
+  const params = new URLSearchParams();
+  if (['math', 'kor'].includes(group.value)) {
+    if (track.value) params.set('track', track.value);
+    if (variant.value) params.set('variant', variant.value);
+    if (allProfiles.checked) params.set('allProfiles', '1');
+  }
+  return params;
+}
+
+function officialUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && ['www.suneung.re.kr', 'www.moe.go.kr', 'www.ncic.re.kr', 'ncic.re.kr']
+      .includes(url.hostname) ? url.href : '';
+  } catch { return ''; }
+}
+
+function answerHref(entry) {
+  const path = entry.sourcePath || driveFilePath(entry.sourceFile);
+  const gateway = path ? driveLink(path) : '';
+  if (gateway) return `${gateway}#page=${Number(entry.sourcePage) || 1}`;
+  return officialUrl(entry.sourceUrl);
+}
+
+async function renderAnswers() {
+  const requestId = ++answerRequestId;
+  const detail = $('#answer-detail');
+  detail.hidden = true;
+  for (const card of list.querySelectorAll('.result-card')) card.querySelector('.card-answer')?.remove();
+  if (!answerToggle.checked) return;
+  const selectedId = state.selectedId;
+  const cards = [...list.querySelectorAll('.result-card:not([hidden])')];
+  const results = await Promise.allSettled([selectedId, ...cards.map((card) => card.dataset.id)]
+    .map((id) => id ? getJson(`/api/answer?id=${encodeURIComponent(id)}`) : null));
+  if (requestId !== answerRequestId || !answerToggle.checked) return;
+  const selected = results[0].status === 'fulfilled' ? results[0].value : null;
+  if (selectedId && state.selectedId === selectedId) {
+    detail.hidden = false;
+    $('#answer-value').textContent = selected?.answer != null ? String(selected.answer) : '확인 필요';
+    $('#answer-note').textContent = selected?.answer != null ? '공식 확정 정답표 대조 완료' : '검증된 정답 연결이 없습니다.';
+    const source = $('#answer-source');
+    const href = selected ? answerHref(selected) : '';
+    if (href) source.href = href;
+    else source.removeAttribute('href');
+    source.hidden = !href;
+  }
+  for (const [index, card] of cards.entries()) {
+    const result = results[index + 1];
+    const entry = result.status === 'fulfilled' ? result.value : null;
+    const badge = document.createElement('span');
+    badge.className = 'card-answer';
+    badge.textContent = entry?.answer != null ? `정답 ${entry.answer}` : '정답 확인 필요';
+    card.append(badge);
+  }
+}
+
 let selectedQuestion = null;
 const selection = createQuestionSelection();
 const selectionLabels = new Map();
@@ -95,7 +347,7 @@ function renderTokens() {
     token.append(label, remove);
     tokensNode.append(token);
   }
-  input.placeholder = state.tokens.length === 3 ? '' : state.mode === 'files' ? '시험지 속 문항 검색' : '문항 검색';
+  input.placeholder = state.tokens.length === 3 ? '' : '문항 검색';
   input.disabled = state.tokens.length === 3;
 }
 
@@ -115,11 +367,15 @@ function addInputWords() {
 }
 
 function queryUrl(offset) {
-  const params = new URLSearchParams();
+  const params = profileParams();
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
+  if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
   if (year.value) { params.set('yearFrom', year.value); params.set('yearTo', year.value); }
   if (month.value) params.set('month', month.value);
+  if (framework.value) params.set('framework', framework.value);
+  if (unit.value) params.set('unit', unit.value);
+  if (standard.value) params.set('standard', standard.value);
   params.set('offset', String(offset));
   if (state.mode === 'questions' && initialSelectionPending && initialParams.get('id')) {
     params.set('focus', initialParams.get('id'));
@@ -133,11 +389,15 @@ function queryUrl(offset) {
 }
 
 function updateAddress() {
-  const params = new URLSearchParams();
+  const params = profileParams();
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
+  if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
   if (year.value) params.set('year', year.value);
   if (month.value) params.set('month', month.value);
+  if (framework.value) params.set('framework', framework.value);
+  if (unit.value) params.set('unit', unit.value);
+  if (standard.value) params.set('standard', standard.value);
   if (state.mode === 'files') params.set('mode', 'files');
   if (shell.classList.contains('is-split') || shell.classList.contains('is-file-preview')) params.set('view', 'split');
   if ((shell.classList.contains('is-detail') || shell.classList.contains('is-split')) && state.selectedId) params.set('id', state.selectedId);
@@ -150,7 +410,8 @@ function setPreviewMode(open) {
   shell.classList.toggle('is-split', open);
   shell.classList.remove('is-detail');
   previewToggle.setAttribute('aria-pressed', String(open));
-  previewToggle.textContent = open ? '미리보기 닫기' : '미리보기 열기';
+  previewToggle.setAttribute('aria-label', open ? '미리보기 닫기' : '미리보기 열기');
+  previewToggle.title = open ? '미리보기 닫기' : '미리보기 열기';
   $('#mobile-back').textContent = open ? '← 결과만 보기' : '← 검색 결과';
   updateAddress();
 }
@@ -158,14 +419,21 @@ function setPreviewMode(open) {
 function setFilePreviewMode(open) {
   shell.classList.toggle('is-file-preview', open);
   previewToggle.setAttribute('aria-pressed', String(open));
-  previewToggle.textContent = open ? '미리보기 닫기' : '미리보기 열기';
+  previewToggle.setAttribute('aria-label', open ? '미리보기 닫기' : '미리보기 열기');
+  previewToggle.title = open ? '미리보기 닫기' : '미리보기 열기';
   if (!open) $('#file-preview').hidden = true;
+  fileTools.hidden = !open;
+  $('#file-preview-back').hidden = !open;
   updateAddress();
 }
 
 function setResultMode(mode) {
   if (state.mode === mode) return;
   state.mode = mode;
+  $('#workspace-mode').value = mode;
+  fileTools.hidden = true;
+  $('#file-preview-back').hidden = true;
+  $('#file-preview-title').textContent = '';
   selectedQuestion = null;
   state.requestId += 1;
   state.selectionRequestId += 1;
@@ -178,10 +446,18 @@ function setResultMode(mode) {
   $('#mode-files').setAttribute('aria-pressed', String(mode === 'files'));
   previewToggle.hidden = false;
   previewToggle.setAttribute('aria-pressed', 'false');
-  previewToggle.textContent = '미리보기 열기';
+  previewToggle.setAttribute('aria-label', '미리보기 열기');
+  previewToggle.title = '미리보기 열기';
   $('#result-sort').textContent = mode === 'files' ? '최신순' : '관련도 · 최신순';
   renderTokens();
   updateAddress();
+}
+
+function cardUrl(item) {
+  if (item.cardPath) return item.cardPath;
+  // Existing science assets remain available; newly indexed subjects render from PDF on demand.
+  return /^[pbce][12]_\d{4}_(06|09|11)_\d{2}$/u.test(item.id)
+    ? `./cards/${encodeURIComponent(item.id)}.webp` : '';
 }
 
 function cardFor(item) {
@@ -203,15 +479,27 @@ function cardFor(item) {
   const image = document.createElement('img');
   image.loading = 'lazy';
   image.decoding = 'async';
-  image.src = `./cards/${encodeURIComponent(item.id)}.webp`;
+  const thumbnail = cardUrl(item);
+  const placeholder = document.createElement('span');
+  placeholder.textContent = '원본 미리보기를 만드는 중…';
   image.alt = `${item.exam} ${item.subjectLabel} ${item.no}번 PDF 원본 문항`;
-  image.onload = () => preview.classList.remove('is-loading');
-  image.onerror = () => {
-    preview.classList.remove('is-loading');
-    preview.classList.add('is-error');
-    preview.append(document.createTextNode('원본 미리보기를 불러오지 못했습니다. 눌러서 문항을 확인하세요.'));
-  };
-  preview.append(image);
+  if (thumbnail) {
+    placeholder.hidden = true;
+    image.src = thumbnail;
+    image.onload = () => preview.classList.remove('is-loading');
+    image.onerror = () => {
+      preview.classList.remove('is-loading');
+      preview.classList.add('is-error');
+      placeholder.hidden = false;
+      placeholder.textContent = '원본 미리보기를 불러오지 못했습니다. 눌러서 문항을 확인하세요.';
+    };
+  } else {
+    image.hidden = true;
+  }
+  preview.append(image, placeholder);
+  button.previewTask = { element: button, image, preview, placeholder, fallback: thumbnail,
+    render: () => renderQuestion(item, 1.3) };
+  previewObserver.observe(button);
   button.append(meta, preview);
   const tags = document.createElement('span');
   tags.className = 'result-tags';
@@ -248,13 +536,22 @@ function fileRowFor(item) {
   image.decoding = 'async';
   image.width = 100;
   image.height = 130;
-  image.src = `./thumbnails/${encodeURIComponent(item.pdfFile.replace(/\.pdf$/u, ''))}.webp`;
+  const hasStaticThumbnail = /^[pbce][12]_\d{4}_(06|09|11)\.pdf$/u.test(item.pdfFile);
+  if (hasStaticThumbnail) image.src = `./thumbnails/${encodeURIComponent(item.pdfFile.replace(/\.pdf$/u, ''))}.webp`;
   image.alt = `${item.pdfFile} 첫 페이지 미리보기`;
   image.onerror = () => {
     image.remove();
     preview.textContent = '미리보기 없음';
   };
+  let placeholder;
+  if (!hasStaticThumbnail) {
+    preview.classList.add('is-loading');
+    image.hidden = true;
+    placeholder = document.createElement('span');
+    placeholder.textContent = '미리보기 생성 중';
+  }
   preview.append(image);
+  if (placeholder) preview.append(placeholder);
   const text = document.createElement('span');
   text.className = 'file-description';
   const name = document.createElement('strong');
@@ -276,11 +573,46 @@ function fileRowFor(item) {
   open.textContent = 'PDF 열기 ↗';
   select.append(preview, text);
   row.append(select, open);
+  if (!hasStaticThumbnail) {
+    row.previewTask = { element: row, image, preview, placeholder, render: () => renderFileThumbnail(item.pdfFile) };
+    previewObserver.observe(row);
+  }
   return row;
 }
 
 async function selectFile(item) {
   const fileRequestId = ++state.fileRequestId;
+  fileItems = [];
+  fileConversionReady = false;
+  activeFilePage = 0;
+  $('#file-page-editable').disabled = true;
+  $('#file-page-previous').disabled = $('#file-page-next').disabled = true;
+  $('#file-page-position').textContent = '—';
+  const convert = $('#file-preview-editable');
+  convert.disabled = true;
+  convert.textContent = '전체 문항 한글로';
+  convert.onclick = null;
+  const configure = $('#file-preview-profile');
+  configure.hidden = !['math', 'kor'].includes(item.subject) || group.value === item.subject;
+  configure.onclick = async () => {
+    group.value = item.subject;
+    year.value = String(item.year);
+    month.value = String(item.month);
+    allProfiles.checked = false;
+    updateSubjectOptions();
+    const saved = savedProfiles[item.subject] || {};
+    updatePaperOptions(saved.track || '', saved.variant || 'odd');
+    await search();
+    await selectFile(item);
+    if (!track.closest('[hidden]')) {
+      if (compactToolbar.matches) {
+        closeToolbarPopovers();
+        toolbar.classList.add('is-filters-open');
+        filterToggle.setAttribute('aria-expanded', 'true');
+      }
+      track.focus();
+    }
+  };
   state.selectedFile = item.pdfFile;
   for (const row of list.querySelectorAll('.file-row')) {
     row.setAttribute('aria-current', String(row.dataset.file === item.pdfFile));
@@ -297,13 +629,68 @@ async function selectFile(item) {
   setFilePreviewMode(true);
   stopFileRendering?.();
   stopFileRendering = null;
+  const questionsPromise = getJson(`/api/file-questions?name=${encodeURIComponent(item.pdfFile)}&${profileParams()}`);
   try {
+    const { items, pages: chosenPages, label, ready } = await questionsPromise;
+    if (fileRequestId !== state.fileRequestId) return;
+    fileItems = items;
+    fileConversionReady = ready;
+    convert.disabled = !ready || !items.length;
+    convert.textContent = !ready && items.length ? '선택과목을 먼저 골라주세요' : items.length ? `${label ? `${label} ` : '전체 '}${items.length}문항 한글로` : '색인된 문항 없음';
+    convert.title = '전체 문항을 한 문서로 변환합니다. 변환 전에 그림 포함·제외를 선택할 수 있습니다. 본문·수식·보기는 편집 가능한 문서로 만듭니다.';
+    convert.onclick = () => { $('#workspace-convert').open = false; void openEditableCollection(items.map((entry) => entry.id)); };
     stopFileRendering = await renderFilePages(item.pdfFile, pages, item.firstMatchPage || 1,
-      () => fileRequestId === state.fileRequestId);
+      () => fileRequestId === state.fileRequestId, chosenPages);
+    if (fileRequestId !== state.fileRequestId) return;
+    updateFilePageControls();
   } catch (error) {
-    if (fileRequestId === state.fileRequestId) pages.textContent = error.message;
+    if (fileRequestId === state.fileRequestId) { pages.textContent = error.message; updateFilePageControls(); }
   }
 }
+
+function updateWorkspaceMode() {
+  const picker = $('#workspace-mode');
+  picker.options[0].textContent = state.mode === 'questions' ? `문항 ${state.total.toLocaleString('ko-KR')}개` : '문항별';
+  picker.options[1].textContent = state.mode === 'files' ? `시험지 ${state.total.toLocaleString('ko-KR')}개` : '시험지별';
+  picker.value = state.mode;
+}
+function updateFilePageControls() {
+  const pages = $('#file-preview-pages');
+  const sections = [...pages.querySelectorAll('.file-page')];
+  const readingLine = pages.getBoundingClientRect().top + Math.min(100, pages.clientHeight / 4);
+  const section = sections.find((entry) => entry.getBoundingClientRect().bottom > readingLine) || sections.at(-1);
+  const index = sections.indexOf(section);
+  activeFilePage = section ? Number(section.dataset.page) : 0;
+  const lastPage = sections.at(-1)?.querySelector('.file-page-label')?.textContent.match(/\/\s*(\d+)/u)?.[1];
+  $('#file-page-position').textContent = section ? `${activeFilePage} / ${lastPage || sections.length}` : '—';
+  $('#file-page-previous').disabled = index <= 0;
+  $('#file-page-next').disabled = index < 0 || index >= sections.length - 1;
+  const items = fileItems.filter((item) => item.page === activeFilePage);
+  const convert = $('#file-page-editable');
+  convert.disabled = !fileConversionReady || !items.length;
+  convert.textContent = items.length ? `${activeFilePage}쪽 ${items.length}문항 한글로` : '이 쪽에 색인된 문항 없음';
+  $('#file-preview-open').href = $('#file-preview-open').href.replace(/#page=\d+/u, `#page=${activeFilePage || 1}`);
+}
+function moveFilePage(direction) {
+  const pages = $('#file-preview-pages');
+  const sections = [...pages.querySelectorAll('.file-page')];
+  const index = sections.findIndex((section) => Number(section.dataset.page) === activeFilePage);
+  const target = sections[index + direction];
+  if (!target) return;
+  pages.scrollTop += target.getBoundingClientRect().top - pages.getBoundingClientRect().top - 12;
+  updateFilePageControls();
+}
+$('#file-preview-pages').addEventListener('scroll', updateFilePageControls, { passive: true });
+$('#file-page-previous').addEventListener('click', () => moveFilePage(-1));
+$('#file-page-next').addEventListener('click', () => moveFilePage(1));
+$('#file-page-editable').addEventListener('click', () => {
+  if (!fileConversionReady) return;
+  const ids = fileItems.filter((item) => item.page === activeFilePage).map((item) => item.id);
+  $('#workspace-convert').open = false;
+  if (ids.length) void openEditableCollection(ids);
+});
+$('#workspace-mode').addEventListener('change', () => { setResultMode($('#workspace-mode').value); void search(); });
+new ResizeObserver(() => { if (!$('#file-preview').hidden) updateFilePageControls(); }).observe($('#file-preview-pages'));
 
 function showPage(page) {
   state.page = page;
@@ -311,6 +698,7 @@ function showPage(page) {
   const first = page * (state.mode === 'files' ? filePageSize : pageSize) - state.baseOffset;
   const visible = state.mode === 'files' ? filePageSize : pageSize;
   for (const [index, card] of cards.entries()) card.hidden = index < first || index >= first + visible;
+  if (answerToggle.checked) void renderAnswers().catch((error) => setHelp(error.message, true));
   const pages = Math.ceil(state.total / visible);
   $('#results-pagination').hidden = pages <= 1;
   $('#page-position').textContent = `${page + 1} / ${pages}`;
@@ -340,6 +728,7 @@ async function search(reset = true) {
     shell.classList.remove('is-detail');
     if (shell.classList.contains('is-file-preview')) setFilePreviewMode(false);
     previewToggle.disabled = true;
+    clearPreviews();
     cardLayoutObserver.disconnect();
     list.replaceChildren();
     $('#result-count').textContent = '검색 중…';
@@ -348,6 +737,7 @@ async function search(reset = true) {
     const data = await getJson(queryUrl(state.offset));
     if (requestId !== state.requestId) return;
     state.total = data.total;
+    updateWorkspaceMode();
     previewToggle.disabled = !data.total;
     $('#result-sort').textContent = filesMode && !state.tokens.length ? '최신순' : '관련도 · 최신순';
     $('#result-count').textContent = `${filesMode ? '시험지' : '검색 결과'} ${data.total.toLocaleString('ko-KR')}개`;
@@ -408,9 +798,24 @@ function renderCurriculum(item) {
   const content = $('#curriculum-content');
   content.replaceChildren();
   const standards = item.curriculum?.standards || [];
-  $('#standards-count').textContent = standards.length ? `${standards.length}개 연결` : '미분류';
-  $('#confidence-badge').textContent = standards.length
-    ? `자동 연결 · ${item.curriculum.confidence === 'high' ? '높음' : '검토 필요'}` : '미분류';
+  const { yearMismatch, verifiedCount, candidateCount } = curriculumDisplayState(item);
+  $('#standards-count').textContent = yearMismatch
+    ? `${candidateCount}건 연도 불일치 · 확인 필요`
+    : verifiedCount ? `검토 완료 ${verifiedCount}개${candidateCount ? ` · 후보 ${candidateCount}건` : ''}`
+      : candidateCount ? `후보 ${candidateCount}건 · 확인 필요` : '미분류';
+  const curriculum = item.curriculum || {};
+  $('#confidence-badge').textContent = yearMismatch
+    ? `${curriculum.framework} · 해당 학년도 적용 불일치 · 검토 필요`
+    : standards.length ? `${curriculum.framework || '교육과정 미확인'} · ${verifiedCount === standards.length ? '검토 완료' : '검토 필요'}`
+      : `${curriculum.framework || '적용 교육과정 확인 필요'} · 미분류`;
+  if (officialUrl(curriculum.sourceUrl)) {
+    const link = document.createElement('a');
+    link.href = officialUrl(curriculum.sourceUrl);
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = '교육과정 공식 출처 ↗';
+    content.append(link);
+  }
   if (!standards.length) {
     const message = document.createElement('p');
     message.className = 'unmapped-copy';
@@ -430,7 +835,18 @@ function renderCurriculum(item) {
     const copy = document.createElement('p');
     copy.className = 'standard-copy';
     copy.textContent = standard.text;
-    entry.append(code, title, copy);
+    const review = document.createElement('small');
+    review.className = 'standard-review';
+    review.textContent = `${yearMismatch ? '적용 연도 불일치 · 확인 필요' : curriculum.reviewStatus === 'verified' && standard.reviewStatus === 'verified' ? '검토 완료' : '확인 필요'}${standard.evidence ? ` · 근거: ${standard.evidence}` : ''}${standard.confidence ? ` · 신뢰도: ${standard.confidence}` : ''}`;
+    entry.append(code, title, copy, review);
+    if (officialUrl(standard.sourceUrl)) {
+      const link = document.createElement('a');
+      link.href = officialUrl(standard.sourceUrl);
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = '성취기준 원문 ↗';
+      entry.append(link);
+    }
     content.append(entry);
   }
 }
@@ -462,14 +878,15 @@ async function selectQuestion(id, openDetail = true) {
     const href = driveLink(driveFilePath(item.pdfFile));
     $('#open-pdf').href = href ? `${href}#page=${item.page}` : '';
     $('#open-pdf').hidden = !href;
-    const imageUrl = `./cards/${encodeURIComponent(id)}.webp`;
+    const imageUrl = cardUrl(item);
     const imageLink = $('#source-image-link');
     imageLink.classList.add('is-loading');
     const image = $('#source-image');
     image.alt = `${item.exam} ${item.subjectLabel} ${item.no}번 PDF 원본 문항`;
     image.onload = () => imageLink.classList.remove('is-loading');
     image.onerror = () => { imageLink.classList.remove('is-loading'); setHelp('이미지 생성에 실패했습니다. 시험지 PDF로 확인해 주세요.', true); };
-    image.src = imageUrl;
+    if (imageUrl) image.src = imageUrl;
+    else image.removeAttribute('src');
     void renderQuestion(item).then((highResolutionUrl) => {
       if (selectionRequestId !== state.selectionRequestId) {
         URL.revokeObjectURL(highResolutionUrl);
@@ -480,7 +897,7 @@ async function selectQuestion(id, openDetail = true) {
       image.src = highResolutionUrl;
     }).catch((error) => {
       if (selectionRequestId === state.selectionRequestId) {
-        $('#source-note').textContent = `${error.message} 카드 이미지는 계속 볼 수 있습니다.`;
+        $('#source-note').textContent = `${error.message} ${imageUrl ? '카드 이미지로 확인하거나' : ''} 시험지 PDF 원본으로 확인해 주세요.`;
         setHelp(error.message, true);
       }
     });
@@ -496,6 +913,7 @@ async function selectQuestion(id, openDetail = true) {
       tagList.append(tag);
     }
     renderCurriculum(item);
+    void renderAnswers().catch((error) => setHelp(error.message, true));
     if (openDetail) {
       if (shell.classList.contains('is-split')) setPreviewMode(false);
       shell.classList.add('is-detail');
@@ -614,16 +1032,31 @@ tokensNode.addEventListener('click', (event) => {
   search();
 });
 $('#clear-search').addEventListener('click', () => {
+  closeToolbarPopovers();
   state.tokens = [];
   input.value = '';
+  group.value = '';
+  updateSubjectOptions();
   subject.value = '';
   year.value = '';
   month.value = '';
+  allProfiles.checked = false;
+  framework.value = '';
+  unit.value = '';
+  standard.value = '';
+  updatePaperOptions('', 'odd');
   renderTokens();
   setHelp(state.mode === 'files' ? '모든 시험지를 표시합니다.' : '모든 문항을 표시합니다.');
   search();
 });
-for (const select of [subject, year, month]) select.addEventListener('change', () => search());
+group.addEventListener('change', () => { updateSubjectOptions(); allProfiles.checked = false;
+  const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); search(); });
+for (const select of [subject, year, month, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
+  updatePaperOptions(); rememberProfile(); search();
+});
+answerToggle.addEventListener('change', () => {
+  void renderAnswers().catch((error) => setHelp(error.message, true));
+});
 for (const [id, mode] of [['#mode-questions', 'questions'], ['#mode-files', 'files']]) {
   $(id).addEventListener('click', () => {
     if (state.mode === mode) return;
@@ -743,16 +1176,32 @@ async function start() {
   try {
     const status = await getJson('/api/status');
     const issues = status.incomplete.length;
+    const missingPdfs = status.incomplete.filter((issue) => issue.pdfFile);
+    const unverifiedCandidates = status.incomplete.filter((issue) => issue.reason === 'new_candidates_unverified');
     const degraded = status.degradedPdfCount || 0;
+    const mismatched = status.curriculumYearMismatchCount || 0;
     $('#source-status').textContent = `${status.pdfCount.toLocaleString('ko-KR')}개 시험지 · ${status.questionCount.toLocaleString('ko-KR')}개 문항`;
-    if (issues || degraded) {
+    if (issues || degraded || mismatched) {
       $('#index-issues').hidden = false;
-      $('#issues-count').textContent = String(issues + degraded);
-      $('#issues-description').textContent = `누락 ${issues}개 시험지${degraded ? ` · 본문 글꼴 추출 주의 ${degraded}개` : ''}`;
+      $('#toolbar-alert').hidden = false;
+      $('#toolbar-menu > summary').title = `추가 검색 설정 · 색인 점검 ${issues + degraded + mismatched}개`;
+      $('#issues-count').textContent = String(issues + degraded + mismatched);
+      $('#issues-description').textContent = [
+        missingPdfs.length ? `누락 ${missingPdfs.length}개 시험지` : '',
+        unverifiedCandidates.length ? `확장 문항 검토 필요 ${unverifiedCandidates.reduce((sum, issue) => sum + issue.questionCount, 0).toLocaleString('ko-KR')}개` : '',
+        degraded ? `본문 글꼴 추출 주의 ${degraded}개` : '',
+        mismatched ? `교육과정 연도 불일치 ${mismatched}문항` : '',
+      ].filter(Boolean).join(' · ');
       const issueList = $('#issues-list');
       for (const issue of status.incomplete) {
         const line = document.createElement('li');
-        line.textContent = `${issue.pdfFile}: ${issue.found === 0 ? '문항 추출 불가' : issue.reason || `${issue.missing.length}개 문항 누락`}`;
+        if (issue.reason === 'new_candidates_unverified') {
+          line.textContent = `확장 문항 ${issue.questionCount.toLocaleString('ko-KR')}개는 원본 대조 전이며, ${issue.unreadableQuestionCount.toLocaleString('ko-KR')}개는 본문 검색이 되지 않습니다.`;
+        } else if (issue.pdfFile) {
+          line.textContent = `${issue.pdfFile}: ${issue.found === 0 ? '문항 추출 불가' : issue.reason || `${issue.missing.length}개 문항 누락`}`;
+        } else {
+          line.textContent = issue.reason || '색인 검토 필요';
+        }
         issueList.append(line);
       }
       if (degraded) {
@@ -760,18 +1209,44 @@ async function start() {
         line.append('특수 글꼴 PDF는 본문 검색이 제한됩니다.', document.createElement('br'), '원본 이미지로 확인하세요.');
         issueList.append(line);
       }
+      if (mismatched) {
+        const line = document.createElement('li');
+        line.textContent = `2020학년도 이전의 2015 개정 교육과정 연결 ${mismatched}건은 적용 연도가 맞지 않아 검토 완료·필터 결과에서 제외합니다.`;
+        issueList.append(line);
+      }
     }
     const years = status.years || [];
     for (const value of years) {
       const option = document.createElement('option');
       option.value = String(value);
-      option.textContent = `${value}학년도`;
+      option.textContent = String(value);
       year.append(option);
     }
+    availableSubjects = status.subjects || [];
+    paperOptions = status.paperOptions || [];
+    for (const { value, label } of status.groups || []) group.add(new Option(label, value));
+    for (const value of status.frameworks || []) framework.add(new Option(value, value));
+    for (const value of status.units || []) unit.add(new Option(value, value));
+    for (const { value, label } of status.standards || []) standard.add(new Option(`${value} ${label}`, value));
     state.tokens = (initialParams.get('q') || '').trim().split(/\s+/u).filter(Boolean).slice(0, 3);
-    subject.value = initialParams.get('subject') || '';
+    const legacySubject = initialParams.get('subject') || '';
+    group.value = initialParams.get('group') || availableSubjects.find((entry) => entry.value === legacySubject)?.group || '';
+    updateSubjectOptions(legacySubject);
     year.value = initialParams.get('year') || '';
     month.value = initialParams.get('month') || '';
+    framework.value = initialParams.get('framework') || '';
+    unit.value = initialParams.get('unit') || '';
+    standard.value = initialParams.get('standard') || '';
+    allProfiles.checked = initialParams.get('allProfiles') === '1';
+    const saved = savedProfiles[group.value] || {};
+    updatePaperOptions(initialParams.has('track') ? initialParams.get('track') : saved.track || '',
+      initialParams.get('variant') || saved.variant || 'odd');
+    if (framework.value || unit.value || standard.value) {
+      if (compactToolbar.matches) $('#toolbar-menu').open = true;
+      $('#filter-details').open = true;
+    }
+    // Answer visibility is never restored from URL, history, or persistent storage.
+    answerToggle.checked = false;
     if (initialParams.get('mode') === 'files') {
       setResultMode('files');
     }

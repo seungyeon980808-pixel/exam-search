@@ -43,6 +43,18 @@ try {
     await page.locator('#source-image-link').click();
     await page.locator('#editable-status').getByText('편집 가능한 문서입니다', { exact: false }).waitFor();
     await page.frameLocator('iframe').getByRole('textbox', { name: '문서 편집 입력' }).waitFor();
+    assert.equal(await page.frameLocator('iframe').locator('#scroll-container')
+      .evaluate((element) => element.scrollLeft), 0,
+    '편집 문서는 첫 문장이 가려지지 않도록 왼쪽부터 열려야 합니다.');
+    await page.locator('#editable-reference-image').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#editable-reference-image').evaluate((image) => image.naturalWidth > 0), true);
+    const referenceBounds = await page.locator('#editable-reference').boundingBox();
+    const editorBounds = await page.locator('#editable-host').boundingBox();
+    assert.ok(referenceBounds && editorBounds);
+    if (width > 900) assert.ok(referenceBounds.x + referenceBounds.width <= editorBounds.x + 2,
+      '데스크톱에서는 원본 이미지가 편집기 왼쪽에 있어야 합니다.');
+    else assert.ok(referenceBounds.y + referenceBounds.height <= editorBounds.y + 2,
+      '좁은 화면에서는 원본 이미지가 편집기 위에 있어야 합니다.');
     await page.screenshot({ path: `${evidence}/editor-${width}.png` });
     assert.equal(await page.locator('#editable-download').isEnabled(), true);
     assert.deepEqual(errors, []);

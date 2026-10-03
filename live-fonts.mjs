@@ -1,4 +1,5 @@
 import { verifyGlyph } from './ttf-glyphs.mjs';
+import { hanyangPua, isOldHangulFont } from './hanyang-pua.mjs';
 
 let registryPromise;
 
@@ -23,22 +24,40 @@ export function inQuestion(item, question, pageHeight) {
 
 export async function verifiedGlyphMap(question, pdf) {
   const needed = new Set();
+  const mapped = new Map();
   for (const item of pdf.content.items) {
     if (!inQuestion(item, question, pdf.pageHeight)) continue;
     for (const char of item.str) {
-      if (/[\uE000-\uF8FF]/u.test(char)) needed.add(`${item.fontName}:${char.codePointAt(0)}`);
+      if (!/[\uE000-\uF8FF]/u.test(char)) continue;
+      const codepoint = char.codePointAt(0);
+      const key = `${item.fontName}:${codepoint}`;
+      const text = isOldHangulFont(pdf.fonts[item.fontName]?.name) && hanyangPua(codepoint);
+      if (text) mapped.set(key, text);
+      else needed.add(key);
     }
   }
-  if (!needed.size) return new Map();
+  if (!needed.size) return mapped;
   const { fonts } = await registry();
-  const mapped = new Map();
+  const rendered = new Map();
+  let renderingFont = '';
+  for (let index = 0; index < (pdf.operations?.fnArray.length || 0); index += 1) {
+    const op = pdf.operations.fnArray[index], args = pdf.operations.argsArray[index];
+    if (op === pdf.OPS?.setFont) renderingFont = args[0];
+    if (op !== pdf.OPS?.showText) continue;
+    for (const glyph of args[0]) {
+      if (!glyph?.unicode || !glyph.fontChar) continue;
+      const key = `${renderingFont}:${glyph.unicode.codePointAt(0)}:${glyph.originalCharCode}`;
+      if (!rendered.has(key)) rendered.set(key, new Set());
+      rendered.get(key).add(glyph.fontChar.codePointAt(0));
+    }
+  }
   const checked = new Set();
   const rejected = new Set();
   for (const glyph of pdf.glyphs) {
     const key = `${glyph.fontId}:${glyph.codepoint}`;
     if (!needed.has(key)) continue;
     const font = pdf.fonts[glyph.fontId];
-    const baseName = font?.name?.split('+').at(-1);
+    const baseName = font?.name?.split('+').at(-1)?.split('-Identity-')[0];
     const candidates = fonts.filter((entry) => entry.fontName === baseName)
       .flatMap((entry) => entry.glyphs
         .filter((proof) => proof.codepoint === glyph.codepoint)
@@ -49,12 +68,15 @@ export async function verifiedGlyphMap(question, pdf) {
     checked.add(identity);
     let matched = false;
     for (const proof of candidates) {
-      if (await verifyGlyph(font.data, glyph.glyphId, proof)) {
+      const renderings = rendered.get(identity);
+      const verified = proof.cffSha256
+        ? renderings?.size === 1 && await verifyGlyph(font.data, glyph.glyphId, proof, [...renderings][0])
+        : await verifyGlyph(font.data, glyph.glyphId, proof);
+      if (verified) {
         const previous = mapped.get(key);
-        if (previous && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
+        if (mapped.has(key) && previous !== proof.formula) throw new Error('같은 글자에 서로 다른 수식이 검증됐습니다.');
         mapped.set(key, proof.formula);
         matched = true;
-        break;
       }
     }
     if (!matched) rejected.add(key);

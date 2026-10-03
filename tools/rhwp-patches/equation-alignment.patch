@@ -1,0 +1,435 @@
+diff --git a/src/document_core/commands/object_ops/equation.rs b/src/document_core/commands/object_ops/equation.rs
+index a52e9404..c96f0bb6 100644
+--- a/src/document_core/commands/object_ops/equation.rs
++++ b/src/document_core/commands/object_ops/equation.rs
+@@ -170,8 +170,15 @@ impl DocumentCore {
+         let explicit_width = json_u32(props_json, "width").is_some();
+         let explicit_height = json_u32(props_json, "height").is_some();
+         if !explicit_width || !explicit_height {
+-            let (width, height) =
+-                crate::renderer::equation::intrinsic_size_hwp(&eq.script, eq.font_size);
++            let (width, height, ascent) =
++                crate::renderer::equation::intrinsic_metrics_hwp(&eq.script, eq.font_size);
++            if !explicit_height
++                && json_i32(props_json, "baseline").is_none()
++                && (json_str(props_json, "script").is_some()
++                    || json_u32(props_json, "fontSize").is_some())
++            {
++                eq.baseline = (100.0 * f64::from(ascent) / f64::from(height)).round() as i16;
++            }
+             if !explicit_width {
+                 eq.common.width = width;
+             }
+@@ -408,7 +415,8 @@ impl DocumentCore {
+             )));
+         }
+ 
+-        let (width, height) = crate::renderer::equation::intrinsic_size_hwp(script, font_size);
++        let (width, height, ascent) =
++            crate::renderer::equation::intrinsic_metrics_hwp(script, font_size);
+         let equation_order = self.document.sections[section_idx]
+             .paragraphs
+             .iter()
+@@ -461,7 +469,7 @@ impl DocumentCore {
+             script: script.to_string(),
+             font_size,
+             color,
+-            baseline: 85,
++            baseline: (100.0 * f64::from(ascent) / f64::from(height)).round() as i16,
+             version_info: "Equation Version 60".to_string(),
+             font_name: "HYhwpEQ".to_string(),
+             ..Default::default()
+@@ -538,5 +546,24 @@ mod tests {
+             eq.raw_ctrl_data.is_empty(),
+             "봉인 없는 raw_ctrl_data 는 비워져야 편집이 .hwp 저장에 반영된다"
+         );
++        DocumentCore::apply_equation_properties(
++            &mut eq,
++            96.0,
++            r#"{"script":"3^{{{1} over {2}}}","fontSize":1200}"#,
++        );
++        let (_, height, ascent) =
++            crate::renderer::equation::intrinsic_metrics_hwp(&eq.script, eq.font_size);
++        assert_eq!(eq.common.height, height);
++        assert_eq!(
++            eq.baseline,
++            (100.0 * f64::from(ascent) / f64::from(height)).round() as i16
++        );
++        DocumentCore::apply_equation_properties(
++            &mut eq,
++            96.0,
++            r#"{"script":"x","baseline":50,"height":4000}"#,
++        );
++        assert_eq!(eq.baseline, 50);
++        assert_eq!(eq.common.height, 4000);
+     }
+ }
+diff --git a/src/renderer/composer/line_breaking.rs b/src/renderer/composer/line_breaking.rs
+index 4b1109c6..abd101a1 100644
+--- a/src/renderer/composer/line_breaking.rs
++++ b/src/renderer/composer/line_breaking.rs
+@@ -2181,6 +2181,33 @@ fn char_level_break_hwp(
+     (results, lw, line_max_fs)
+ }
+ 
++// Authentic HWP controls keep their producer geometry (including picture-band
++// oracle rows). HWPX/generated controls have no raw CTRL_HEADER and are painted
++// with this engine's natural equation box.
++fn equation_flow_metrics(eq: &crate::model::control::Equation) -> (i32, i32, i32) {
++    if !eq.raw_ctrl_data.is_empty() && eq.common.height > 0 {
++        let height = eq.common.height as i32;
++        return (
++            eq.common.width as i32,
++            height,
++            height
++                .saturating_mul(i32::from(eq.baseline))
++                .saturating_div(100),
++        );
++    }
++    let (width, height, ascent) =
++        crate::renderer::equation::intrinsic_metrics_hwp(&eq.script, eq.font_size);
++    (
++        if eq.common.width > 0 {
++            eq.common.width
++        } else {
++            width
++        } as i32,
++        height as i32,
++        ascent,
++    )
++}
++
+ fn inline_control_line_height_hwp(para: &Paragraph) -> Option<i32> {
+     para.controls
+         .iter()
+@@ -2188,7 +2215,7 @@ fn inline_control_line_height_hwp(para: &Paragraph) -> Option<i32> {
+             Control::Picture(pic) if pic.common.treat_as_char => Some(pic.common.height as i32),
+             Control::Shape(shape) if shape.common().treat_as_char => Some(shape.flow_height_hu()),
+             Control::Table(table) if table.common.treat_as_char => Some(table.common.height as i32),
+-            Control::Equation(eq) if eq.common.treat_as_char => Some(eq.common.height as i32),
++            Control::Equation(eq) if eq.common.treat_as_char => Some(equation_flow_metrics(eq).1),
+             Control::Form(form) if form.common.treat_as_char => Some(form.height as i32),
+             _ => None,
+         })
+@@ -2211,7 +2238,8 @@ fn inline_control_size_hwp(ctrl: &Control) -> Option<(i32, i32)> {
+             (width, table.common.height as i32)
+         }
+         Control::Equation(eq) if eq.common.treat_as_char => {
+-            (eq.common.width as i32, eq.common.height as i32)
++            let (width, height, _) = equation_flow_metrics(eq);
++            (width, height)
+         }
+         Control::Form(form) if form.common.treat_as_char => (form.width as i32, form.height as i32),
+         _ => return None,
+@@ -2240,11 +2268,7 @@ fn flow_inline_controls(para: &Paragraph) -> Vec<FlowInlineControl> {
+             }
+             let (width_hwp, height_hwp) = inline_control_size_hwp(control)?;
+             let baseline_distance_hwp = match control {
+-                Control::Equation(equation) if equation.baseline > 0 => Some(
+-                    height_hwp
+-                        .saturating_mul(i32::from(equation.baseline))
+-                        .saturating_div(100),
+-                ),
++                Control::Equation(equation) => Some(equation_flow_metrics(equation).2),
+                 _ => None,
+             };
+             (char_position < text_len).then_some(FlowInlineControl {
+@@ -2629,16 +2653,9 @@ fn layout_paragraph_in_frame_impl(
+                 .controls
+                 .iter()
+                 .filter_map(|control| match control {
+-                    Control::Equation(equation)
+-                        if equation.common.treat_as_char
+-                            && equation.common.height as i32 == height_hwp
+-                            && equation.baseline > 0 =>
+-                    {
+-                        Some(
+-                            height_hwp
+-                                .saturating_mul(i32::from(equation.baseline))
+-                                .saturating_div(100),
+-                        )
++                    Control::Equation(equation) if equation.common.treat_as_char => {
++                        let (_, height, ascent) = equation_flow_metrics(equation);
++                        (height == height_hwp).then_some(ascent)
+                     }
+                     _ => None,
+                 })
+@@ -2721,22 +2738,23 @@ fn layout_paragraph_in_frame_impl(
+                             || (line.end_idx == text_chars.len()
+                                 && control.char_position == text_chars.len())
+                     }) {
+-                        inline_metrics = match inline_metrics {
+-                            Some((height_hwp, baseline_distance_hwp))
+-                                if height_hwp > control.height_hwp =>
+-                            {
+-                                Some((height_hwp, baseline_distance_hwp))
++                        inline_metrics = Some(match inline_metrics {
++                            Some((height, None)) if control.baseline_distance_hwp.is_none() => {
++                                (height.max(control.height_hwp), None)
+                             }
+-                            Some((height_hwp, baseline_distance_hwp))
+-                                if height_hwp == control.height_hwp =>
+-                            {
+-                                Some((
+-                                    height_hwp,
+-                                    baseline_distance_hwp.max(control.baseline_distance_hwp),
+-                                ))
++                            Some((height, baseline)) => {
++                                let old_ascent =
++                                    baseline.unwrap_or_else(|| baseline_distance_hwp(height));
++                                let ascent = control
++                                    .baseline_distance_hwp
++                                    .unwrap_or_else(|| baseline_distance_hwp(control.height_hwp));
++                                let merged_ascent = old_ascent.max(ascent);
++                                let descent =
++                                    (height - old_ascent).max(control.height_hwp - ascent);
++                                (merged_ascent + descent, Some(merged_ascent))
+                             }
+-                            _ => Some((control.height_hwp, control.baseline_distance_hwp)),
+-                        };
++                            None => (control.height_hwp, control.baseline_distance_hwp),
++                        });
+                     }
+                     let text_start = if frame.row_count() == first_row && segments.is_empty() {
+                         0
+@@ -2760,12 +2778,14 @@ fn layout_paragraph_in_frame_impl(
+                     dpi,
+                 );
+                 if let Some((height_hwp, baseline_distance_hwp)) = inline_metrics {
+-                    let inline_owns_row_height = height_hwp > metrics.line_height;
+-                    apply_inline_control_frame_height(&mut metrics, height_hwp);
+-                    if inline_owns_row_height {
+-                        if let Some(baseline_distance_hwp) = baseline_distance_hwp {
+-                            metrics.baseline_distance = baseline_distance_hwp;
+-                        }
++                    if let Some(ascent) = baseline_distance_hwp {
++                        let descent = (metrics.line_height - metrics.baseline_distance)
++                            .max(height_hwp - ascent);
++                        metrics.baseline_distance = metrics.baseline_distance.max(ascent);
++                        metrics.line_height = metrics.baseline_distance + descent;
++                        metrics.text_height = metrics.line_height;
++                    } else {
++                        apply_inline_control_frame_height(&mut metrics, height_hwp);
+                     }
+                 }
+                 if metrics.line_height != candidate_height {
+@@ -3754,16 +3774,19 @@ fn reflow_line_segs_impl(
+             let (_, height_hwp) = forced_inline_line.expect("checked inline control");
+             apply_inline_control_line_height(&mut text_seg, height_hwp);
+         }
+-        if let Some(height_hwp) = inline_controls
+-            .iter()
+-            .filter(|control| {
+-                (lb.start_idx..lb.end_idx).contains(&control.char_position)
+-                    || (lb.end_idx == text_len && control.char_position == text_len)
+-            })
+-            .map(|control| control.height_hwp)
+-            .max()
+-        {
+-            apply_inline_control_line_height(&mut text_seg, height_hwp);
++        for control in inline_controls.iter().filter(|control| {
++            (lb.start_idx..lb.end_idx).contains(&control.char_position)
++                || (lb.end_idx == text_len && control.char_position == text_len)
++        }) {
++            if let Some(ascent) = control.baseline_distance_hwp {
++                let descent = (text_seg.line_height - text_seg.baseline_distance)
++                    .max(control.height_hwp - ascent);
++                text_seg.baseline_distance = text_seg.baseline_distance.max(ascent);
++                text_seg.line_height = text_seg.baseline_distance + descent;
++                text_seg.text_height = text_seg.line_height;
++            } else {
++                apply_inline_control_line_height(&mut text_seg, control.height_hwp);
++            }
+         }
+         new_line_segs.push(text_seg);
+ 
+@@ -4524,6 +4547,52 @@ mod frame_reflow_tests {
+         );
+         assert_eq!(frame.row_count(), 1);
+         assert_eq!(frame.top, 2_400);
++
++        // 10pt text with a 12pt fractional exponent: use painted ascent and
++        // descent, independent of stale producer height/baseline percentages.
++        for saved_baseline in [50, 100] {
++            let mut para = paragraph(
++                "a b",
++                vec![CharShapeRef {
++                    start_pos: 0,
++                    char_shape_id: 0,
++                }],
++            );
++            para.char_offsets = vec![0, 9, 10];
++            para.controls.push(Control::Equation(Box::new(
++                crate::model::control::Equation {
++                    script: "3^{{{1} over {2}}}".into(),
++                    font_size: 1200,
++                    baseline: saved_baseline,
++                    common: crate::model::shape::CommonObjAttr {
++                        treat_as_char: true,
++                        width: 1200,
++                        height: 1200,
++                        ..Default::default()
++                    },
++                    ..Default::default()
++                },
++            )));
++            let styles = self::styles(&[13.333333333333334]);
++            let (_, height, ascent) =
++                crate::renderer::equation::intrinsic_metrics_hwp("3^{{{1} over {2}}}", 1200);
++            let mut frame = LayoutFrame::new(0..30_000, 0, Vec::new());
++            let rows = layout_paragraph_in_frame(&para, &mut frame, &styles, 96.0).unwrap();
++            assert_eq!(rows.len(), 1);
++            assert!(rows[0].baseline_distance >= ascent);
++            assert!(rows[0].line_height - rows[0].baseline_distance >= height as i32 - ascent);
++            reflow_line_segs(&mut para, ParagraphBox::column(0..30_000), &styles, 96.0);
++            assert!(para.line_segs[0].baseline_distance >= ascent);
++            assert!(
++                para.line_segs[0].line_height - para.line_segs[0].baseline_distance
++                    >= height as i32 - ascent
++            );
++            eprintln!(
++                "fraction exponent baseline={saved_baseline}: frame={:?} scalar={:?}",
++                shared_metrics(&rows),
++                shared_metrics(&para.line_segs)
++            );
++        }
+     }
+ 
+     fn a_frame_that_expects_the_stored_rows_admits_them_and_skips_the_reflow() {
+diff --git a/src/renderer/equation/layout.rs b/src/renderer/equation/layout.rs
+index d8ecae2e..39e892ef 100644
+--- a/src/renderer/equation/layout.rs
++++ b/src/renderer/equation/layout.rs
+@@ -501,26 +501,12 @@ impl EqLayout {
+         let b = self.layout_node(base, fs);
+         let s = self.layout_node(sup, fs * SCRIPT_SCALE);
+ 
+-        // sup_shift: 기준선으로부터 위첨자 상단까지의 거리 (양수 = base 상단 아래)
+-        let sup_shift = b.baseline - s.height * 0.7;
+-
+-        let (base_y, sup_y, total_h);
+-        if sup_shift >= 0.0 {
+-            // [Task #1300] 위첨자 상단을 base 상단에 맞춘다 (한컴 정합).
+-            // 기존엔 base 를 sup_shift(=b.baseline 비례) 만큼 아래로 밀어 위첨자를
+-            // 박스 최상단에 두었는데, 키 큰 base(괄호 분수 등)에서 위첨자가 base 상단
+-            // 위로 과하게 치솟아 윗줄을 침범했다(#1300). base 를 밀지 않고(상단 정렬)
+-            // 위첨자 상단이 base 상단과 같은 높이에 오도록 한다.
+-            // base 가 sup 보다 낮은 경우만 sup 를 담도록 base 를 내린다.
+-            sup_y = 0.0;
+-            base_y = (s.height - b.height).max(0.0);
+-            total_h = (base_y + b.height).max(s.height);
+-        } else {
+-            // 위첨자가 base 상단 위로 확장 — sup를 상단에, base를 |sup_shift|만큼 내림
+-            sup_y = 0.0;
+-            base_y = -sup_shift;
+-            total_h = (base_y + b.height).max(s.height);
+-        }
++        // Keep the complete exponent above the base baseline. Using only
++        // 70% of its height leaves a fraction denominator below the base.
++        // A tall base still stays at y=0 (Task #1300).
++        let sup_y = 0.0;
++        let base_y = (s.height - b.baseline).max(0.0);
++        let total_h = (base_y + b.height).max(s.height);
+ 
+         let mut base_box = b;
+         base_box.x = 0.0;
+@@ -1421,6 +1407,14 @@ mod tests {
+             sup_box.y,
+             base_box.y
+         );
++        // The complete exponent (including the fraction denominator) belongs
++        // above the base baseline, not just the fraction's math axis.
++        assert!(
++            sup_box.y + sup_box.height <= base_box.y + base_box.baseline,
++            "exponent bottom {} exceeds base baseline {}",
++            sup_box.y + sup_box.height,
++            base_box.y + base_box.baseline
++        );
+         // sup의 baseline이 base baseline보다 위에 있어야 함
+         let sup_baseline_abs = sup_box.y + sup_box.baseline;
+         let base_baseline_abs = base_box.y + base_box.baseline;
+diff --git a/src/renderer/equation/mod.rs b/src/renderer/equation/mod.rs
+index f546561f..6e02160b 100644
+--- a/src/renderer/equation/mod.rs
++++ b/src/renderer/equation/mod.rs
+@@ -19,6 +19,14 @@ pub mod tokenizer;
+ 
+ /// 수식 스크립트와 BaseUnit에서 레이아웃이 소비할 intrinsic HWPUNIT 크기를 계산한다.
+ pub fn intrinsic_size_hwp(script: &str, font_size: u32) -> (u32, u32) {
++    let (width, height, _) = intrinsic_metrics_hwp(script, font_size);
++    (width, height)
++}
++
++/// Natural painted width, height and ascent, in HWP units.
++/// Saved equation baseline percentages describe the producer's box, which
++/// may differ from this renderer's unscaled equation geometry.
++pub(crate) fn intrinsic_metrics_hwp(script: &str, font_size: u32) -> (u32, u32, i32) {
+     let font_size_px = super::hwpunit_to_px(font_size.max(1) as i32, super::DEFAULT_DPI);
+     let tokens = tokenizer::tokenize(script);
+     let ast = parser::EqParser::new(tokens).parse();
+@@ -26,5 +34,6 @@ pub fn intrinsic_size_hwp(script: &str, font_size: u32) -> (u32, u32) {
+     (
+         super::px_to_hwpunit(layout.width, super::DEFAULT_DPI).max(1) as u32,
+         super::px_to_hwpunit(layout.height, super::DEFAULT_DPI).max(1) as u32,
++        super::px_to_hwpunit(layout.baseline, super::DEFAULT_DPI),
+     )
+ }
+diff --git a/src/renderer/layout/paragraph_layout.rs b/src/renderer/layout/paragraph_layout.rs
+index 6f919266..8bc49388 100644
+--- a/src/renderer/layout/paragraph_layout.rs
++++ b/src/renderer/layout/paragraph_layout.rs
+@@ -3382,11 +3382,7 @@ impl LayoutEngine {
+                         - zero_endnote_boundary_result_shift)
+                         .max(col_area_y);
+                     let inline_x = row_inline_x[tac_row];
+-                    let eq_y = if cell_ctx.is_some() {
+-                        (row_y + baseline - layout_box.baseline).max(row_y)
+-                    } else {
+-                        row_y + baseline - layout_box.baseline
+-                    };
++                    let eq_y = row_y + baseline - layout_box.baseline;
+                     let (eq_cell_idx, eq_cell_para_idx) = if let Some(ref ctx) = cell_ctx {
+                         (
+                             ctx.path.first().map(|e| e.cell_index),
+@@ -4205,6 +4201,25 @@ impl LayoutEngine {
+                     ),
+                 )
+             };
++            // Imported LINE_SEG metrics can be smaller than the natural painted
++            // equation. Reserve ascent and descent separately on this row so
++            // text and equations share one baseline in both body and cells.
++            let (line_height, baseline) = para.map_or((line_height, baseline), |p| {
++                let mut ascent = baseline;
++                let mut descent = (line_height - baseline).max(0.0);
++                for (_, _, ci) in &line_tac_offsets_for_width {
++                    if let Some(Control::Equation(eq)) = p.controls.get(*ci) {
++                        let (_, height, eq_ascent) =
++                            crate::renderer::equation::intrinsic_metrics_hwp(
++                                &eq.script,
++                                eq.font_size,
++                            );
++                        ascent = ascent.max(hwpunit_to_px(eq_ascent, self.dpi));
++                        descent = descent.max(hwpunit_to_px(height as i32 - eq_ascent, self.dpi));
++                    }
++                }
++                (ascent + descent, ascent)
++            });
+             // 들여쓰기/내어쓰기: 문단 여백은 무조건 적용
+             // - 보통(ind=0): 모든 줄 margin_left
+             // - 들여쓰기(ind>0): 첫줄 margin_left+indent, 다음줄 margin_left
+@@ -6780,14 +6795,7 @@ impl LayoutEngine {
+                             // 텍스트와 섞인 인라인 수식뿐 아니라 공백 run 안의 TAC 수식도
+                             // baseline을 맞춘다. 수식 renderer는 bbox 높이로 세로 스케일하지
+                             // 않으므로 y에 직접 붙이면 큰 루트/분수 수식이 아래 줄을 덮는다.
+-                            let eq_y = if cell_ctx.is_none()
+-                                && comp_line.runs.iter().all(|r| {
+-                                    !r.text.chars().any(|c| c > '\u{001F}' && c != '\u{FFFC}')
+-                                }) {
+-                                y + baseline - layout_box.baseline
+-                            } else {
+-                                (y + baseline - layout_box.baseline).max(y)
+-                            };
++                            let eq_y = y + baseline - layout_box.baseline;
+                             let (eq_cell_idx, eq_cell_para_idx) = if let Some(ref ctx) = cell_ctx {
+                                 (
+                                     ctx.path.first().map(|e| e.cell_index),

@@ -1,0 +1,23 @@
+{
+  "upstream": "https://github.com/edwardkim/rhwp",
+  "sourceCommit": "f1f9c6ae58344ee9368996d3543f76b9345cf227",
+  "version": "0.8.6",
+  "patch": "tools/rhwp-patches/equation-alignment.patch",
+  "patchSha256": "cc68bd878ac56667a0cd41ba46faf2a6aa9f197d4f7e9c2085b5b52976f1f954",
+  "wasmSha256": "5a69262328dbfa8df50bc3f0296a66b482966c6d6fcef11e54268250b548bcac",
+  "oldWasmSha256": "8000e4ce320b7994dca6bcd58be0c862144c7b805576504e523a420439da658b",
+  "build": [
+    "git checkout f1f9c6ae58344ee9368996d3543f76b9345cf227",
+    "git apply equation-alignment.patch",
+    "wasm-pack build --target web --release"
+  ],
+  "wasmBindgen": "0.2.127",
+  "optimized": true,
+  "existingGlueCompatibility": {
+    "imports": 82,
+    "added": [],
+    "removed": [],
+    "nodeInstantiation": true
+  },
+  "cacheVersion": "typography-20261003-1"
+}

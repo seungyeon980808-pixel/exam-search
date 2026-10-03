@@ -1,0 +1,161 @@
+{
+  "source": "p1_2027_06_20 original PDF native runs; regression for saved equation/text advances",
+  "runs": [
+    {
+      "kind": "text",
+      "value": "그림 (가)는 점전하 "
+    },
+    {
+      "kind": "equation",
+      "script": "A"
+    },
+    {
+      "kind": "text",
+      "value": ", "
+    },
+    {
+      "kind": "equation",
+      "script": "B"
+    },
+    {
+      "kind": "text",
+      "value": ", "
+    },
+    {
+      "kind": "equation",
+      "script": "C"
+    },
+    {
+      "kind": "text",
+      "value": "를 각각 "
+    },
+    {
+      "kind": "equation",
+      "script": "x=-d"
+    },
+    {
+      "kind": "text",
+      "value": ", "
+    },
+    {
+      "kind": "equation",
+      "script": "x=0"
+    },
+    {
+      "kind": "text",
+      "value": ", "
+    },
+    {
+      "kind": "equation",
+      "script": "x=x_{0}"
+    },
+    {
+      "kind": "text",
+      "value": "에"
+    },
+    {
+      "kind": "text",
+      "value": " "
+    },
+    {
+      "kind": "text",
+      "value": "고정했을 때, "
+    },
+    {
+      "kind": "equation",
+      "script": "B"
+    },
+    {
+      "kind": "text",
+      "value": "에 크기가 "
+    },
+    {
+      "kind": "equation",
+      "script": "F_{0}"
+    },
+    {
+      "kind": "text",
+      "value": "인 전기력이 "
+    },
+    {
+      "kind": "equation",
+      "script": "+x"
+    },
+    {
+      "kind": "text",
+      "value": "방향으로 작용하는"
+    },
+    {
+      "kind": "text",
+      "value": " "
+    },
+    {
+      "kind": "text",
+      "value": "것을 나타낸 것이다. 그림 (나)는 (가)에서 "
+    },
+    {
+      "kind": "equation",
+      "script": "C"
+    },
+    {
+      "kind": "text",
+      "value": "를 "
+    },
+    {
+      "kind": "equation",
+      "script": "x"
+    },
+    {
+      "kind": "text",
+      "value": "축상에서 옮기며"
+    },
+    {
+      "kind": "text",
+      "value": " "
+    },
+    {
+      "kind": "text",
+      "value": "고정할 때, "
+    },
+    {
+      "kind": "equation",
+      "script": "x>0"
+    },
+    {
+      "kind": "text",
+      "value": "인 구간에서 "
+    },
+    {
+      "kind": "equation",
+      "script": "C"
+    },
+    {
+      "kind": "text",
+      "value": "에 작용하는 전기력을 나타낸"
+    },
+    {
+      "kind": "text",
+      "value": " "
+    },
+    {
+      "kind": "text",
+      "value": "것이다. 전기력의 방향은 "
+    },
+    {
+      "kind": "equation",
+      "script": "+x"
+    },
+    {
+      "kind": "text",
+      "value": "방향이 양"
+    },
+    {
+      "kind": "equation",
+      "script": "(+)"
+    },
+    {
+      "kind": "text",
+      "value": "이다."
+    }
+  ]
+}

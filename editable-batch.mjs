@@ -1,5 +1,5 @@
 import { getJson } from './data.mjs';
-import { resolveEditableContent } from './editable-source.mjs';
+import { resolveEditableContent } from './editable-source.mjs?v=readability-20261004-4';
 
 const cache = new Map();
 export function clearEditableBatchCache() { cache.clear(); }
@@ -13,6 +13,7 @@ export function createEditableBatch(ids, options = {}) {
   const controller = new AbortController();
   const lookup = options.getQuestion || ((id) => getJson(`/api/question?id=${encodeURIComponent(id)}`));
   const resolve = options.resolve || resolveEditableContent;
+  const includeImages = options.includeImages === true;
   const snapshot = () => ({ items: items.map((item) => ({ ...item })), cancelled,
     total: items.length, completed: items.filter((item) => ['ready', 'draft', 'error'].includes(item.status)).length });
   const report = () => { if (!cancelled) options.onProgress?.(snapshot()); };
@@ -47,13 +48,16 @@ export function createEditableBatch(ids, options = {}) {
         item.status = 'running'; report();
         if (cancelled) return snapshot();
         try {
-          const cached = options.resolve ? null : cache.get(item.id);
-          const result = cached ? structuredClone(cached) : await resolve(item.question, { signal: controller.signal });
+          const cacheKey = JSON.stringify([item.id, includeImages]);
+          const cached = options.resolve ? null : cache.get(cacheKey);
+          const result = cached ? structuredClone(cached) : await resolve(item.question, { signal: controller.signal, includeImages,
+            onPhase(message) { if (!cancelled) options.onPhase?.(message, item.question); } });
           if (cancelled) return snapshot();
           item.result = result;
           item.status = result.provenance === 'index-draft' ? 'draft' : 'ready';
-          if (!options.resolve) {
-            cache.delete(item.id); cache.set(item.id, structuredClone(result));
+          if (!options.resolve && result.quality?.state !== 'incomplete'
+            && !(includeImages && result.warnings?.some((note) => /그림.*제외/u.test(note)))) {
+            cache.delete(cacheKey); cache.set(cacheKey, structuredClone(result));
             if (cache.size > 64) cache.delete(cache.keys().next().value);
           }
         } catch (error) {
