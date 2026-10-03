@@ -214,7 +214,18 @@ export function recoverEquationItems(items, baseline, fractionHeightScale = 2) {
       if (!radicand.length || above.length) fail(bar, 'radical extent');
       parts = [radical, bar, ...radicand];
       anchor = { ...radical, y: rowBaseline(radicand), height: Math.max(...radicand.map((item) => item.height)) };
-      value = `\\sqrt{${join(bindScripts(radicand, anchor.y))}}`;
+      // A root index is a small digit above the hook, left of the top bar.
+      // It belongs to the radical rather than a trailing baseline factor.
+      const indices = work.filter((item) => item !== radical && item !== bar && !radicand.includes(item)
+        && item.math && /^\d+$/u.test(item.value.trim()) && item.height <= anchor.height * .7
+        && item.x >= radical.x - .5 && right(item) <= bar.x + .5
+        && item.y > anchor.y + anchor.height * .25
+        && item.y < bar.y + radical.height);
+      if (indices.length && Math.max(...indices.map((item) => item.y)) - Math.min(...indices.map((item) => item.y)) > .8)
+        fail(radical, 'ambiguous radical index');
+      parts.push(...indices);
+      const index = indices.length ? `[${join(indices)}]` : '';
+      value = `\\sqrt${index}{${join(bindScripts(radicand, anchor.y))}}`;
     } else if (above.length && below.length && !heads.length) {
       if (nearby.length !== above.length + below.length) fail(bar, 'fraction baseline collision');
       parts = [bar, ...above, ...below];

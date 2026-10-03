@@ -27,4 +27,3 @@ test('a wrong indexed box is replaced by the printed question number column', ()
   assert.deepEqual(box.map(Math.round), [54, 288, 412, 588]);
   assert.equal(questionBoxFromPage({ no: 9, box: [0, 0, 1, 1] }, pdf), null);
 });
-

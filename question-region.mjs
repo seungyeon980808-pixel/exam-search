@@ -9,7 +9,7 @@
 // Boxes are [x0, top0, x1, top1] in page points with a top-left origin; text items keep pdf.js
 // coordinates (bottom-left origin).
 import { inQuestion } from './live-fonts.mjs';
-import { drawingPrimitives } from './pdf-drawings.mjs';
+import { drawingPrimitives } from './pdf-drawings.mjs?v=readability-20261004-4';
 
 export const SPLIT_FAILURE = '원본 PDF에서 본문과 선지 다섯 개를 모두 분리하지 못했습니다.';
 export const PLACEHOLDER = '(선지는 원본 참고)';
@@ -151,6 +151,11 @@ export function joinRegions(pdf, box, next, nextBox, dx) {
   const within = (source, region) => (item) => inQuestion(item, { box: region }, source.pageHeight);
   const items = [...pdf.content.items.filter(within(pdf, box)), ...next.content.items.filter(within(next, nextBox)).map(move)];
   const joined = { ...pdf, content: { ...pdf.content, items },
+    figureSourceRegions: [
+      { page: pdf.pageNumber, flowBox: box, sourceBox: box, dx: 0, dy: 0 },
+      { page: next.pageNumber || pdf.pageNumber, sourceBox: nextBox,
+        flowBox: nextBox.map((v, i) => v + (i % 2 ? shift : dx)), dx, dy: shift },
+    ],
     fonts: { ...next.fonts, ...pdf.fonts },
     glyphs: next === pdf ? pdf.glyphs : [...(pdf.glyphs || []), ...(next.glyphs || [])] };
   if (pdf.equationItems) {

@@ -1,0 +1,147 @@
+{
+  "schema": 1,
+  "scope": "Actual resolver path; observed content regions and native layout, not semantic correctness",
+  "biology": [
+    "b1_2025_11_17",
+    "b1_2025_11_18",
+    "b1_2025_11_19",
+    "b1_2025_11_20",
+    "b2_2025_11_17",
+    "b2_2025_11_18",
+    "b2_2025_11_19",
+    "b2_2025_11_20"
+  ],
+  "scienceSubjects": [
+    "p1",
+    "p2",
+    "c1",
+    "c2",
+    "b1",
+    "b2",
+    "e1",
+    "e2"
+  ],
+  "scienceNumbers": [
+    1,
+    11,
+    20
+  ],
+  "other": [
+    "2021_11_math_ga_odd_01",
+    "2021_11_math_ga_odd_03",
+    "2021_11_math_ga_odd_04",
+    "2021_11_math_ga_odd_10",
+    "2021_11_math_ga_odd_12",
+    "2019_11_kor_all_odd_01",
+    "2019_11_kor_all_odd_36",
+    "2019_11_eng_all_odd_36",
+    "2019_11_economics_all_single_01",
+    "2019_11_economics_all_single_11",
+    "2019_11_economics_all_single_20",
+    "2019_11_kor_all_odd_33",
+    "2019_11_kor_all_odd_43"
+  ],
+  "nativeCharges": {
+    "b1_2025_11_20": [
+      "NH4⁺",
+      "NO3⁻"
+    ]
+  },
+  "proseOracles": {
+    "2019_11_kor_all_odd_01": {
+      "sourceNote": "Page 1 shared radio passage, physical wraps 따뜻하/게, 보이/네요, 속상하/겠구나. Source-specific reviewed word boundary oracle.",
+      "joinedWords": [
+        "따뜻하게",
+        "보이네요",
+        "속상하겠구나"
+      ]
+    },
+    "b2_2025_11_18": {
+      "sourceNote": "One bullet continues across the printed line ending before 구성된다; preserve the whole bullet as one native paragraph.",
+      "joinedParagraphFragments": [
+        "X는8개의아미노산으로구성되고,Y는5개의아미노산으로구성된다."
+      ]
+    },
+    "2019_11_kor_all_odd_36": {
+      "sourceNote": "Reviewed shared novel passage 임장군전: printed wraps 경업이/옥에, 청죄/한데, 북경/에 are prose continuations; dialogue turns and credits remain separate.",
+      "joinedWords": [
+        "청죄한데",
+        "북경에",
+        "없거늘",
+        "되었사오니",
+        "엄치하소서"
+      ],
+      "joinedParagraphFragments": [
+        "경업이옥에갇혀생각하되"
+      ]
+    },
+    "2019_11_kor_all_odd_33": {
+      "sourceNote": "Reviewed original modern-poetry shared passage: each selected printed verse remains a distinct paragraph.",
+      "separateParagraphFragments": [
+        [
+          "새로 돋은 정맥이",
+          "바르르 떤다."
+        ],
+        [
+          "샤갈의 마을에는 삼월에 눈이 온다.",
+          "봄을 바라고 섰는 사나이의 관자놀이에"
+        ]
+      ]
+    },
+    "2019_11_kor_all_odd_43": {
+      "sourceNote": "Reviewed original classical verse shared passage: the selected printed lines remain independent.",
+      "separateParagraphFragments": [
+        [
+          "배 방에 누워 있어 내 신세를 생각하니",
+          "가뜩이 심란한데 대풍(大風)이 일어나서"
+        ]
+      ]
+    }
+  },
+  "criticalRegions": {
+    "b2_2025_11_18": [
+      {
+        "label": "gene-sequence",
+        "page": 4,
+        "box": [
+          106.2600021,
+          642.3010254,
+          400.1999969,
+          655.5009766
+        ]
+      },
+      {
+        "label": "amino-acid-data",
+        "page": 4,
+        "box": [
+          228.4199982,
+          770.5809937,
+          398.2200012,
+          894.7810059
+        ]
+      }
+    ],
+    "b2_2025_11_20": [
+      {
+        "label": "dna-sequence",
+        "page": 4,
+        "box": [
+          467.1000061,
+          597.4810181,
+          734.7000122,
+          613.681
+        ]
+      },
+      {
+        "label": "restriction-enzyme-data",
+        "page": 4,
+        "box": [
+          463.5,
+          672.1210022,
+          738.2999878,
+          723.1210022
+        ]
+      }
+    ]
+  }
+}

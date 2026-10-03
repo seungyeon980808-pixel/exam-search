@@ -7,6 +7,22 @@ import { equationTextItems } from './pdf-text-geometry.mjs';
 
 const getQuestion = async (id) => ({ id, pdfFile: `${id[0]}.pdf` });
 const result = (question) => ({ questionId: question.id, provenance: 'pdf', paragraphs: [] });
+test('a batch retries incomplete output instead of caching its missing source assets', async () => {
+  const source = await readFile(new URL('./editable-batch.mjs', import.meta.url), 'utf8');
+  const context = { AbortController, structuredClone, getJson: async () => ({ id: 'A1', pdfFile: 'A.pdf' }) };
+  let calls = 0;
+  context.resolveEditableContent = async (question) => ({ ...result(question), quality: { state: 'incomplete' } });
+  const resolver = context.resolveEditableContent;
+  context.resolveEditableContent = (...args) => { calls += 1; return resolver(...args); };
+  runInNewContext(source.replace(/^import .*;\n/gmu, '').replaceAll('export function', 'function'), context);
+  await context.createEditableBatch(['A1']).run();
+  await context.createEditableBatch(['A1']).run();
+  assert.equal(calls, 2);
+  context.resolveEditableContent = async (question) => { calls += 1; return { ...result(question), quality: { state: 'review' } }; };
+  await context.createEditableBatch(['A1']).run();
+  await context.createEditableBatch(['A1']).run();
+  assert.equal(calls, 3);
+});
 test('PDF grouping restores the original selection order', async () => {
   const calls = [], progress = [];
   const batch = createEditableBatch(['A1', 'B1', 'A2'], { getQuestion,
@@ -79,6 +95,56 @@ test('PDF bytes remain owned by the pending extraction after another PDF clears 
   assert.deepEqual(seen.sort(), [1, 2]); assert.deepEqual(destroyed.sort(), [1, 2]);
 });
 
+for (const stage of ['download', 'shared document opening']) {
+  test(`cancelling a PDF reader waiting for ${stage} releases only that consumer`, { timeout: 1000 }, async () => {
+    const source = await readFile(new URL('./pdf-viewer.mjs', import.meta.url), 'utf8');
+    let releaseDownload, releaseDocument;
+    const download = new Promise((resolve) => { releaseDownload = resolve; });
+    const sharedOpen = new Promise((resolve) => { releaseDocument = resolve; });
+    let downloads = 0, privateParses = 0, sharedDestroys = 0, privateDestroys = 0;
+    const page = { getTextContent: async () => ({ styles: {} }),
+      getOperatorList: async () => ({ fnArray: [] }), getViewport: () => ({ height: 100, width: 80 }) };
+    const pdf = { getPage: async () => page };
+    const context = { URL, Uint8Array, equationTextItems,
+      downloadDriveFile: () => { downloads += 1; return download; }, driveFilePath: (name) => name,
+      pdfjs: { getDocument: ({ fontExtraProperties }) => {
+        if (fontExtraProperties) {
+          privateParses += 1;
+          return { promise: Promise.resolve(pdf), destroy: async () => { privateDestroys += 1; } };
+        }
+        return { promise: sharedOpen, destroy: async () => { sharedDestroys += 1; } };
+      } } };
+    runInNewContext(source.replace(/^import .*;\n/gmu, '')
+      .replace(/^pdfjs.GlobalWorkerOptions.*;\n/mu, '')
+      .replaceAll('import.meta.url', "'file:///test/'").replaceAll('export async function', 'async function'), context);
+    const controller = new AbortController();
+    const cancelled = context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 }, { signal: controller.signal });
+    const active = context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 });
+    if (stage === 'shared document opening') {
+      releaseDownload(Uint8Array.of(1));
+      await download;
+    }
+    controller.abort();
+    // Neither shared dependency is resolved here. Returning AbortError proves that
+    // cancellation releases the reader immediately instead of awaiting the download.
+    await assert.rejects(cancelled, { name: 'AbortError' });
+    assert.equal(downloads, 1);
+    assert.equal(privateParses, 0);
+    assert.equal(sharedDestroys, 0);
+    releaseDownload(Uint8Array.of(1));
+    releaseDocument(pdf);
+    assert.equal((await active).pageHeight, 100);
+    assert.equal(privateParses, 1);
+    assert.equal(privateDestroys, 1);
+    assert.equal(sharedDestroys, 0);
+    // The successful shared cache remains available after the cancelled wait.
+    await context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 });
+    assert.equal(downloads, 1);
+    assert.equal(privateParses, 2);
+    assert.equal(privateDestroys, 2);
+  });
+}
+
 test('successful structure cache evicts its least recently used entry after 64 items', async () => {
   const originalFetch = globalThis.fetch; const calls = [];
   const ids = Array.from({ length: 65 }, (_, index) => `cache${index}`);
@@ -102,7 +168,27 @@ test('successful structure cache evicts its least recently used entry after 64 i
     const pristine = await createEditableBatch(['cache64'], { getQuestion: lookup }).run();
     assert.notEqual(pristine.items[0].result.paragraphs[0][0].value, 'mutated');
     assert.equal(calls.length, 65);
+    await createEditableBatch(['cache64'], { getQuestion: lookup, includeImages: true }).run();
+    assert.equal(calls.length, 66, 'including images must not reuse the excluded-image structure');
+    await createEditableBatch(['cache64'], { getQuestion: lookup, includeImages: true }).run();
+    await createEditableBatch(['cache64'], { getQuestion: lookup, includeImages: false }).run();
+    assert.equal(calls.length, 66, 'both modes retain independent cached results');
     await createEditableBatch(['cache0'], { getQuestion: lookup }).run();
-    assert.equal(calls.length, 66); assert.equal(calls.at(-1), 'cache0');
+    assert.equal(calls.length, 67); assert.equal(calls.at(-1), 'cache0');
   } finally { globalThis.fetch = originalFetch; clearEditableBatchCache(); }
+});
+
+test('single run snapshots and forwards the image option to each item', async () => {
+  for (const includeImages of [false, true]) {
+    const seen = [];
+    const options = { includeImages, getQuestion, resolve: async (question, deps) => {
+      seen.push(deps.includeImages);
+      assert.ok(deps.signal instanceof AbortSignal);
+      return result(question);
+    } };
+    const batch = createEditableBatch(['A1', 'B1'], options);
+    options.includeImages = !includeImages;
+    await batch.run();
+    assert.deepEqual(seen, [includeImages, includeImages]);
+  }
 });

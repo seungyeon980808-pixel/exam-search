@@ -246,3 +246,23 @@ test('textItemBox converts the baseline to a top-left box', () => {
 
 
 
+
+test('a shallow standalone sequence image is a figure, while an inline image remains text-owned', () => {
+  // Exact embedded-image dimensions from b2_2025_11_18 (PDF page 4).
+  const b = ops().image(106.260002, 642.301025, 400.199997, 655.500977);
+  const items = [...body(605), text('다음 조건을 만족한다.', 106, 682, 11.5)];
+  const regions = figureRegions(drawingPrimitives(b.list, OPS, H), items, H);
+  assert.equal(regions.length, 1);
+  assert.equal(regions[0].kind, 'image');
+  const inline = [...items, text('이 자료와 연결되는 문장의 내용이다.', 401, 653, 11.5)];
+  assert.equal(figureRegions(drawingPrimitives(b.list, OPS, H), inline, H).length, 0);
+});
+
+test('a one-column two-row source panel is editable while an undivided passage frame is not a table', () => {
+  const b = ops().rect(40,100,240,180).line(40,120,240,120);
+  const items = [...body(60), text('특징',130,115),text('∙세균이 관여한다.',50,140),text('∙질소가 전환된다.',50,160)];
+  const grids = tableGrids(drawingPrimitives(b.list,OPS,H),items,H,[0,0,400,800]);
+  assert.equal(grids.length,1); assert.equal(grids[0].cols,1); assert.equal(grids[0].rows,2);
+  const frame = ops().rect(40,100,240,180);
+  assert.equal(tableGrids(drawingPrimitives(frame.list,OPS,H),items,H,[0,0,400,800]).length,0);
+});

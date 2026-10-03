@@ -5,50 +5,98 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="평가원 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
     <title>기출 탐색기</title>
-    <link rel="stylesheet" href="./styles.css?v=editable-2" />
-    <script src="./app.js" type="module"></script>
+    <link rel="stylesheet" href="./styles.css?v=resizable-editor-20261003-1" />
+    <script>
+      if (location.protocol === 'file:') document.documentElement.classList.add('local-file');
+    </script>
+    <script src="./app.js?v=readability-20261004-4" type="module"></script>
   </head>
   <body>
+    <main class="local-file-notice" hidden>
+      <h1>로컬 서버에서 열어 주세요</h1>
+      <p>파일을 직접 열면 검색과 문서 변환을 사용할 수 없습니다.</p>
+      <a id="local-server-link" class="button primary" href="http://127.0.0.1:8813/">기출 탐색기 열기</a>
+    </main>
+    <script>
+      if (location.protocol === 'file:') {
+        document.querySelector('.local-file-notice').hidden = false;
+        const localUrl = new URL('http://127.0.0.1:8813/');
+        localUrl.search = location.search;
+        localUrl.hash = location.hash;
+        document.querySelector('#local-server-link').href = localUrl.href;
+      }
+    </script>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand">
+        <div class="brand" aria-label="기출 탐색기" title="기출 탐색기">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div><strong>기출 탐색기</strong><small>5E 기출 라이브러리</small></div>
-        </div>
-        <div class="topbar-actions">
-          <div class="source-status" id="source-status" role="status">PDF 색인을 불러오는 중입니다</div>
-          <details class="index-issues" id="index-issues" hidden>
-            <summary id="issues-heading" title="색인 상태 확인"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg><span>점검</span><span class="issues-count" id="issues-count"></span></summary>
-            <div class="index-issues-panel"><strong>색인 상태</strong><p id="issues-description"></p><ul id="issues-list"></ul></div>
-          </details>
+          <span class="sr-only">기출 탐색기</span>
         </div>
         <section class="search-panel" aria-label="기출 검색">
         <form class="search-form" id="search-form" autocomplete="off">
           <label class="search-box" for="keyword-input">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/></svg>
             <span id="tokens" class="tokens"></span>
-            <input id="keyword-input" type="search" placeholder="예: 빛 간섭 경로차" aria-label="검색할 단어 입력" />
+            <input id="keyword-input" type="search" placeholder="문항 검색" aria-label="검색할 단어 입력" />
           </label>
-          <label class="filter-control"><span class="sr-only">과목</span><select id="group-filter" aria-label="과목"><option value="">전과목</option></select></label>
-          <label class="filter-control" id="subject-filter-control" hidden><span class="sr-only">세부과목</span><select id="subject-filter" aria-label="세부과목"><option value="">전체 세부과목</option></select></label>
-          <label class="filter-control"><span class="sr-only">연도</span><select id="year-filter" aria-label="연도"><option value="">전체 연도</option></select></label>
-          <label class="filter-control"><span class="sr-only">시험</span><select id="month-filter" aria-label="시험"><option value="">전체 시험</option><option value="6">6월 모평</option><option value="9">9월 모평</option><option value="11">수능</option></select></label>
           <button class="button primary" type="submit">검색</button>
-          <button class="button secondary" type="button" id="clear-search">초기화</button>
         </form>
-        <div class="advanced-filters" aria-label="교육과정 필터">
-          <label>교육과정 <select id="framework-filter" aria-label="교육과정"><option value="">전체</option></select></label>
-          <label>단원 <select id="unit-filter" aria-label="단원"><option value="">전체</option></select></label>
-          <label>성취기준 <select id="standard-filter" aria-label="성취기준"><option value="">전체</option></select></label>
-          <label class="answer-switch"><input type="checkbox" id="answer-toggle" /><span>정답 표시</span></label>
+        <button class="toolbar-icon filter-toggle" id="filter-toggle" type="button" aria-label="검색 조건 열기" aria-expanded="false" aria-controls="basic-filters" title="검색 조건"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></button>
+        <div class="filter-row" id="basic-filters" aria-label="기본 검색 조건">
+          <label class="filter-control"><span class="filter-label">과목</span><select id="group-filter" aria-label="과목"><option value="">전과목</option></select></label>
+          <label class="filter-control" id="subject-filter-control" hidden><span class="filter-label">세부과목</span><select id="subject-filter" aria-label="세부과목"><option value="">전체 세부과목</option></select></label>
+          <label class="filter-control"><span class="filter-label">연도</span><select id="year-filter" aria-label="연도"><option value="">전체 연도</option></select></label>
+          <label class="filter-control"><span class="filter-label">시험</span><select id="month-filter" aria-label="시험"><option value="">전체 시험</option><option value="6">6월 모평</option><option value="9">9월 모평</option><option value="11">수능</option></select></label>
+          <label class="filter-control" id="track-filter-control" hidden><span class="filter-label">선택과목</span><select id="track-filter" aria-label="선택과목"><option value="">선택과목 선택</option></select></label>
+          <label class="filter-control" id="variant-filter-control" hidden><span class="filter-label">시험 유형</span><select id="variant-filter" aria-label="시험 유형"><option value="odd">홀수형</option><option value="even">짝수형</option></select></label>
         </div>
+        <div class="toolbar-inline-actions" id="toolbar-inline-actions">
+          <details class="filter-details" id="filter-details"><summary class="toolbar-icon" aria-label="상세 조건" title="상세 조건"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h5m4 0h7M4 12h9m4 0h3M4 18h2m4 0h10M9 3v6m4 0v6m-7 0v6"/></svg><span id="advanced-count"></span></summary>
+            <div class="advanced-filters" aria-label="교육과정 필터">
+              <label>교육과정 <select id="framework-filter" aria-label="교육과정"><option value="">전체</option></select></label>
+              <label>단원 <select id="unit-filter" aria-label="단원"><option value="">전체</option></select></label>
+              <label>성취기준 <select id="standard-filter" aria-label="성취기준"><option value="">전체</option></select></label>
+            </div>
+          </details>
+          <label class="answer-switch" title="정답 표시"><input type="checkbox" id="answer-toggle" aria-label="정답 표시" /><span>정답</span></label>
+          <button class="toolbar-icon" type="button" id="clear-search" aria-label="초기화" title="검색 조건 초기화"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+        </div>
+        <span id="toolbar-actions-anchor" hidden></span>
         <p class="search-help" id="search-help" role="status" aria-live="polite"></p>
         </section>
+        <div class="workspace-tools" id="workspace-tools">
+          <label class="workspace-mode"><span class="sr-only">검색 결과 단위</span><select id="workspace-mode" aria-label="검색 결과 단위"><option value="questions">문항별</option><option value="files">시험지별</option></select></label>
+          <button class="toolbar-icon preview-toggle" id="preview-toggle" type="button" aria-label="미리보기 열기" title="미리보기 열기" aria-controls="detail-pane" aria-pressed="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16"/></svg></button>
+          <div class="file-workspace-tools" id="file-workspace-tools" hidden>
+            <nav class="file-page-nav" aria-label="시험지 쪽 이동"><button class="toolbar-icon" id="file-page-previous" type="button" aria-label="이전 쪽" disabled>‹</button><span id="file-page-position" aria-live="polite">—</span><button class="toolbar-icon" id="file-page-next" type="button" aria-label="다음 쪽" disabled>›</button></nav>
+            <details class="workspace-convert" id="workspace-convert"><summary class="button primary">한글로 ⌄</summary><div class="workspace-convert-panel"><button class="button secondary" id="file-preview-editable" type="button" disabled>전체 문항 한글로</button><button class="button secondary" id="file-page-editable" type="button" disabled>현재 쪽 한글로</button><button class="button secondary" id="file-preview-profile" type="button" hidden>선택과목 설정</button></div></details>
+            <a class="toolbar-icon workspace-pdf" id="file-preview-open" target="_blank" rel="noopener" title="시험지 PDF 열기" aria-label="시험지 PDF 열기">↗</a>
+          </div>
+        </div>
+        <details class="toolbar-menu" id="toolbar-menu">
+          <summary class="toolbar-icon" aria-label="더보기" title="추가 검색 설정·색인 상태"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span class="toolbar-alert" id="toolbar-alert" hidden></span></summary>
+          <div class="toolbar-menu-panel" id="toolbar-menu-panel">
+            <h1 class="workspace-count" id="result-count">문항을 불러오는 중</h1>
+            <span class="result-sort" id="result-sort">관련도 · 최신순</span>
+            <div class="result-mode-switch" role="group" aria-label="검색 결과 단위" hidden><button id="mode-questions" type="button" aria-pressed="true">문항별</button><button id="mode-files" type="button" aria-pressed="false">시험지별</button></div>
+            <h2 class="workspace-file-name" id="file-preview-title"></h2>
+            <button class="button secondary" id="file-preview-back" type="button" hidden>결과만 보기</button>
+            <div class="topbar-actions">
+              <div class="source-status" id="source-status" role="status">PDF 색인을 불러오는 중입니다</div>
+              <details class="index-issues" id="index-issues" hidden>
+                <summary id="issues-heading" title="색인 상태 확인"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg><span>점검</span><span class="issues-count" id="issues-count"></span></summary>
+                <div class="index-issues-panel"><strong>색인 상태</strong><p id="issues-description"></p><ul id="issues-list"></ul></div>
+              </details>
+            </div>
+            <label class="profile-all" id="profile-all-control" hidden><input type="checkbox" id="profile-all" /><span>모든 선택과목·유형</span></label>
+            <span class="profile-summary" id="profile-summary" role="status"></span>
+          </div>
+        </details>
       </header>
 
       <main class="workspace" id="workspace">
         <section class="results-pane" aria-label="검색 결과">
-          <div class="pane-header"><div class="results-heading"><h1 id="result-count">문항을 불러오는 중</h1><div class="result-mode-switch" role="group" aria-label="검색 결과 단위"><button id="mode-questions" type="button" aria-pressed="true">문항별</button><button id="mode-files" type="button" aria-pressed="false">시험지별</button></div></div><div class="pane-actions"><span class="result-sort" id="result-sort">관련도 · 최신순</span><button class="button secondary preview-toggle" id="preview-toggle" type="button" aria-controls="detail-pane" aria-pressed="false" disabled>미리보기 열기</button></div></div>
+          <div class="pane-header"><div class="pane-actions"></div></div>
           <div class="selection-toolbar" id="selection-toolbar" role="group" aria-label="선택 문항" hidden><button class="button secondary" id="selection-toggle" type="button" aria-expanded="false" aria-controls="selection-tray"><span id="selection-count" aria-live="polite">선택 0개</span><span aria-hidden="true">⌄</span></button><button class="button primary" id="selection-open" type="button" disabled>모아 보기</button><button class="button secondary" id="selection-clear" type="button">해제</button></div>
           <section class="selection-tray" id="selection-tray" aria-label="선택한 문항 순서" hidden><ol id="selection-list"></ol></section>
           <div class="result-grid" id="result-list"></div>
@@ -58,7 +106,7 @@
         <section class="detail-pane" id="detail-pane" aria-label="원본 확인">
           <div class="detail-empty" id="detail-empty"><div class="empty-icon" aria-hidden="true">PDF</div><h2>문항을 선택하세요</h2><p>검색 결과에서 문항을 고르면 원본 PDF의 해당 문항을 보여줍니다.</p></div>
           <div class="file-preview" id="file-preview" hidden>
-            <header class="file-preview-header"><button class="detail-back" id="file-preview-back" type="button">← 결과만 보기</button><h2 id="file-preview-title"></h2><button class="button secondary" id="file-preview-editable" type="button" disabled>전체 문항 한글로</button><a class="button secondary" id="file-preview-open" target="_blank" rel="noopener">PDF 열기 ↗</a></header>
+
             <div class="file-pages" id="file-preview-pages" role="region" aria-label="시험지 페이지 스크롤" tabindex="0"></div>
           </div>
           <div class="detail-content" id="detail-content" hidden>
@@ -98,20 +146,23 @@
       <div class="editable-shell">
         <header class="editable-toolbar">
           <strong id="editable-title">편집 문서</strong>
-          <div class="editable-actions"><a class="button secondary" id="editable-pdf" target="_blank" rel="noopener" hidden>시험지 PDF ↗</a><a class="button secondary" id="editable-original" target="_blank" rel="noopener" hidden>원본 이미지 ↗</a><button class="button primary" id="editable-download" type="button" disabled>HWPX 내려받기</button><button class="button secondary" id="editable-close" type="button">닫기</button></div>
+          <details class="editable-information" id="editable-information"><summary id="editable-status-label">변환 옵션 ⓘ</summary><div class="editable-information-panel"><p class="editable-status" id="editable-status" role="status" aria-live="polite"></p><button class="button secondary" id="editable-review-issues" type="button" hidden>문항별 확인 사항 보기</button></div></details>
+          <div class="editable-conversion-options"><label for="editable-image-mode">그림</label><select id="editable-image-mode"><option value="exclude">제외</option><option value="include">포함</option></select><button class="button secondary" id="editable-reconvert" type="button" hidden>다시 변환</button></div>
+          <label class="editable-layout-option" for="editable-layout">배치 <select id="editable-layout"><option value="continuous">이어 배치</option><option value="question">문항별 새 페이지</option></select></label>
+          <div class="editable-view-switch" role="group" aria-label="편집 화면 용지 보기"><button type="button" id="editable-column-view" aria-pressed="true">문항 폭</button><button type="button" id="editable-page-view" aria-pressed="false">전체 용지</button></div>
+          <div class="editable-zoom" role="group" aria-label="편집 화면 확대 비율"><button type="button" id="editable-zoom-out" aria-label="편집 화면 축소">−</button><input id="editable-zoom" type="number" min="10" max="500" step="5" value="100" aria-label="편집 화면 배율 (%)" /><span>%</span><button type="button" id="editable-zoom-in" aria-label="편집 화면 확대">+</button><button type="button" id="editable-zoom-fit">너비 맞춤</button></div>
+          <button class="button secondary" id="editable-reference-toggle" type="button" aria-pressed="true" aria-controls="editable-reference">원본 대조</button>
+          <details class="editable-more" id="editable-more"><summary class="toolbar-icon" aria-label="변환 문항·원본·재시도" title="변환 문항·원본·재시도">⋯</summary><div class="editable-more-panel"><small>배치 변경은 다시 변환할 때 적용됩니다. 긴 문항은 다음 페이지로 이어지고, 공통 지문은 각 문항에 포함됩니다.</small><a class="button secondary" id="editable-pdf" target="_blank" rel="noopener" hidden>시험지 PDF ↗</a><a class="button secondary" id="editable-original" target="_blank" rel="noopener" hidden>원본 이미지 ↗</a><div class="editable-batch-controls"><details id="editable-sources" hidden><summary>문항 목록·원본</summary><ol id="editable-items"></ol></details><button class="button secondary" id="editable-retry" type="button" hidden>실패 문항 재시도</button><button class="button secondary" id="editable-partial" type="button" hidden>성공한 문항만 열기</button></div></div></details>
+          <div class="editable-actions"><button class="button primary" id="editable-download" type="button" disabled>HWPX 내려받기</button><button class="button secondary" id="editable-close" type="button">닫기</button></div>
         </header>
-        <p class="editable-status" id="editable-status" role="status" aria-live="polite"></p>
-        <div class="editable-batch-controls">
-          <details id="editable-sources" hidden><summary>문항 목록·원본</summary><ol id="editable-items"></ol></details>
-          <button class="button secondary" id="editable-retry" type="button" hidden>실패 문항 재시도</button>
-          <button class="button primary" id="editable-partial" type="button" hidden>성공한 문항만 열기</button>
-        </div>
         <div class="editable-content" id="editable-content">
           <section class="editable-reference" id="editable-reference" aria-label="원본 문항 이미지" hidden>
-            <div class="editable-reference-heading"><strong>원본 문항</strong><span>PDF 원본과 편집본을 비교하세요</span></div>
+            <div class="editable-reference-heading"><strong>원본 문항</strong><span>PDF 대조</span></div>
             <div class="editable-reference-scroll" id="editable-reference-scroll"><img id="editable-reference-image" alt="" hidden /><p id="editable-reference-message" role="status">원본 문항을 불러오는 중입니다.</p></div>
           </section>
+          <div id="editable-divider" class="editable-divider" role="separator" tabindex="0" aria-label="원본과 변환 문서 크기 조절" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="65" aria-valuenow="30" title="드래그하여 너비 조절 · 방향키로 조절 · 두 번 클릭하면 초기화"></div>
           <div class="editable-host" id="editable-host"></div>
+          <div class="editable-loading" id="editable-loading" hidden><div class="editable-loading-card" role="status" aria-live="polite"><span class="editable-loading-spinner" id="editable-loading-spinner" aria-hidden="true"></span><strong id="editable-loading-title">한글 문서 생성 중</strong><p id="editable-loading-detail">문항을 준비하고 있습니다.</p><button class="button primary" id="editable-start" type="button" hidden>변환 시작</button></div></div>
         </div>
       </div>
     </dialog>

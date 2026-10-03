@@ -17,11 +17,10 @@ export function documentScripts(bytes) {
 }
 
 export function documentText(bytes) {
-  return [...sectionXml(bytes).matchAll(/<hp:t[^>]*>([\s\S]*?)<\/hp:t>/gu)].map((match) => unescape(match[1])).join(' ');
+  return [...sectionXml(bytes).matchAll(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>/gu)].map((match) => unescape(match[1])).join(' ');
 }
 
 export function inlineContent(bytes) {
-  return [...sectionXml(bytes).matchAll(/<hp:t[^>]*>([\s\S]*?)<\/hp:t>|<hp:script>([\s\S]*?)<\/hp:script>/gu)]
+  return [...sectionXml(bytes).matchAll(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>|<hp:script>([\s\S]*?)<\/hp:script>/gu)]
     .map((match) => match[2] === undefined ? unescape(match[1]) : '[' + unescape(match[2]) + ']').join('');
 }
-

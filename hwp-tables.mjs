@@ -1,3 +1,4 @@
+import { typography, bodyCharFormat, paragraphFormat } from './document-typography.mjs?v=typography-20261003-3';
 const checked = (json, message) => {
   const result = JSON.parse(json);
   if (!result.ok) throw new Error(message);
@@ -24,11 +25,12 @@ export function validateDataTable(table, validateRuns) {
   }
 }
 
-export function insertDataTable(document, index, table, equationScript) {
+export function insertDataTable(document, index, table, equationScript, width = 48000) {
   const widthSum = table.widths?.reduce((sum, width) => sum + width, 0);
-  const colWidths = widthSum > 0 ? table.widths.map((width) => Math.round(width / widthSum * 48000)) : undefined;
+  const colWidths = widthSum > 0 ? table.widths.map((value) => Math.round(value / widthSum * width))
+    : table.rows[0].map(() => Math.floor(width / table.rows[0].length));
   const made = checked(document.createTableEx(JSON.stringify({ sectionIdx: 0, paraIdx: index, charOffset: 0,
-    rowCount: table.rows.length, colCount: table.rows[0].length, colWidths, treatAsChar: false })), '자료 표를 만들지 못했습니다.');
+    rowCount: table.rows.length, colCount: table.rows[0].length, colWidths, treatAsChar: true })), '자료 표를 만들지 못했습니다.');
   const parent = made.paraIdx;
   const control = made.controlIdx;
   for (const span of table.spans || []) if (span.rowSpan > 1 || span.colSpan > 1) {
@@ -42,9 +44,10 @@ export function insertDataTable(document, index, table, equationScript) {
     const span = table.spans?.find((entry) => entry.row === row && entry.col === col);
     checked(document.setCellProperties(0, parent, control, cellIndex, JSON.stringify({
       ...(colWidths ? { width: colWidths.slice(col, col + (span?.colSpan || 1)).reduce((sum, width) => sum + width, 0) } : {}),
-      applyInnerMargin: true, paddingTop: 220,
-      paddingBottom: runs.some((run) => run.kind === 'equation' && /\\(?:frac|sum|int)|cases\{/u.test(run.script)) ? 1000 : 220,
+      applyInnerMargin: true, paddingTop: typography.cellPadding,
+      paddingBottom: typography.cellPadding,
     })), '표 칸의 크기를 설정하지 못했습니다.');
+    const listCell = table.rows[0].length === 1 && runs.some(run => run.kind === 'text' && /(?:^|\n)\s*[◦○∙•·ㆍ]/u.test(run.value));
     const paragraphs = [[]];
     for (const run of runs) {
       if (run.kind === 'equation') paragraphs.at(-1).push(run);
@@ -66,14 +69,16 @@ export function insertDataTable(document, index, table, equationScript) {
         const scratch = parent + 1;
         checked(document.insertParagraph(0, scratch), '표 수식의 작업 문단을 만들지 못했습니다.');
         try {
-          checked(document.insertEquation(0, scratch, 0, equationScript(equation.script), 1200, 0), '표 수식을 만들지 못했습니다.');
+          checked(document.insertEquation(0, scratch, 0, equationScript(equation.script), typography.equation, 0), '표 수식을 만들지 못했습니다.');
           JSON.parse(document.copySelection(0, scratch, 0, scratch, 1));
           checked(document.pasteInternalInCell(0, parent, control, cellIndex, para, equation.offset), '표 수식을 넣지 못했습니다.');
         } finally { document.deleteParagraph(0, scratch); }
       }
+      checked(document.applyCharFormatInCell(0, parent, control, cellIndex, para, 0,
+        document.getCellParagraphLength(0, parent, control, cellIndex, para),
+        JSON.stringify(bodyCharFormat)), '표 글자 크기를 설정하지 못했습니다.');
       checked(document.applyParaFormatInCell(0, parent, control, cellIndex, para,
-        JSON.stringify({ alignment: 'center', lineSpacing: 180, lineSpacingType: 'Percent',
-          spacingAfter: contents.some((run) => run.kind === 'equation' && /\\(?:frac|sum|int)|cases\{/u.test(run.script)) ? 700 : 0 })), '표 문단을 정렬하지 못했습니다.');
+        JSON.stringify({ ...paragraphFormat, alignment: listCell ? 'left' : 'center' })), '표 문단을 정렬하지 못했습니다.');
     }
     cellIndex += 1;
   }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { stackTextFractions } from './live-convert.mjs';
+import { stackTextFractions, attachTextCharges, lineRuns } from './live-convert.mjs';
 import { legacyText, attachedScript } from './legacy-glyphs.mjs';
 
 const text = (value, x, y, width = 5.5, height = 11.5) => ({ value, raw: value, x, y, width, height, math: false });
@@ -38,3 +38,17 @@ test('a raised subscript glyph is printed as a superscript', () => {
   assert.ok(attachedScript.test('ʰ') && attachedScript.test('ᵐ') && attachedScript.test('₂'));
 });
 
+
+// Source coordinates from b1_2025_11_20, page 4. No formula is inferred from chemistry.
+test('ordinary-font charges remain attached to the observed chemical text baseline', () => {
+  for (const [base, x, y, width, height, charge, cx, cy, cw, ch, expected] of [
+    ['(NH4', 610.74, 373.0191, 17.34, 9.27, '＋', 628.08, 376.9791, 5.1, 6.05, '(NH4⁺)'],
+    ['(NO3', 612.1249325, 248.2321, 22.7351915, 11.5, '－', 634.860124, 253.3159, 6.839876, 7.36, '(NO3⁻)'],
+  ]) {
+    const items = attachTextCharges([text(base,x,y,width,height), text(charge,cx,cy,cw,ch), text(')',cx+cw,y,3,height)]);
+    assert.equal(items[1].y,y);
+    assert.equal(lineRuns({y,items}).map(r=>r.value).join(''),expected);
+    const ordinary = text('+',cx,y,cw,height);
+    assert.deepEqual(attachTextCharges([text(base,x,y,width,height),ordinary])[1],ordinary);
+  }
+});

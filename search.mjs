@@ -1,3 +1,5 @@
+import { matchesPaper } from './paper-profile.mjs';
+
 export function normalize(value) {
   return String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko');
 }
@@ -63,6 +65,7 @@ export function searchQuestions(items, query, filters = {}) {
     if (filters.subject && item.subject !== filters.subject) return false;
     if (item.year < yearFrom || item.year > yearTo) return false;
     if (month && item.month !== month) return false;
+    if (!matchesPaper(item, filters)) return false;
     const curriculum = item.curriculum || {};
     // A mismatched legacy link cannot qualify a framework, unit, or standard filter.
     if ((filters.framework || filters.unit || filters.standard) && curriculumYearMismatch(item)) return false;
@@ -117,20 +120,19 @@ export function searchFiles(files, questions, query, filters = {}) {
   const eligible = files.filter((file) => (!filters.group || subjectGroup(file.subject).value === filters.group)
     && (!filters.subject || file.subject === filters.subject)
     && file.year >= yearFrom && file.year <= yearTo && (!month || file.month === month));
-  if (!tokens.length) {
-    if (filters.framework || filters.unit || filters.standard) {
-      const matches = new Map();
-      for (const item of searchQuestions(questions, '', filters)) {
-        const current = matches.get(item.pdfFile);
-        if (current) current.matchedCount += 1;
-        else matches.set(item.pdfFile, { matchedCount: 1, firstMatchPage: item.page || 1 });
-      }
-      return eligible.filter((file) => matches.has(file.pdfFile))
-        .map((file) => ({ ...file, ...matches.get(file.pdfFile) }));
-    }
-    return eligible.map((file) => ({ ...file, matchedCount: file.questionCount, firstMatchPage: 1 }));
+  const counts = new Map();
+  for (const item of questions) if (matchesPaper(item, filters)) {
+    const entry = counts.get(item.pdfFile) || { questionCount: 0, firstMatchPage: item.page || 1 };
+    entry.questionCount += 1;
+    entry.firstMatchPage = Math.min(entry.firstMatchPage, item.page || 1);
+    counts.set(item.pdfFile, entry);
   }
-  const byName = new Map(eligible.map((file) => [file.pdfFile, file]));
+  const scoped = eligible.filter((file) => file.questionCount === 0 || counts.has(file.pdfFile))
+    .map((file) => ({ ...file, ...(counts.get(file.pdfFile) || {}) }));
+  if (!tokens.length && !filters.framework && !filters.unit && !filters.standard) {
+    return scoped.map((file) => ({ ...file, matchedCount: file.questionCount }));
+  }
+  const byName = new Map(scoped.map((file) => [file.pdfFile, file]));
   const matches = new Map();
   for (const item of searchQuestions(questions, query, filters)) {
     if (!byName.has(item.pdfFile)) continue;
@@ -140,7 +142,7 @@ export function searchFiles(files, questions, query, filters = {}) {
   }
   return [...matches].map(([name, match]) => ({ ...byName.get(name), ...match }));
 }
-export function fileQuestions(questions, pdfFile, page = null) {
-  return questions.filter((item) => item.pdfFile === pdfFile && (page === null || item.page === page))
+export function fileQuestions(questions, pdfFile, page = null, filters = { allProfiles: true }) {
+  return questions.filter((item) => item.pdfFile === pdfFile && (page === null || item.page === page) && matchesPaper(item, filters))
     .sort((a, b) => a.page - b.page || a.no - b.no || a.id.localeCompare(b.id));
 }

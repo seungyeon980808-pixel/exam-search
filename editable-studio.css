@@ -1,0 +1,33 @@
+/* Compact chrome for the exam comparison embed. The standalone studio is unchanged. */
+#menu-bar { height: 28px; min-height: 28px; }
+#icon-toolbar { height: 36px; min-height: 36px; }
+#icon-toolbar .tb-btn { flex-direction: row; gap: 3px; min-height: 30px; padding: 2px 4px; }
+#icon-toolbar .tb-label br { display: none; }
+#style-bar { padding-top: 3px; padding-bottom: 3px; row-gap: 3px; }
+@media (pointer: coarse) {
+  #menu-bar { height: 40px; min-height: 40px; }
+  #icon-toolbar { height: 44px; min-height: 44px; }
+  #icon-toolbar .tb-btn { min-height: 36px; }
+}
+/* Keep real Studio menus and controls in a single format row. */
+#studio-header { display: grid; grid-template-columns: 66px minmax(0, 1fr); align-items: center; background: var(--ui-bg-light); border-bottom: 1px solid var(--ui-border); }
+#exam-document-menu { position: relative; margin-left: 6px; }
+#exam-document-menu > summary { display: flex; align-items: center; height: 32px; padding: 0 7px; border-radius: 3px; cursor: pointer; list-style: none; white-space: nowrap; }
+#exam-document-menu > summary::-webkit-details-marker { display: none; }
+#exam-document-menu[open] > summary, #exam-document-menu > summary:hover { background: var(--ui-selected); }
+#exam-document-menu > #menu-bar { position: absolute; z-index: 1000; top: 100%; left: 0; display: flex; flex-direction: column; align-items: stretch; height: auto; min-height: 0; width: 90px; padding: 4px; border: 1px solid var(--ui-border); background: var(--ui-surface); box-shadow: var(--shadow-dropdown); }
+#exam-document-menu:not([open]) > #menu-bar { display: none; }
+#exam-document-menu .menu-title { display: block; padding: 3px 9px; }
+#exam-document-menu .menu-dropdown { top: 0; left: 100%; }
+#exam-document-menu .menu-toolbox-toggle { width: 100%; flex-basis: 24px; margin-left: 0; }
+#icon-toolbar { grid-column: 1 / -1; grid-row: 2; }
+#style-bar { grid-column: 2; grid-row: 1; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; height: 36px; min-height: 36px; padding: 3px 6px; border-bottom: 0; overflow-x: auto; scrollbar-width: none; }
+#style-bar .sb-field-ribbon-group { flex: 0 0 365px; width: 365px; min-width: 365px; }
+#style-bar .sb-field-grid { display: grid; grid-template-columns: 60px 48px 110px 68px 63px; gap: 4px; width: 365px; max-width: none; }
+#style-bar .sb-field-label, #style-bar .sb-ribbon-label { display: none; }
+#style-bar .sb-command-track, #style-bar .sb-command-band { flex-wrap: nowrap; flex-shrink: 0; gap: 3px; }
+#style-bar .sb-btn { width: 27px; min-width: 27px; height: 28px; }
+:root[data-exam-paper-view="column"] #scroll-container { overflow-x: hidden; }
+:root[data-exam-paper-view="column"] #scroll-content > .document-page-canvas,
+:root[data-exam-paper-view="column"] #scroll-content > .page-placeholder,
+:root[data-exam-paper-view="column"] #scroll-content > [data-rhwp-overlay-page] { clip-path: inset(0 var(--exam-column-crop, 45%) 0 var(--exam-column-left-crop, 0%)); }

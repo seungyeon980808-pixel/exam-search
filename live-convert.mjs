@@ -1,11 +1,14 @@
-import { readQuestionPdf } from './pdf-viewer.mjs';
+import { readQuestionPdf } from './pdf-viewer.mjs?v=preview-crop-20261004-1';
+import { questionFigures } from './figure-fallback.mjs?v=preview-crop-20261004-1';
+import { observedContentRegions } from './content-integrity.mjs?v=readability-20261004-4';
+import { appendLineRuns } from './prose-flow.mjs?v=readability-20261004-4';
 import { inQuestion, verifiedGlyphMap } from './live-fonts.mjs';
-import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from './live-equations.mjs';
+import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from './live-equations.mjs?v=typography-20261003-3';
 import { attachedScript, legacyTable, legacyText } from './legacy-glyphs.mjs';
-import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs';
+import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs?v=readability-20261004-4';
 import { recoverQuestionRegion } from './question-region.mjs';
 // --- data-table hook
-import { extractTables, tableFlow, restoreTableBlocks } from './live-tables.mjs';
+import { extractTables, tableFlow, restoreTableBlocks } from './live-tables.mjs?v=readability-20261004-4';
 
 function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {
@@ -132,6 +135,22 @@ export function attachTextScripts(items, recoverBases = true) {
   return items.flatMap((item, index) => consumed.has(item) ? [] : [promoted.get(item) || textScripts[index]]);
 }
 
+/** Ordinary-font ion charges are positioned above their chemical base in modern PDFs. */
+export function attachTextCharges(items) {
+  const superscript = { '+': '⁺', '＋': '⁺', '-': '⁻', '−': '⁻', '－': '⁻',
+    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+  return items.map((item) => {
+    if (item.math || !/^[0-9]{0,2}[+＋−－-]$/u.test(item.value.trim())) return item;
+    const base = items.filter((other) => other !== item && !other.math
+      && /(?:[A-Z][a-z]?[0-9₀-₉]*)+$/u.test(other.value.trim())
+      && item.height > 0 && item.height <= other.height * 0.8
+      && item.y - other.y >= other.height * 0.2 && item.y - other.y <= other.height * 0.7
+      && item.x - other.x - other.width >= -0.8 && item.x - other.x - other.width <= 1.5)
+      .sort((a, b) => Math.abs(item.x - a.x - a.width) - Math.abs(item.x - b.x - b.width))[0];
+    return base ? { ...item, y: base.y, value: [...item.value.trim()].map((char) => superscript[char]).join('') } : item;
+  });
+}
+
 function clipItems(question, pdf, glyphs) {
   const advances = new Map(pdf.glyphs?.map((glyph) =>
     [`${glyph.fontId}:${glyph.codepoint}`, glyph.advance]) || []);
@@ -141,9 +160,11 @@ function clipItems(question, pdf, glyphs) {
   const fontOf = (item) => pdf.fonts[item.fontName]?.name;
   // Labels drawn inside figures (axes, points, captions of drawings) are not question text.
   let regions = [];
+  let primitives = [];
   if (pdf.operations && pdf.OPS) {
     try {
-      regions = figureRegions(drawingPrimitives(pdf.operations, pdf.OPS, pdf.pageHeight), pdf.content.items, pdf.pageHeight);
+      primitives = drawingPrimitives(pdf.operations, pdf.OPS, pdf.pageHeight);
+      regions = figureRegions(primitives, pdf.content.items, pdf.pageHeight);
     } catch { regions = []; }
   }
   const inQuestionItems = source.filter((item) => inQuestion(item, question, pdf.pageHeight));
@@ -166,6 +187,8 @@ function clipItems(question, pdf, glyphs) {
   const clipped = inQuestionItems.filter((item) => !dropped.has(item));
   // Lets buildLiveStructure know figure labels were removed from this question.
   clipItems.lastDropped = dropped.size;
+  clipItems.lastRegions = regions;
+  clipItems.lastPrimitives = primitives;
   // Legacy symbol glyphs double as subscripts and superscripts: the same glyph printed on the
   // baseline is a subscript and raised it is a superscript. Measure each script-only item
   // against the nearest item holding ordinary letters or digits.
@@ -182,7 +205,7 @@ function clipItems(question, pdf, glyphs) {
       .sort((a, b) => gap(a) - gap(b) || b.height - a.height
         || Math.abs(a.transform[5] - item.transform[5]) - Math.abs(b.transform[5] - item.transform[5]))[0] || null;
   };
-  return attachTextScripts(clipped
+  return attachTextScripts(attachTextCharges(clipped
     .flatMap((item) => {
       const scriptOf = scriptBase(item);
       const offset = scriptOf ? (item.transform[5] - scriptOf.transform[5]) / scriptOf.height : null;
@@ -208,7 +231,7 @@ function clipItems(question, pdf, glyphs) {
         x += width;
         return part;
       });
-    }), false);
+    })), false);
 }
 
 function findLines(items) {
@@ -396,7 +419,7 @@ export function stackTextFractions(items) {
   return [...items.filter((item) => !used.has(item) || restored.has(item)), ...kept];
 }
 
-export function buildLiveStructure(question, pdf, glyphs) {
+export function buildLiveStructure(question, pdf, glyphs, options = {}) {
   // --- data-table hook: keep cell equations out of the surrounding line grouping.
   const flow = tableFlow(extractTables(clipItems(question, pdf, glyphs), pdf, question), pdf.pageHeight,
     (items) => findLines(recoverStretchyBrackets(recoverPiecewiseItems(items))).flatMap((line, index) =>
@@ -404,6 +427,19 @@ export function buildLiveStructure(question, pdf, glyphs) {
   const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(flow.items))));
   const figureDropped = clipItems.lastDropped > 0;
   const blocks = [];
+  const tops = new WeakMap();
+  let sourceTop = 0;
+  let sourceLine;
+  const append = (block) => {
+    if (block.role !== 'choice') block.sourceLine = sourceLine;
+    tops.set(block, sourceTop); blocks.push(block);
+  };
+  let figures = [];
+  let figureWarning = '';
+  if (options.includeImages !== false) {
+    try { figures = questionFigures(question, pdf, clipItems.lastRegions); }
+    catch (error) { figureWarning = `그림 영역 분석에 실패해 그림을 제외했습니다: ${error instanceof Error ? error.message : String(error)}`; }
+  }
   let role = 'stem';
   let choiceCount = 0;
   let markers = 0;
@@ -461,11 +497,17 @@ export function buildLiveStructure(question, pdf, glyphs) {
   const opening = sourceLines.find(({ plain }) => ownNumber.test(plain));
   const questionLeft = opening ? Math.min(...opening.line.items.map((item) => item.x)) : question.box?.[0];
   for (const line of lines) {
+    sourceTop = pdf.pageHeight - line.y;
     if (!line.items.length) continue;
     // Old KICE fonts insert a backtick as a thin spacer; it is never printed.
     const runs = lineRuns(line).map((run) => run.kind === 'text' ? { ...run, value: run.value.replace(/\u0060/gu, '') } : run)
       .filter((run) => run.kind !== 'text' || run.value);
     const plain = runs.map((run) => run.kind === 'text' ? run.value : '').join('').trim();
+    sourceLine = { left: Math.min(...line.items.map((item) => item.x)),
+      right: Math.max(...line.items.map((item) => item.x + item.width)), y: line.y,
+      height: Math.max(...line.items.filter((item) => !item.math).map((item) => item.height), 1),
+      columnRight: question.box?.[2] || pdf.pageWidth,
+      region: JSON.stringify([question.pdfFile, question.page, question.box]), opening: ownNumber.test(plain) };
     if (!runs.length || /^[<〈]\s*보\s*기\s*[>〉]$/u.test(plain)) continue;
     if ((choiceCount === 5 || inlineFifthSeen) && /\d\s*권\s*중\s*\d\s*권/u.test(plain)) break;
     const nextNumber = plain.match(/^(\d{1,2})\.(?!\d)/u)?.[1]
@@ -493,7 +535,7 @@ export function buildLiveStructure(question, pdf, glyphs) {
     }
     if (inlineChoices) {
       if (plain.includes('⑤')) inlineFifthSeen = true;
-      blocks.push({ role: 'stem', label: '', runs });
+      append({ role: 'stem', label: '', runs });
       continue;
     }
     previousLine = line;
@@ -504,7 +546,7 @@ export function buildLiveStructure(question, pdf, glyphs) {
       const label = plain[0];
       const first = runs.find((run) => run.kind === 'text');
       first.value = first.value.replace(/^\s*[ㄱㄴㄷ]\.\s*/u, '');
-      blocks.push({ role, label, runs });
+      append({ role, label, runs });
       continue;
     }
     let current = role;
@@ -512,13 +554,14 @@ export function buildLiveStructure(question, pdf, glyphs) {
     if (answerRow && line.y > answerRow.y) {
       if (/^[①②③④⑤]/u.test(plain) && blocks.at(-1)?.role === role) {
         blocks.at(-1).runs.push({ kind: 'text', value: ' ' }, ...runs);
-      } else blocks.push({ role, label: '', runs });
+      } else append({ role, label: '', runs });
       continue;
     }
     const lineHasMarker = runs.some((run) => run.kind === 'text' && /[①②③④⑤]/u.test(run.value));
     if (role === 'choice' && !lineHasMarker) {
       // Wrapped choice text or figure labels continue the previous choice.
-      blocks.findLast((block) => block.role === 'choice')?.runs.push({ kind: 'text', value: ' ' }, ...runs);
+      const last = blocks.findLast((block) => block.role === 'choice');
+      if (last) last.runs = appendLineRuns(last.runs, runs, question.questionText || question.text || '');
       continue;
     }
     const flush = () => {
@@ -526,9 +569,9 @@ export function buildLiveStructure(question, pdf, glyphs) {
       if (current === 'choice') {
         const label = '①②③④⑤'[choiceCount++];
         const own = !currentRuns.some((run) => run.kind === 'equation' ? run.script?.trim() : run.value?.trim());
-        blocks.push({ role: current, label, runs: currentRuns, own });
+        append({ role: current, label, runs: currentRuns, own });
       } else {
-        blocks.push({ role: current, label: '', runs: currentRuns });
+        append({ role: current, label: '', runs: currentRuns });
       }
       currentRuns = [];
     };
@@ -540,7 +583,7 @@ export function buildLiveStructure(question, pdf, glyphs) {
         if (/^[①②③④⑤]$/u.test(part)) {
           flush();
           if (current === 'choice' && !currentRuns.length && role === 'choice' && markers > choiceCount) {
-            blocks.push({ role: 'choice', label: '①②③④⑤'[choiceCount++], runs: [], own: true });
+            append({ role: 'choice', label: '①②③④⑤'[choiceCount++], runs: [], own: true });
           }
           markers += 1;
           current = 'choice';
@@ -550,10 +593,11 @@ export function buildLiveStructure(question, pdf, glyphs) {
     }
     flush();
     if (current === 'choice' && markers > choiceCount) {
-      blocks.push({ role: 'choice', label: '①②③④⑤'[choiceCount++], runs: [], own: true });
+      append({ role: 'choice', label: '①②③④⑤'[choiceCount++], runs: [], own: true });
     }
   }
   const notes = ['원본 PDF에서 브라우저가 변환했습니다. 그림·도표는 생략했습니다.'];
+  if (figureWarning) notes.push(figureWarning);
   const choices = blocks.filter((block) => block.role === 'choice');
   // Drawn choices keep only axis ticks or stray labels, even after wrapped lines are joined.
   const token = (run) => run.kind === 'equation' ? run.script.trim() : run.value.trim();
@@ -589,8 +633,12 @@ export function buildLiveStructure(question, pdf, glyphs) {
   // --- data-table hook
   blocks.splice(0, blocks.length, ...restoreTableBlocks(blocks, flow.tables));
   return { schema: 'exam-editable-v1', questionId: question.id,
+    subject: question.subject, flowReference: question.questionText || question.text || '',
     title: question.title, number: question.no, sourcePdf: question.pdfFile,
     page: question.page, status: 'needs_review', blocks,
+    contentRegions: observedContentRegions(question, pdf, clipItems.lastPrimitives, clipItems.lastRegions, figures, blocks, options.includeImages !== false),
+    figureFallbacks: figures.map((figure) => ({ ...figure, afterBlock: blocks.findLastIndex((block) =>
+      tops.has(block) && tops.get(block) <= (figure.flowBox || figure.box)[3] + 2) })),
     notes, ...(inlineChoices ? { inlineChoices: true } : {}) };
 }
 
@@ -630,25 +678,33 @@ function locate(question, pdf) {
   return { ...question, box };
 }
 
-export async function convertQuestionNow(question) {
-  const pdf = await readQuestionPdf(question);
+export async function convertQuestionNow(question, options = {}) {
+  const check = () => options.signal?.throwIfAborted();
+  const build = (item, page, glyphs) => {
+    check();
+    return buildLiveStructure(item, page, glyphs, options);
+  };
+  check();
+  const pdf = await readQuestionPdf(question, options);
+  check();
   const primary = async () => {
     try {
       const glyphs = await verifiedGlyphMap(question, pdf);
-      return buildLiveStructure(question, pdf, glyphs);
+      return build(question, pdf, glyphs);
     } catch (error) {
       // Older indexes sometimes point at the wrong column or stop before the choices.
       const located = locate(question, pdf);
       if (!located) throw error;
       const glyphs = await verifiedGlyphMap(located, pdf);
-      const structure = buildLiveStructure(located, pdf, glyphs);
+      check();
+      const structure = build(located, pdf, glyphs);
       structure.notes.push('색인의 문항 영역이 원본과 달라 원본 PDF의 문항 번호 위치로 다시 찾았습니다.');
       return structure;
     }
   };
   // --- question-region hook: continuation into the next column/page, extended boxes and
   // picture choices, tried only when the primary result fails to split or has an empty choice.
-  return recoverQuestionRegion(question, pdf, primary, { build: buildLiveStructure, glyphMap: verifiedGlyphMap,
-    readPage: (page) => readQuestionPdf({ ...question, page }) });
+  return recoverQuestionRegion(question, pdf, primary, { build, glyphMap: verifiedGlyphMap,
+    readPage: (page) => { check(); return readQuestionPdf({ ...question, page }, options); } });
   // --- end question-region hook
 }

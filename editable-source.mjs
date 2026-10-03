@@ -1,5 +1,7 @@
-import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs';
-import { passageBlocks, passageKey } from './shared-passage.mjs';
+import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=readability-20261004-4';
+import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=preview-crop-20261004-1';
+import { passageBlocks, passageKey } from './shared-passage.mjs?v=preview-crop-20261004-1';
+import { finalizeContentQuality } from './content-quality.mjs?v=readability-20261004-4';
 
 let indexPromise;
 export async function editableEntries() {
@@ -12,8 +14,8 @@ export async function editableEntries() {
   return indexPromise;
 }
 
-async function readPrepared(path) {
-  const response = await fetch(new URL(path, import.meta.url));
+async function readPrepared(path, { signal } = {}) {
+  const response = await fetch(new URL(path, import.meta.url), { signal });
   if (!response.ok) throw new Error('문항의 편집 데이터를 불러오지 못했습니다.');
   return response.json();
 }
@@ -34,34 +36,49 @@ export function preparedParagraphs(question, prepared) {
 }
 
 export async function resolveEditableContent(question, dependencies = {}) {
+  // Native text is the dependable default. Image work is enabled only by an explicit
+  // conversion option, including when prepared data already contains figure controls.
+  const includeImages = dependencies.includeImages === true;
+  dependencies = { ...dependencies, includeImages };
   const check = () => dependencies.signal?.throwIfAborted();
   check();
   const entry = (await (dependencies.entries || editableEntries)())[question.id];
   check();
   // Shared passages precede the independently validated question paragraphs.
-  const result = async (paragraphs, provenance, warnings = [], inlineChoices = false) => {
+  const result = async (paragraphs, provenance, warnings = [], inlineChoices = false, quality) => {
     warnings = [...warnings];
     const validatedQuestion = { ...question, inlineChoices };
     validateQuestionParagraphs(paragraphs, validatedQuestion);
     const passage = await passageBlocks(question, { ...dependencies, notes: warnings });
     check();
+    quality = quality || { state: provenance === 'index-draft' ? 'incomplete' : 'unverified',
+      scope: 'observed-source-regions', regions: [], unresolvedCount: 0, excludedCount: 0 };
+    if (warnings.some((note) => /공통 지문을 제외했습니다/u.test(note))) quality = { ...quality, state: 'incomplete' };
+    if (passage.length) quality = { ...quality, passageRequiresReview: true };
     if (passage.length) paragraphs = [...passage.map((block) => block.runs), [], ...paragraphs];
     return { questionId: question.id, question: validatedQuestion,
       // The passage paragraphs and their blank separator; one [n～m] set shares the same key.
       ...(passage.length ? { questionParagraphStart: passage.length + 1, passageKey: passageKey(question) } : {}),
       sourceLabel: question.title || `${question.pdfFile} ${question.no}번`,
-      paragraphs, provenance, warnings, status: 'needs_review' };
+      paragraphs, provenance, warnings: [...new Set(warnings)], quality, status: 'needs_review' };
   };
   if (entry?.status === 'needs_review' && entry.source) {
-    const prepared = await (dependencies.readPrepared || readPrepared)(entry.source);
+    let prepared = await (dependencies.readPrepared || readPrepared)(entry.source, { signal: dependencies.signal });
     check();
-    return result(preparedParagraphs(question, prepared), 'prepared', prepared.notes || [], prepared.inlineChoices === true);
+    // Validate identity, equations and choices before optional drawing work. A bad
+    // native question must never be disguised as an illustration warning.
+    const native = withoutFigures(prepared);
+    preparedParagraphs(question, native);
+    prepared = includeImages ? await restoreFigures(question, prepared, { ...dependencies, bestEffort: true }) : native;
+    check();
+    const audit = finalizeContentQuality(prepared, { includeImages, sourcePage: question.page });
+    return result(preparedParagraphs(question, prepared), 'prepared', [...(prepared.notes || []), ...audit.warnings], prepared.inlineChoices === true, audit.quality);
   }
   let prepared;
   try {
-    const convert = dependencies.convert || (await import('./live-convert.mjs')).convertQuestionNow;
+    const convert = dependencies.convert || (await import('./live-convert.mjs?v=readability-20261004-4')).convertQuestionNow;
     check();
-    prepared = await convert(question);
+    prepared = await convert(question, { includeImages, signal: dependencies.signal });
     check();
   } catch (error) {
     check();
@@ -74,5 +91,10 @@ export async function resolveEditableContent(question, dependencies = {}) {
       '색인 텍스트 초안입니다. 수식·선지를 원본 PDF와 확인하세요.',
     ]);
   }
-  return result(preparedParagraphs(question, prepared), 'pdf', prepared.notes || [], prepared.inlineChoices === true);
+  const native = withoutFigures(prepared);
+  preparedParagraphs(question, native);
+  prepared = includeImages ? await restoreFigures(question, prepared, { ...dependencies, bestEffort: true }) : native;
+  check();
+  const audit = finalizeContentQuality(prepared, { includeImages, sourcePage: question.page });
+  return result(preparedParagraphs(question, prepared), 'pdf', [...(prepared.notes || []), ...audit.warnings], prepared.inlineChoices === true, audit.quality);
 }

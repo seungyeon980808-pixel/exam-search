@@ -31,4 +31,3 @@ test('a tall closing parenthesis after a fraction is not a subscript', () => {
   const text = recoverEquationItems(items, 913.9).map((item) => item.value).join('');
   assert.equal(text, '(x+\\frac{{\\pi}}{3})');
 });
-

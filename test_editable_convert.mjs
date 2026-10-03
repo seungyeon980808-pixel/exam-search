@@ -14,6 +14,12 @@ test('visible sequence braces remain delimiters, not HWP grouping braces', () =>
   assert.equal(contentRuns(String.raw`$\{a_{n}\}$`)[0].script, 'LEFT {a_{n}RIGHT }');
 });
 
+test('indexed radical uses native ROOT index OF body notation after HWPX roundtrip', async () => {
+  assert.equal(contentRuns(String.raw`$\sqrt[3]{9}$`)[0].script, 'root {3} of {9}');
+  const bytes = await createEditableHwpx({ no: 1, responseType: 'short_answer', text: String.raw`1. 값은 $\sqrt[3]{9}$이다.` });
+  assert.deepEqual(documentScripts(bytes), ['root {3} of {9}']);
+});
+
 test('indexed question separates stem, claims and five inline choices', () => {
   const question = index.items.find((item) => item.id === 'p1_2027_06_01');
   const lines = paragraphsForText(question.text, question.no).map((runs) => runs.map((run) => run.value).join(''));
@@ -30,7 +36,7 @@ test('formula markup becomes a native editable equation after HWPX roundtrip', a
   const bytes = await createEditableHwpx({ no: 6, text: source });
   const document = new HwpDocument(bytes);
   try {
-    assert.match(document.getTextRange(0, 0, 0, 100), /6\. 속력은 이다\./u);
+    assert.match(document.getTextRange(0, 1, 0, 100), /6\. 속력은 이다\./u);
     const controls = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
     assert.equal(controls.length, 1);
     const equation = JSON.parse(document.getEquationProperties(
@@ -131,7 +137,7 @@ test('explicit short-answer mathematics preserves an editable equation without f
   try {
     const controls = JSON.parse(document.getControls()).filter((control) => control.ctrlId === 'eqed');
     assert.equal(controls.length, 1);
-    assert.doesNotMatch(document.getTextRange(0, 0, 0, 200), /[①②③④⑤]/u);
+    assert.doesNotMatch(document.getTextRange(0, 1, 0, 200), /[①②③④⑤]/u);
     assert.match(JSON.parse(document.getEquationProperties(controls[0].list, controls[0].para,
       controls[0].controlIndex, -1, -1)).script, /x\^\{2\}/u);
   } finally { document.free(); }
@@ -187,7 +193,7 @@ test('2027 June question 18 restores fractions and subscripts as editable equati
   try {
     // Equations inside the <보기> table are edited through the table cell address.
     const table = JSON.parse(document.getControls()).find((control) => control.ctrlId === 'tbl');
-    const cell = [0, table.para, table.controlIndex, 0, 1];
+    const cell = [0, table.para, table.controlIndex, 0, 0];
     assert.equal(JSON.parse(document.getEquationProperties(...cell)).script, 'v_{0} = {{1} over {14}}gt_{0}');
     const changed = JSON.parse(document.setEquationProperties(...cell, JSON.stringify({ script: 'v_{0}={1} over {7}gt_{0}' })));
     assert.equal(changed.ok, true);
@@ -225,6 +231,6 @@ test('prepared JSON opens directly as editable HWPX without a stored binary', as
   try {
     const table = JSON.parse(document.getControls()).find((control) => control.ctrlId === 'tbl');
     assert.ok(table, '<보기>는 표 상자로 들어가야 합니다.');
-    assert.equal(document.getCellParagraphCount(0, table.para, table.controlIndex, 0), 4);
+    assert.equal(document.getCellParagraphCount(0, table.para, table.controlIndex, 0), 3);
   } finally { document.free(); }
 });

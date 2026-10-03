@@ -6,8 +6,18 @@ import { buildLiveStructure } from './live-convert.mjs';
 const item = (value, x, y, width = 5, height = 10) => ({ value, raw: value, x, y, width, height, math: true });
 const bar = (x, y, width) => ({ ...item('\\frac', x, y, width, 1), raw: '\ue06d' });
 const root = (x, y) => ({ ...item('\\sqrt', x, y), raw: '\ue05c' });
+
+const indexedRoot = [
+  { ...root(107.28, 896.1591), width: 11.04, height: 12 },
+  item('3', 109.56, 900.5391, 2.76, 5.52),
+  { ...bar(117.60, 898.9191, 7.14), height: 10.98 },
+  item('9', 117.78, 895.3191, 5.52, 10.98),
+];
 const head = (x, y) => ({ ...item('\\vec', x, y), raw: '\ue06e' });
 const scenarios = [
+  ['actual 2021 ga1 preserves cube-root index', indexedRoot, 895.019, '\\sqrt[3]{9}'],
+  ['full-size factor preceding square root is not its index',
+    [item('3', 99, 895.3191, 5.52, 10.98), ...indexedRoot.filter((part) => part.height !== 5.52)], 895.019, '3\\sqrt{9}'],
   ['captured 2021 September ga25 adjacent lim and sum own separate lower limits', [item('lim', 115.4, 531.9, 18.7, 13.2), item('n', 114.1, 523.3, 4.5, 7.5), item('→', 119.6, 523.3, 7.4, 7.5), item('∞', 128, 523.3, 7.4, 7.5), item('\\sum', 138.1, 529.3, 14.3, 19.8), item('k', 136.9, 522.7, 3.9, 7.5), item('=', 142.1, 523.1, 5.8, 7.5), item('1', 149.7, 522.7, 3.7, 7.5), item('n', 142.9, 544.8, 4.5, 7.5), item('a', 154.6, 532.5, 6, 11)], 532.5, '\\lim_{n→∞}\\sum_{k=1}^{n}a'],
   ['captured 2020 November ga30 exponent overlaps the tall closing brace advance', [item('\\{', 540.1, 966.8, 6.4, 25.8), item('f', 545.4, 970.9, 5.4, 11), { ...item('′', 552, 970.9, 3, 11), math: false }, item('(', 555, 966.8, 4.3, 25.8), { ...bar(559.9, 967.4, 8.8), height: 11 }, item('1', 561.7, 978.1, 5.5, 11), item('3', 561.7, 963.6, 5.5, 11), item(')', 569.8, 966.8, 4.3, 25.8), item('\\}', 573.5, 966.8, 6.4, 25.8), item('2', 578.8, 983, 3.7, 7.5)], 970.6, '\\{f′(\\frac{1}{3})\\}^{2}'],
   ['captured 2021 November na20 integral cannot claim the preceding square', [item('x', 510.5, 921, 6.3, 11), item('2', 517.4, 925.9, 3.7, 7.5), item('\\int', 521.2, 917.9, 13.5, 22), item('x', 535.3, 931.7, 4.2, 7.5), item('0', 532.5, 911.3, 3.7, 7.5), item('f(t)dt', 539.9, 921, 29.3, 11)], 921.5, 'x^{2}\\int_{0}^{x}f(t)dt'],

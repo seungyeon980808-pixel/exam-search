@@ -1,4 +1,4 @@
-import { drawingPrimitives, tableGrids, textItemBox } from './pdf-drawings.mjs';
+import { drawingPrimitives, tableGrids, textItemBox } from './pdf-drawings.mjs?v=readability-20261004-4';
 import { recoverEquationItems } from './live-equations.mjs';
 
 const contains = (box, x, y) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
@@ -53,7 +53,7 @@ export function tableFlow(extracted, pageHeight, toRuns) {
         const items = cell.items.length && cell.items.every((item) => item.math) && cell.items.some((item) => /\uE06D/u.test(item.raw))
           ? recoverEquationItems(cell.items, baseline) : cell.items;
         rows[cell.row][cell.col] = toRuns(items).map((run) => run.kind === 'text'
-          ? { ...run, value: run.value.replace(/\u0060/gu, '') } : run);
+          ? { ...run, value: run.value.replace(/\u0060/gu, '').replace(/(^|\n)∙(?=[가-힣])/gu, '$1·') } : run);
       }
     } catch {
       // Table extraction is optional: retain today's complete line flow if a cell is ambiguous.
@@ -64,6 +64,24 @@ export function tableFlow(extracted, pageHeight, toRuns) {
     return [{ kind: 'table', rows, spans: table.cells.map(({ row, col, rowSpan, colSpan }) => ({ row, col, rowSpan, colSpan })),
       widths: xs.slice(1).map((x, col) => x - xs[col]), box: table.box, marker: `\uFFFCtable${index}\uFFFC` }];
   });
+  // Captions centred just below their own ruled panel move with that panel. Keeping
+  // them in the page-wide baseline flow would combine '(가) (나)' after both tables.
+  for (const table of tables) {
+    const candidates = rest.filter((item) => item.value.trim()
+      && item.x + item.width / 2 > table.box[0] && item.x + item.width / 2 < table.box[2]
+      && pageHeight - item.y - table.box[3] >= 0
+      && pageHeight - item.y - table.box[3] <= Math.max(18, item.height * 1.8)).sort((a,b) => a.x-b.x);
+    if (!candidates.length || candidates.some((item, i) => Math.abs(item.y-candidates[0].y)>1.5
+      || (i && item.x-candidates[i-1].x-candidates[i-1].width>2))) continue;
+    const caption = candidates.map((item) => item.value.trim()).join('');
+    if (!/^\([가-힣]\)$/u.test(caption)) continue;
+    const middle = (candidates[0].x + candidates.at(-1).x + candidates.at(-1).width)/2;
+    // One caption cannot belong to overlapping/nested tables.
+    if (tables.some((other) => other !== table && middle > other.box[0] && middle < other.box[2]
+      && Math.abs(other.box[3] - table.box[3]) < 4)) continue;
+    table.caption = caption;
+    for (const item of candidates) rest.splice(rest.indexOf(item), 1);
+  }
   return { tables, items: [...rest, ...tables.map((table) => ({ x: table.box[0],
     y: pageHeight - (table.box[1] + table.box[3]) / 2, width: 1, height: 1,
     value: table.marker, raw: table.marker, math: false }))] };
@@ -73,7 +91,7 @@ export function restoreTableBlocks(blocks, tables) {
   return tables.reduce((current, table) => current.flatMap((block) => {
     if (!block.runs.some((run) => run.kind === 'text' && run.value.includes(table.marker))) return [block];
     if (block.role === 'choice') throw new Error('선지 안의 표는 변환할 수 없습니다.');
-    const { marker, ...data } = table;
+    const { marker, caption, ...data } = table;
     const result = [];
     let runs = [];
     for (const run of block.runs) {
@@ -82,6 +100,7 @@ export function restoreTableBlocks(blocks, tables) {
       if (before.trim()) runs.push({ kind: 'text', value: before });
       if (runs.length) result.push({ ...block, runs });
       result.push({ ...data, role: block.role, label: '', runs: [] });
+      if (caption) result.push({ role: block.role, label: '', runs: [{ kind: 'text', value: caption }] });
       runs = after.trim() ? [{ kind: 'text', value: after }] : [];
     }
     if (runs.length) result.push({ ...block, runs });

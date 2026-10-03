@@ -33,7 +33,8 @@ test('UI keeps answer state ephemeral and separate from body index', async () =>
   assert.match(html, /type="checkbox" id="answer-toggle"/);
   assert.doesNotMatch(html, /id="answer-toggle"[^>]*checked/);
   assert.match(app, /answerToggle\.checked = false/);
-  assert.doesNotMatch(app, /localStorage|sessionStorage/);
+  assert.doesNotMatch(app, /(?:localStorage|sessionStorage)\.(?:getItem|setItem)\([^;]*(?:answerToggle|answer-toggle)/);
+  assert.match(app, /localStorage\.setItem\('exam-paper-profiles', JSON\.stringify\(savedProfiles\)\)/);
   assert.match(data, /\.\/data\/answers\.json/);
   assert.match(data, /verificationStatus === 'verified'/);
   assert.match(app, /source\.removeAttribute\('href'\)/);

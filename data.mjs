@@ -1,3 +1,4 @@
+import { paperLabel, paperPages, paperReady } from './paper-profile.mjs';
 import { catalogFiles, curriculumYearMismatch, prepareQuestions, searchFiles, searchQuestions, subjectGroup, fileQuestions } from './search.mjs';
 
 let catalogPromise;
@@ -60,7 +61,10 @@ export async function getJson(path) {
     return { pdfCount: index.pdfCount, questionCount: index.questionCount,
       incomplete: index.incomplete || [], degradedPdfCount: index.degradedPdfCount,
       years: [...new Set(questions.map((item) => item.year))].sort((a, b) => b - a),
-      groups, subjects, frameworks, units, standards, curriculumYearMismatchCount };
+      groups, subjects, frameworks, units, standards, curriculumYearMismatchCount,
+      paperOptions: [...new Map(questions.filter((item) => ['math', 'kor'].includes(item.subject)).map((item) =>
+        [`${item.subject}:${item.year}:${item.month}:${item.track}:${item.variant}`,
+          { subject: item.subject, year: item.year, month: item.month, track: item.track, variant: item.variant }])).values()] };
   }
   if (url.pathname === '/api/question') {
     const item = byId.get(params.get('id'));
@@ -73,7 +77,11 @@ export async function getJson(path) {
     return entry?.verificationStatus === 'verified' ? entry : null;
   }
   if (url.pathname === '/api/file-questions') {
-    return { items: fileQuestions(questions, params.get('name')) };
+    const filters = { track: params.get('track') || '', variant: params.get('variant') || 'odd', allProfiles: params.get('allProfiles') || '' };
+    const all = fileQuestions(questions, params.get('name'));
+    const items = fileQuestions(questions, params.get('name'), null, filters);
+    const scopedPages = all.length && ['math', 'kor'].includes(all[0].subject) ? paperPages(all, items) : null;
+    return { items, pages: scopedPages, label: paperLabel(items, filters), ready: paperReady(items, filters) };
   }
   if (url.pathname === '/api/file-pages') {
     const pageCount = pageCounts.get(params.get('name'));
@@ -84,7 +92,8 @@ export async function getJson(path) {
     const filters = { group: params.get('group') || '', subject: params.get('subject') || '',
       yearFrom: params.get('yearFrom') || '', yearTo: params.get('yearTo') || '',
       month: params.get('month') || '', framework: params.get('framework') || '',
-      unit: params.get('unit') || '', standard: params.get('standard') || '' };
+      unit: params.get('unit') || '', standard: params.get('standard') || '', track: params.get('track') || '',
+      variant: params.get('variant') || 'odd', allProfiles: params.get('allProfiles') || '' };
     const query = params.get('q') || '';
     const fileMode = url.pathname === '/api/files';
     const found = fileMode ? searchFiles(files, questions, query, filters)

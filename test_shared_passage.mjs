@@ -16,7 +16,7 @@ const pdf = (lines) => ({ pageHeight: 500, fonts: { text: { name: 'Plain' }, mat
 const deps = (lines) => ({ readQuestionPdf: async () => pdf(lines), glyphMap: async () => new Map(), notes: [] });
 const plain = (block) => block.runs.map((run) => run.value || run.script).join('');
 const prepared = { schema: 'exam-editable-v1', status: 'needs_review', questionId: 'shared', number: 1,
-  sourcePdf: 'test.pdf', page: 1, blocks: [{ role: 'stem', runs: [{ kind: 'text', value: '적절한 것은?' }] },
+  sourcePdf: 'test.pdf', page: 1, figureFallbacks: [], blocks: [{ role: 'stem', runs: [{ kind: 'text', value: '적절한 것은?' }] },
     ...[...'①②③④⑤'].map((label) => ({ role: 'choice', label, runs: [{ kind: 'text', value: '답' }] }))] };
 
 test('shared regions omit the question itself and duplicate regions', () => {
@@ -46,7 +46,7 @@ test('multiple passage pages are read in indexed order', async () => {
   q.passageRegions.push({ page: 2, box: [0, 0, 180, 400] });
   const options = deps([]);
   options.readQuestionPdf = async (item) => pdf(item.page === 1 ? [header, '첫 페이지'] : ['둘째 페이지']);
-  assert.deepEqual((await passageBlocks(q, options)).map(plain), [header, '첫 페이지', '둘째 페이지']);
+  assert.deepEqual((await passageBlocks(q, options)).map(plain), [header, '첫 페이지 둘째 페이지']);
 });
 test('passage preserves native editable equation runs', async () => {
   const options = deps([]);
@@ -114,4 +114,101 @@ test('a failed passage download is retried by the next question of the set', asy
   assert.deepEqual(await passageBlocks(question(lines), { ...options, notes: [] }), []);
   assert.deepEqual((await passageBlocks(question(lines), { ...options, notes: [] })).map(plain), lines);
   assert.equal(reads, 2);
+});
+
+test('shared passage caches separate image inclusion and exclusion while preserving the same native text', async () => {
+  const lines = [header, '공통 지문'];
+  let reads = 0, renders = 0;
+  const configs = [];
+  const options = { ...deps(lines), readQuestionPdf: async () => { reads += 1; return pdf(lines); },
+    build: (_, __, ___, config) => {
+      configs.push(config.includeImages);
+      return { blocks: lines.map((value) => ({ role: 'stem', runs: [{ kind: 'text', value }] })),
+        figureFallbacks: [{ box: [20, 100, 80, 140], afterBlock: 0 }] };
+    }, renderFigure: async () => { renders += 1; return { bytes: new Uint8Array([1]), width: 120, height: 80 }; } };
+  const excluded = await passageBlocks(question(lines), options);
+  const included = await passageBlocks(question(lines), { ...options, includeImages: true });
+  const excludedAgain = await passageBlocks(question(lines), options);
+  const includedAgain = await passageBlocks(question(lines), { ...options, includeImages: true });
+  assert.equal(reads, 2);
+  assert.equal(renders, 1);
+  assert.deepEqual(configs, [false, true]);
+  assert.deepEqual(excluded.map(plain), lines);
+  assert.deepEqual(excludedAgain.map(plain), lines);
+  assert.deepEqual(included.filter((block) => block.kind !== 'figure').map(plain), lines);
+  assert.equal(includedAgain.filter((block) => block.kind === 'figure').length, 1);
+});
+
+test('an unavailable shared passage illustration is a warning and does not remove common text or equations', async () => {
+  const lines = [header, '공통 지문'];
+  const options = { ...deps(lines), includeImages: true,
+    build: () => ({ blocks: lines.map((value) => ({ role: 'stem', runs: [{ kind: 'text', value }] })),
+      figureFallbacks: [{ box: [20, 100, 80, 140], afterBlock: 0 }] }),
+    renderFigure: async () => { throw new Error('passage picture failed'); } };
+  const blocks = await passageBlocks(question(lines), options);
+  assert.deepEqual(blocks.map(plain), lines);
+  assert.match(options.notes.join(' '), /passage picture failed/u);
+  assert.doesNotMatch(options.notes.join(' '), /공통 지문을 제외/u);
+});
+
+test('invalid native shared passage text is rejected before optional illustration rendering', async () => {
+  const lines = [header, '공통 지문'];
+  let rendered = false;
+  const options = { ...deps(lines), includeImages: true,
+    build: () => ({ blocks: [{ role: 'stem', runs: [{ kind: 'text', value: '다른 문항 본문' }] }],
+      figureFallbacks: [{ box: [20, 100, 80, 140], afterBlock: 0 }] }),
+    renderFigure: async () => { rendered = true; return { bytes: new Uint8Array([1]), width: 120, height: 80 }; } };
+  assert.deepEqual(await passageBlocks(question(lines), options), []);
+  assert.equal(rendered, false);
+  assert.match(options.notes.join(' '), /색인과 일치하지/u);
+});
+
+test('parent cancellation during an optional passage crop propagates instead of returning a partial passage', async () => {
+  const controller = new AbortController();
+  const lines = [header, '공통 지문'];
+  let started;
+  const begun = new Promise((resolve) => { started = resolve; });
+  const work = passageBlocks(question(lines), { ...deps(lines), includeImages: true, signal: controller.signal,
+    build: () => ({ blocks: lines.map((value) => ({ role: 'stem', runs: [{ kind: 'text', value }] })),
+      figureFallbacks: [{ box: [20, 100, 80, 140], afterBlock: 0 }] }),
+    renderFigure: async () => { started(); return new Promise(() => {}); } });
+  await begun;
+  controller.abort();
+  await assert.rejects(work, { name: 'AbortError' });
+});
+
+test('an optional shared image failure is retried instead of being retained as a completed cache entry', async () => {
+  const lines = [header, '공통 지문'];
+  let renders = 0;
+  const controller = new AbortController();
+  const options = { ...deps(lines), includeImages: true, signal: controller.signal,
+    readQuestionPdf: async (_, config) => { assert.equal(config.signal, controller.signal); return pdf(lines); },
+    build: () => ({ blocks: lines.map((value) => ({ role: 'stem', runs: [{ kind: 'text', value }] })),
+      figureFallbacks: [{ box: [20, 100, 80, 140], afterBlock: 0 }] }),
+    renderFigure: async () => {
+      renders += 1;
+      if (renders === 1) throw new Error('temporary passage image failure');
+      return { bytes: new Uint8Array([1]), width: 120, height: 80 };
+    } };
+  const first = await passageBlocks(question(lines), { ...options, notes: [] });
+  const second = await passageBlocks(question(lines), { ...options, notes: [] });
+  assert.deepEqual(first.map(plain), lines);
+  assert.equal(second.filter((block) => block.kind === 'figure').length, 1);
+  assert.equal(renders, 2);
+});
+
+test('shared passage resolver reflows bound endings and preserves intentional Korean spaces', async () => {
+  const lines = ['친구를 생각하는 마음이 참 따뜻하', '게 느껴져요.',
+    '자존감이 낮아진 것으로 보이', '네요.',
+    '친구가 자책하고 있으면 많이 속상하', '겠구나.',
+    '그런 게 마음에 남는다고 생각해야 한다.'];
+  const options = deps(lines);
+  const blocks = await passageBlocks({ ...question(lines), subject: 'kor' }, options);
+  assert.equal(options.notes.length, 0);
+  const content = blocks.map(plain).join('\n');
+  assert.match(content, /따뜻하게/u);
+  assert.match(content, /보이네요/u);
+  assert.match(content, /속상하겠구나/u);
+  assert.match(content, /그런 게/u);
+  assert.match(content, /생각해야 한다/u);
 });

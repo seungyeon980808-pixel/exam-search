@@ -80,3 +80,22 @@ test('side-by-side table anchors both become native table blocks', () => {
     [{ marker: 'markerA', kind: 'table', rows: [[[]]] }, { marker: 'markerB', kind: 'table', rows: [[[]]] }]);
   assert.deepEqual(blocks.map((block) => block.kind), ['table', 'table']);
 });
+
+test('adjacent table captions follow their own panel instead of joining after both panels', () => {
+  const right = { ...grid, box:[120,20,220,80], cells:grid.cells.map(c=>({...c,box:c.box.map((n,i)=>i%2?n:n+120)})) };
+  const source = [...items.slice(0,3), ...items.slice(0,3).map(i=>({...i,x:i.x+120})),
+    { ...item('(',40,93),width:3 },{ ...item('가',43,93),width:10 },{ ...item(')',53,93),width:3 },
+    { ...item('(나)',160,93),width:16 }];
+  const flow = tableFlow(partitionTableItems(source,[grid,right],100),100,cell=>cell.map(i=>({kind:'text',value:i.value})));
+  assert.equal(flow.tables.length,2);
+  assert.ok(!flow.items.some(i=>/[가나]/u.test(i.value)));
+  const blocks=restoreTableBlocks([{role:'stem',runs:[{kind:'text',value:flow.tables.map(t=>t.marker).join(' ')}]}],flow.tables);
+  assert.deepEqual(blocks.map(b=>b.kind==='table'?'table':b.runs.map(r=>r.value).join('')),['table','(가)','table','(나)']);
+});
+
+test('Korean panel bullets use a supported text glyph while equation multiplication is untouched', () => {
+  const data=partitionTableItems(items,[grid],100);
+  const flow=tableFlow(data,100,()=>[{kind:'text',value:'∙세균이 관여한다.'},{kind:'equation',script:'a∙b'}]);
+  assert.equal(flow.tables[0].rows[0][0][0].value,'·세균이 관여한다.');
+  assert.equal(flow.tables[0].rows[0][0][1].script,'a∙b');
+});

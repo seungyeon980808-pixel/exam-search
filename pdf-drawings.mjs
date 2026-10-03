@@ -808,7 +808,7 @@ export function figureRegions(primitives, textItems, pageHeight) {
     if (!strong.length) continue;
     const box = members.map((m) => m.box).reduce(union);
     const w = box[2] - box[0], hgt = box[3] - box[1];
-    const images = strong.filter((m) => m.prim.type === 'image' && m.box[2] - m.box[0] >= 16 && m.box[3] - m.box[1] >= 16);
+    const images = strong.filter((m) => m.prim.type === 'image' && m.box[2] - m.box[0] >= 16 && m.box[3] - m.box[1] >= 6);
     const inlineImage = images.length && hgt <= bodySize * 2.6 && chains.some((c) => c.protected
       && Math.min(c.box[3], box[3]) - Math.max(c.box[1], box[1]) > hgt * 0.5 && gapBetween(c.box, box) < bodySize * 1.5);
     const vector = strong.length >= 3 && w >= 18 && hgt >= 12 && w * hgt >= 500;
@@ -918,7 +918,7 @@ export function insideFigure(item, regions, pageHeight) {
 function gridOf(table) {
   const { xs, ys, component: { h, v } } = table;
   const rows = ys.length - 1, cols = xs.length - 1;
-  if (rows < 2 || cols < 2) return null;
+  if (rows < 2 || cols < 1) return null;
   if (xs.some((x, i) => i && x - xs[i - 1] < 6) || ys.some((y, i) => i && y - ys[i - 1] < 6)) return null;
   const full = (k) => k >= 0.9, none = (k) => k <= 0.1;
   const x0 = xs[0], x1 = xs.at(-1), y0 = ys[0], y1 = ys.at(-1);
@@ -993,14 +993,3 @@ export function tableGrids(primitives, textItems, pageHeight, questionBox) {
   }
   return grids.sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0]);
 }
-
-
-
-
-
-
-
-
-
-
-
