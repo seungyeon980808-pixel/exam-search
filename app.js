@@ -5,6 +5,9 @@ import { trackLabels, variantLabels } from './paper-profile.mjs';
 import { curriculumDisplayState } from './search.mjs';
 import { openEditable, openEditableCollection } from './editable-editor.mjs?v=readability-20261004-4';
 import { createQuestionSelection } from './question-selection.mjs';
+import { createEmbeddedHost } from './embedded-host.mjs';
+
+const publishEmbeddedAddress = createEmbeddedHost(window);
 
 const $ = (selector) => document.querySelector(selector);
 const shell = $('.app-shell');
@@ -403,6 +406,7 @@ function updateAddress() {
   if ((shell.classList.contains('is-detail') || shell.classList.contains('is-split')) && state.selectedId) params.set('id', state.selectedId);
   if (shell.classList.contains('is-file-preview') && state.selectedFile) params.set('file', state.selectedFile);
   history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+  publishEmbeddedAddress();
 }
 
 function setPreviewMode(open) {
