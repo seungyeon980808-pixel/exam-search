@@ -1,9 +1,23 @@
-import { driveFilePath, getJson } from './data.mjs';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-20261008-3';
 import { driveLink } from './drive-source.mjs';
-import { renderFilePages, renderFileThumbnail, renderQuestion } from './pdf-viewer.mjs?v=preview-crop-20261004-1';
+let pdfModule;
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-20261008-3').catch(error => { pdfModule = null; throw error; });
+const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
+const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
+const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs';
-import { openEditable, openEditableCollection } from './editable-editor.mjs?v=readability-20261004-4';
+import { curriculumDisplayState } from './search.mjs?v=library-20261008-3';
+import { curriculumOptions } from './catalog-filters.mjs?v=library-20261008-3';
+let editorModule;
+async function openEditor(method, args) {
+  setHelp('편집 문서를 준비하고 있습니다.');
+  try {
+    editorModule ||= import('./editable-editor.mjs?v=library-20261008-3').catch(error => { editorModule = null; throw error; });
+    return (await editorModule)[method](...args);
+  } catch (error) { setHelp(error.message, true); }
+}
+const openEditable = (...args) => openEditor('openEditable', args);
+const openEditableCollection = (...args) => openEditor('openEditableCollection', args);
 import { createQuestionSelection } from './question-selection.mjs';
 import { createEmbeddedHost } from './embedded-host.mjs';
 
@@ -40,11 +54,53 @@ const unit = $('#unit-filter');
 const standard = $('#standard-filter');
 const answerToggle = $('#answer-toggle');
 const viewer = $('#image-viewer');
-const pageSize = 9;
+let pageSize = (() => { try { return Number(new URLSearchParams(location.search).get('pageSize') || localStorage.getItem('exam-page-size')) || 9; } catch { return 9; } })();
+if (![6,9,18,36].includes(pageSize)) pageSize = 9;
+$('#page-size').value = String(pageSize);
 const filePageSize = 12;
 const state = { mode: 'questions', tokens: [], total: 0, baseOffset: 0, offset: 0, page: 0, selectedId: '', selectedFile: '', requestId: 0, selectionRequestId: 0, fileRequestId: 0, navigating: false, zoom: 100 };
 const initialParams = new URLSearchParams(location.search);
+state.tokens = (initialParams.get('q') || '').trim().split(/\s+/u).filter(Boolean).slice(0, 3);
 let initialSelectionPending = true;
+let catalogData;
+let sourceController;
+let fileRenderController;
+let searchController, detailController, warmController, warmSubject='', warmTimer;
+function stopWarmup() {
+  warmController?.abort();
+  if(warmTimer!==undefined){
+    if(window.cancelIdleCallback)cancelIdleCallback(warmTimer);else clearTimeout(warmTimer);
+  }
+  warmTimer=undefined;warmSubject='';
+}
+const warmScope=()=>subject.value||`group:${group.value||'all'}`;
+function warmSelectedSubject({intent=false}={}) {
+  if(!catalogData||(!subject.value&&!intent)||warmSubject===warmScope())return;
+  stopWarmup();warmSubject=warmScope();warmController=new AbortController();
+  const filters={subject:subject.value,group:group.value},signal=warmController.signal;
+  const prepare=()=>{warmTimer=undefined;if(!signal.aborted)void prefetchSearch(filters,{signal,intent}).catch(()=>{});};
+  warmTimer=window.requestIdleCallback?requestIdleCallback(prepare,{timeout:300}):setTimeout(prepare,80);
+}
+let landingOpen = !initialParams.size;
+$('#library-landing').hidden = !landingOpen;
+$('#workspace').hidden = landingOpen;
+function leaveLanding() { landingOpen = false; $('#library-landing').hidden = true; $('#workspace').hidden = false; }
+function setReadiness(text, retry = false) {
+  $('#search-readiness-text').textContent = text;
+  $('#search-retry').hidden = !retry;
+}
+onSearchState(status => {
+  if (status.updateAvailable) { $('#catalog-update').hidden = false; }
+  if (status.phase === 'preparing') setReadiness(`본문 검색 준비 중${status.total ? ` · ${status.done}/${status.total} 과목` : ''}`);
+  if (status.phase === 'ready') setReadiness('전체 본문 검색 준비 완료');
+  if (status.phase === 'error') setReadiness(status.message, true);
+});
+$('#search-retry').addEventListener('click', () => void (catalogData ? search() : start()));
+$('#page-size').addEventListener('change', () => {
+  pageSize = Number($('#page-size').value);
+  try { localStorage.setItem('exam-page-size', String(pageSize)); } catch {}
+  if (!landingOpen) void search();
+});
 let activeQuestionObjectUrl = null;
 let stopFileRendering = null;
 let answerRequestId = 0;
@@ -67,7 +123,7 @@ const previewObserver = new IntersectionObserver((entries) => {
 function runPreviewQueue() {
   while (activePreviews < 2 && previewQueue.length) {
     const task = previewQueue.shift();
-    if (!task.element.isConnected) continue;
+    if (!task.element.isConnected || task.element.closest('[hidden]')) continue;
     activePreviews += 1;
     void task.render().then((url) => {
       if (!task.element.isConnected) { URL.revokeObjectURL(url); return; }
@@ -126,6 +182,8 @@ function closeToolbarPopovers() {
 function syncToolbar() {
   toolbar.dataset.group = group.value;
   const previewParent = minimalWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
+  const sizeControl = $('#page-size').closest('label');
+  if (sizeControl.parentElement !== previewParent) previewParent.append(sizeControl);
   if (previewToggle.parentElement !== previewParent) {
     if (minimalWorkspace.matches) previewParent.prepend(previewToggle);
     else previewParent.insertBefore(previewToggle, $('#file-workspace-tools').parentElement === previewParent ? $('#file-workspace-tools') : null);
@@ -195,7 +253,36 @@ function updateSubjectOptions(selected = '') {
   }
   subject.disabled = !details;
   subject.value = [...subject.options].some((option) => option.value === selected) ? selected : '';
+  updateYearOptions();
   syncToolbar();
+}
+
+function updateYearOptions(selected = year.value) {
+  if (!catalogData) return;
+  const years = [...new Set(catalogData.files.filter(file => (!group.value || availableSubjects.find(s => s.value === file.subject)?.group === group.value) && (!subject.value || file.subject === subject.value)).map(file => file.year))].sort((a, b) => b - a);
+  year.replaceChildren(new Option('전체 연도', ''), ...years.map(value => new Option(String(value), String(value))));
+  year.value = years.includes(Number(selected)) ? selected : '';
+}
+
+function updateCurriculumOptions(preferred = {}) {
+  if (!catalogData) return;
+  const filters = { group: group.value, subject: subject.value, year: year.value, month: month.value, track: track.value, variant: variant.value, allProfiles: allProfiles.checked };
+  const replace = (control, values, chosen) => {
+    control.replaceChildren(new Option('전체', ''), ...values.map(value => new Option(value.label || value, value.value || value)));
+    control.value = [...control.options].some(option => option.value === chosen) ? chosen : '';
+  };
+  replace(framework, curriculumOptions(catalogData, filters).frameworks, preferred.framework ?? framework.value);
+  filters.framework = framework.value;
+  const selectedUnit = preferred.unit ?? unit.value;
+  filters.preserveUnit = selectedUnit;
+  replace(unit, curriculumOptions(catalogData, filters).units, selectedUnit);
+  filters.unit = unit.value;
+  const options = curriculumOptions(catalogData, filters);
+  replace(standard, options.standards, preferred.standard ?? standard.value);
+  const scoped = group.value && (!subject.disabled ? subject.value : true);
+  unit.disabled = !scoped; standard.disabled = !scoped;
+  $('#unit-filter-note').textContent = !scoped ? '과목과 세부과목을 먼저 골라 주세요.' : !options.units.length ? '이 조건에는 연결된 단원이 없습니다. 키워드로 검색해 주세요.' : '';
+  updatePaperOptions();
 }
 
 function updatePaperOptions(preferredTrack = track.value, preferredVariant = variant.value) {
@@ -332,6 +419,7 @@ function renderSelection() {
 function setHelp(message, error = false) {
   help.textContent = message;
   help.classList.toggle('is-error', error);
+  if (error) $('#search-readiness-text').textContent = message;
 }
 
 function renderTokens() {
@@ -380,6 +468,7 @@ function queryUrl(offset) {
   if (unit.value) params.set('unit', unit.value);
   if (standard.value) params.set('standard', standard.value);
   params.set('offset', String(offset));
+  params.set('pageSize', String(state.mode === 'files' ? filePageSize : pageSize));
   if (state.mode === 'questions' && initialSelectionPending && initialParams.get('id')) {
     params.set('focus', initialParams.get('id'));
     params.set('pageSize', String(pageSize));
@@ -392,7 +481,9 @@ function queryUrl(offset) {
 }
 
 function updateAddress() {
+  if (landingOpen) return;
   const params = profileParams();
+  if (pageSize !== 9) params.set('pageSize', String(pageSize));
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
   if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
@@ -425,7 +516,7 @@ function setFilePreviewMode(open) {
   previewToggle.setAttribute('aria-pressed', String(open));
   previewToggle.setAttribute('aria-label', open ? '미리보기 닫기' : '미리보기 열기');
   previewToggle.title = open ? '미리보기 닫기' : '미리보기 열기';
-  if (!open) $('#file-preview').hidden = true;
+  if (!open) { $('#file-preview').hidden = true; fileRenderController?.abort(); stopFileRendering?.(); stopFileRendering = null; }
   fileTools.hidden = !open;
   $('#file-preview-back').hidden = !open;
   updateAddress();
@@ -495,7 +586,10 @@ function cardFor(item) {
       preview.classList.remove('is-loading');
       preview.classList.add('is-error');
       placeholder.hidden = false;
-      placeholder.textContent = '원본 미리보기를 불러오지 못했습니다. 눌러서 문항을 확인하세요.';
+      placeholder.textContent = '원본 미리보기를 준비하고 있습니다.';
+      preview.classList.add('is-loading');
+      button.previewTask.fallback = '';
+      previewObserver.observe(button);
     };
   } else {
     image.hidden = true;
@@ -503,7 +597,7 @@ function cardFor(item) {
   preview.append(image, placeholder);
   button.previewTask = { element: button, image, preview, placeholder, fallback: thumbnail,
     render: () => renderQuestion(item, 1.3) };
-  previewObserver.observe(button);
+  if (!thumbnail) previewObserver.observe(button);
   button.append(meta, preview);
   const tags = document.createElement('span');
   tags.className = 'result-tags';
@@ -585,6 +679,9 @@ function fileRowFor(item) {
 }
 
 async function selectFile(item) {
+  fileRenderController?.abort();
+  fileRenderController = new AbortController();
+  const fileSignal = fileRenderController.signal;
   const fileRequestId = ++state.fileRequestId;
   fileItems = [];
   fileConversionReady = false;
@@ -644,7 +741,7 @@ async function selectFile(item) {
     convert.title = '전체 문항을 한 문서로 변환합니다. 변환 전에 그림 포함·제외를 선택할 수 있습니다. 본문·수식·보기는 편집 가능한 문서로 만듭니다.';
     convert.onclick = () => { $('#workspace-convert').open = false; void openEditableCollection(items.map((entry) => entry.id)); };
     stopFileRendering = await renderFilePages(item.pdfFile, pages, item.firstMatchPage || 1,
-      () => fileRequestId === state.fileRequestId, chosenPages);
+      () => fileRequestId === state.fileRequestId, chosenPages, { signal: fileSignal });
     if (fileRequestId !== state.fileRequestId) return;
     updateFilePageControls();
   } catch (error) {
@@ -653,6 +750,7 @@ async function selectFile(item) {
 }
 
 function updateWorkspaceMode() {
+  $('#page-size').closest('label').hidden = state.mode === 'files';
   const picker = $('#workspace-mode');
   picker.options[0].textContent = state.mode === 'questions' ? `문항 ${state.total.toLocaleString('ko-KR')}개` : '문항별';
   picker.options[1].textContent = state.mode === 'files' ? `시험지 ${state.total.toLocaleString('ko-KR')}개` : '시험지별';
@@ -703,6 +801,19 @@ function showPage(page) {
   const visible = state.mode === 'files' ? filePageSize : pageSize;
   for (const [index, card] of cards.entries()) card.hidden = index < first || index >= first + visible;
   if (answerToggle.checked) void renderAnswers().catch((error) => setHelp(error.message, true));
+  const keepFrom = Math.max(0, first - visible), keepTo = first + visible * 2;
+  for (const [index, card] of cards.entries()) {
+    if (index >= keepFrom && index < keepTo) continue;
+    const preview = card.querySelector('.result-card') || card;
+    previewObserver.unobserve(preview); cardLayoutObserver.unobserve(card);
+    const url = previewUrls.get(preview);
+    if (url) { URL.revokeObjectURL(url); previewUrls.delete(preview); }
+    if (card.dataset.id && !selection.has(card.dataset.id)) selectionLabels.delete(card.dataset.id);
+    card.remove();
+  }
+  const remaining = Math.max(0, Math.min(cards.length, keepTo) - keepFrom);
+  state.baseOffset += keepFrom;
+  state.offset = state.baseOffset + remaining;
   const pages = Math.ceil(state.total / visible);
   $('#results-pagination').hidden = pages <= 1;
   $('#page-position').textContent = `${page + 1} / ${pages}`;
@@ -719,27 +830,38 @@ function updateNavigation() {
 }
 
 async function search(reset = true) {
+  leaveLanding();
+  closeToolbarPopovers();
   const requestId = ++state.requestId;
+  searchController?.abort();searchController=new AbortController();
+  const signal=searchController.signal;
+  if(warmSubject!==warmScope())stopWarmup();
   const filesMode = state.mode === 'files';
-  if (reset) {
-    state.selectionRequestId += 1;
-    state.fileRequestId += 1;
-    state.baseOffset = 0;
-    state.offset = 0;
-    state.page = 0;
-    state.selectedId = '';
-    state.selectedFile = '';
-    shell.classList.remove('is-detail');
-    if (shell.classList.contains('is-file-preview')) setFilePreviewMode(false);
-    previewToggle.disabled = true;
-    clearPreviews();
-    cardLayoutObserver.disconnect();
-    list.replaceChildren();
-    $('#result-count').textContent = '검색 중…';
-  }
+  const retained=reset&&!!list.querySelector('.result-card,.file-row');
+  state.searchPending=true;list.inert=true;list.setAttribute('aria-busy','true');
+  list.classList.toggle('is-refreshing',retained);
+  if(reset)$('#result-count').textContent=retained?'갱신 중 · 이전 결과':'검색 중…';
+  // Visible feedback is immediate; search input and filters remain operable.
+  setReadiness(retained?'새 조건으로 검색 중 · 이전 결과를 표시하고 있습니다':'검색 중…');
   try {
-    const data = await getJson(queryUrl(state.offset));
+    const data = await getJson(queryUrl(reset?0:state.offset),{signal});
     if (requestId !== state.requestId) return;
+    if(reset){
+      // Replace only when a complete result is ready. A failed search leaves the
+      // previous readable results and active document intact.
+      const preserveQuestion=data.items.some(item=>item.id===state.selectedId);
+      if(!preserveQuestion){
+        state.selectionRequestId++;detailController?.abort();sourceController?.abort();
+        state.selectedId='';selectedQuestion=null;shell.classList.remove('is-detail');
+        $('#detail-content').hidden=true;$('#detail-empty').hidden=false;
+      }
+      state.fileRequestId++;fileRenderController?.abort();stopFileRendering?.();stopFileRendering=null;
+      state.selectedFile='';if(shell.classList.contains('is-file-preview'))setFilePreviewMode(false);
+      state.baseOffset=0;state.offset=0;state.page=0;
+      clearPreviews();cardLayoutObserver.disconnect();
+      list.replaceChildren();
+    }
+    setReadiness(state.tokens.length ? '본문 검색 완료' : '목록 준비 완료 · 키워드나 단원으로 좁혀 보세요');
     state.total = data.total;
     updateWorkspaceMode();
     previewToggle.disabled = !data.total;
@@ -764,6 +886,10 @@ async function search(reset = true) {
     list.append(...data.items.map(filesMode ? fileRowFor : cardFor));
     state.offset = data.offset + data.items.length;
     showPage(state.page);
+    if(reset){
+      if(shell.classList.contains('is-split'))$('.results-pane').scrollTop=0;
+      else window.scrollTo(0,0);
+    }
     if (reset && filesMode && initialSelectionPending) {
       initialSelectionPending = false;
       const preferred = initialParams.get('file');
@@ -780,13 +906,13 @@ async function search(reset = true) {
       }
       const target = data.items.find((item) => item.id === preferred)?.id
         || (shell.classList.contains('is-split') ? data.items[0]?.id : null);
-      if (target) await selectQuestion(target, !shell.classList.contains('is-split'));
+      if (target && target!==state.selectedId) void selectQuestion(target, !shell.classList.contains('is-split'));
     }
     if (!filesMode) updateNavigation();
     updateAddress();
   } catch (error) {
-    if (requestId !== state.requestId) return;
-    if (reset) {
+    if (requestId !== state.requestId || signal.aborted) return;
+    if (reset && !retained) {
       if (shell.classList.contains('is-split')) setPreviewMode(false);
       $('#result-count').textContent = '검색할 수 없습니다';
       const failure = document.createElement('p');
@@ -794,7 +920,14 @@ async function search(reset = true) {
       failure.textContent = error.message;
       list.replaceChildren(failure);
     }
+    if(retained)$('#result-count').textContent='검색 실패 · 이전 결과';
+    setReadiness(error.message, true);
     setHelp(error.message, true);
+  } finally {
+    if(requestId===state.requestId){
+      state.searchPending=false;list.inert=false;list.setAttribute('aria-busy','false');list.classList.remove('is-refreshing');
+      if(!signal.aborted)warmSelectedSubject();
+    }
   }
 }
 
@@ -858,8 +991,10 @@ function renderCurriculum(item) {
 async function selectQuestion(id, openDetail = true) {
   if (!id) return;
   const selectionRequestId = ++state.selectionRequestId;
+  detailController?.abort();detailController=new AbortController();
+  const detailSignal=detailController.signal;
   try {
-    const item = await getJson(`/api/question?id=${encodeURIComponent(id)}`);
+    const item = await getJson(`/api/question?id=${encodeURIComponent(id)}`,{signal:detailSignal});
     if (selectionRequestId !== state.selectionRequestId) return;
     state.selectedId = id;
     selectedQuestion = item;
@@ -889,18 +1024,34 @@ async function selectQuestion(id, openDetail = true) {
     image.alt = `${item.exam} ${item.subjectLabel} ${item.no}번 PDF 원본 문항`;
     image.onload = () => imageLink.classList.remove('is-loading');
     image.onerror = () => { imageLink.classList.remove('is-loading'); setHelp('이미지 생성에 실패했습니다. 시험지 PDF로 확인해 주세요.', true); };
+    if (activeQuestionObjectUrl && !viewer.open) { URL.revokeObjectURL(activeQuestionObjectUrl); activeQuestionObjectUrl = null; }
     if (imageUrl) image.src = imageUrl;
     else image.removeAttribute('src');
-    void renderQuestion(item).then((highResolutionUrl) => {
+    sourceController?.abort();
+    sourceController = new AbortController();
+    const signal = sourceController.signal;
+    const scroll = $('.detail-scroll');
+    const anchor = { top: scroll.scrollTop, left: scroll.scrollLeft };
+    const preserve = () => { anchor.top = scroll.scrollTop; anchor.left = scroll.scrollLeft; };
+    scroll.addEventListener('scroll', preserve, { passive: true, signal });
+    void renderQuestion(item, 3, { signal }).then((highResolutionUrl) => {
       if (selectionRequestId !== state.selectionRequestId) {
         URL.revokeObjectURL(highResolutionUrl);
         return;
       }
       if (activeQuestionObjectUrl) URL.revokeObjectURL(activeQuestionObjectUrl);
       activeQuestionObjectUrl = highResolutionUrl;
+      // Ignore automatic scroll clamping while the image geometry is replaced.
+      scroll.removeEventListener('scroll', preserve);
+      image.onload = () => {
+        imageLink.classList.remove('is-loading');
+        scroll.scrollTo(anchor.left, anchor.top);
+        scroll.removeEventListener('scroll', preserve);
+      };
       image.src = highResolutionUrl;
     }).catch((error) => {
-      if (selectionRequestId === state.selectionRequestId) {
+      scroll.removeEventListener('scroll', preserve);
+      if (selectionRequestId === state.selectionRequestId && !signal.aborted) {
         $('#source-note').textContent = `${error.message} ${imageUrl ? '카드 이미지로 확인하거나' : ''} 시험지 PDF 원본으로 확인해 주세요.`;
         setHelp(error.message, true);
       }
@@ -927,25 +1078,25 @@ async function selectQuestion(id, openDetail = true) {
     updateNavigation();
     updateAddress();
   } catch (error) {
-    setHelp(error.message, true);
+    if(selectionRequestId===state.selectionRequestId&&!detailSignal.aborted)setHelp(error.message, true);
   }
 }
 
 async function loadPrevious() {
   if (state.baseOffset === 0) return false;
-  const from = Math.max(0, state.baseOffset - 40);
+  const from = Math.max(0, state.baseOffset - Math.ceil(40 / (state.mode === 'files' ? filePageSize : pageSize)) * (state.mode === 'files' ? filePageSize : pageSize));
   const requestId = ++state.requestId;
   const data = await getJson(queryUrl(from));
   if (requestId !== state.requestId) return false;
   const preceding = data.items.slice(0, state.baseOffset - from);
   list.prepend(...preceding.map(state.mode === 'files' ? fileRowFor : cardFor));
   state.baseOffset = from;
-  showPage(state.page);
+  // The caller selects the destination page before pruning its neighbors.
   return preceding.length > 0;
 }
 
 async function navigateQuestion(direction) {
-  if (state.navigating) return;
+  if (state.navigating || state.searchPending) return;
   state.navigating = true;
   try {
     let cards = [...list.querySelectorAll('.result-card')];
@@ -972,6 +1123,7 @@ async function navigateQuestion(direction) {
 }
 
 async function changePage(direction) {
+  if(state.searchPending)return;
   const visible = state.mode === 'files' ? filePageSize : pageSize;
   const target = state.page + direction;
   if (target < 0 || target >= Math.ceil(state.total / visible)) return;
@@ -1028,6 +1180,7 @@ $('#search-form').addEventListener('submit', (event) => {
   event.preventDefault();
   if (addInputWords()) search();
 });
+input.addEventListener('input',()=>{if(input.value.trim())warmSelectedSubject({intent:true});});
 tokensNode.addEventListener('click', (event) => {
   const word = event.target.closest('button')?.dataset.word;
   if (!word) return;
@@ -1049,14 +1202,19 @@ $('#clear-search').addEventListener('click', () => {
   unit.value = '';
   standard.value = '';
   updatePaperOptions('', 'odd');
+  updateCurriculumOptions({framework:'',unit:'',standard:''});
   renderTokens();
   setHelp(state.mode === 'files' ? '모든 시험지를 표시합니다.' : '모든 문항을 표시합니다.');
   search();
 });
 group.addEventListener('change', () => { updateSubjectOptions(); allProfiles.checked = false;
-  const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); search(); });
+  const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); updateCurriculumOptions({ framework: '', unit: '', standard: '' }); search(); });
 for (const select of [subject, year, month, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
-  updatePaperOptions(); rememberProfile(); search();
+  if (select === subject) updateYearOptions();
+  if ([subject, year, month].includes(select)) { framework.value = ''; unit.value = ''; standard.value = ''; }
+  if (select === framework) { unit.value = ''; standard.value = ''; }
+  if (select === unit) standard.value = '';
+  updatePaperOptions(); updateCurriculumOptions(); rememberProfile(); search();
 });
 answerToggle.addEventListener('change', () => {
   void renderAnswers().catch((error) => setHelp(error.message, true));
@@ -1178,7 +1336,9 @@ window.addEventListener('keydown', (event) => {
 
 async function start() {
   try {
-    const status = await getJson('/api/status');
+    catalogData = await browserCatalog();
+    const status = catalogData.status;
+    setReadiness('과목을 고르면 바로 시작할 수 있습니다');
     const issues = status.incomplete.length;
     const missingPdfs = status.incomplete.filter((issue) => issue.pdfFile);
     const unverifiedCandidates = status.incomplete.filter((issue) => issue.reason === 'new_candidates_unverified');
@@ -1232,7 +1392,7 @@ async function start() {
     for (const value of status.frameworks || []) framework.add(new Option(value, value));
     for (const value of status.units || []) unit.add(new Option(value, value));
     for (const { value, label } of status.standards || []) standard.add(new Option(`${value} ${label}`, value));
-    state.tokens = (initialParams.get('q') || '').trim().split(/\s+/u).filter(Boolean).slice(0, 3);
+    // Search words entered while the catalog was loading are retained.
     const legacySubject = initialParams.get('subject') || '';
     group.value = initialParams.get('group') || availableSubjects.find((entry) => entry.value === legacySubject)?.group || '';
     updateSubjectOptions(legacySubject);
@@ -1254,12 +1414,39 @@ async function start() {
     if (initialParams.get('mode') === 'files') {
       setResultMode('files');
     }
+    updateCurriculumOptions({framework: initialParams.get('framework') || '', unit: initialParams.get('unit') || '', standard: initialParams.get('standard') || ''});
     renderTokens();
-    await search();
+    document.documentElement.dataset.catalogReady = 'true';
+    {
+      $('#workspace').hidden = landingOpen;
+      $('#library-landing').hidden = !landingOpen;
+      $('#landing-stats').textContent = `${status.pdfCount.toLocaleString('ko-KR')}개 시험지 · ${status.questionCount.toLocaleString('ko-KR')}개 문항`;
+      $('#landing-subjects').replaceChildren(...status.groups.map(entry => {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'landing-subject';
+        const label = document.createElement('strong'); label.textContent = entry.label;
+        const count = document.createElement('span'); count.textContent = `${entry.count.toLocaleString('ko-KR')}문항`;
+        button.append(label, count);
+        button.onclick = () => { group.value = entry.value; updateSubjectOptions(); updatePaperOptions(); updateCurriculumOptions({framework:'',unit:'',standard:''}); void search(); if (!subject.disabled) subject.focus(); };
+        return button;
+      }));
+    }
+    if (!landingOpen) await search();
   } catch (error) {
     $('#source-status').textContent = 'PDF 색인을 불러오지 못했습니다';
+    setReadiness(error.message, true);
     setHelp(error.message, true);
   }
 }
 
+$('#landing-browse').addEventListener('click', () => { setResultMode('files'); void search(); });
+$('.brand').addEventListener('click', () => {
+  if (!catalogData) return;
+  searchController?.abort();detailController?.abort();stopWarmup();
+  state.searchPending=false;list.inert=false;list.setAttribute('aria-busy','false');list.classList.remove('is-refreshing');
+  sourceController?.abort(); fileRenderController?.abort(); stopFileRendering?.(); clearPreviews();
+  state.requestId++; state.selectionRequestId++; state.fileRequestId++;
+  shell.classList.remove('is-detail', 'is-split', 'is-file-preview');
+  landingOpen = true; $('#library-landing').hidden = false; $('#workspace').hidden = true;
+  history.replaceState(null, '', location.pathname); publishEmbeddedAddress();
+});
 start();

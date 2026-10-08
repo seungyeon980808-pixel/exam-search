@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="평가원 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
     <title>기출 탐색기</title>
-    <link rel="stylesheet" href="./styles.css?v=resizable-editor-20261003-1" />
+    <link rel="stylesheet" href="./styles.css?v=fast-library-20261008-3" />
     <script>
       if (location.protocol === 'file:') document.documentElement.classList.add('local-file');
     </script>
-    <script src="./app.js?v=embedded-host-20261008-1" type="module"></script>
+    <script src="./app.js?v=fast-library-20261008-3" type="module"></script>
   </head>
   <body>
     <main class="local-file-notice" hidden>
@@ -28,19 +28,11 @@
     </script>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand" aria-label="기출 탐색기" title="기출 탐색기">
+        <button class="brand" type="button" aria-label="기출 탐색기 처음으로" title="처음으로">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <span class="sr-only">기출 탐색기</span>
-        </div>
+        </button>
         <section class="search-panel" aria-label="기출 검색">
-        <form class="search-form" id="search-form" autocomplete="off">
-          <label class="search-box" for="keyword-input">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/></svg>
-            <span id="tokens" class="tokens"></span>
-            <input id="keyword-input" type="search" placeholder="문항 검색" aria-label="검색할 단어 입력" />
-          </label>
-          <button class="button primary" type="submit">검색</button>
-        </form>
         <button class="toolbar-icon filter-toggle" id="filter-toggle" type="button" aria-label="검색 조건 열기" aria-expanded="false" aria-controls="basic-filters" title="검색 조건"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></button>
         <div class="filter-row" id="basic-filters" aria-label="기본 검색 조건">
           <label class="filter-control"><span class="filter-label">과목</span><select id="group-filter" aria-label="과목"><option value="">전과목</option></select></label>
@@ -50,11 +42,20 @@
           <label class="filter-control" id="track-filter-control" hidden><span class="filter-label">선택과목</span><select id="track-filter" aria-label="선택과목"><option value="">선택과목 선택</option></select></label>
           <label class="filter-control" id="variant-filter-control" hidden><span class="filter-label">시험 유형</span><select id="variant-filter" aria-label="시험 유형"><option value="odd">홀수형</option><option value="even">짝수형</option></select></label>
         </div>
+        <form class="search-form" id="search-form" autocomplete="off">
+          <label class="search-box" for="keyword-input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.5-4.5"/></svg>
+            <span id="tokens" class="tokens"></span>
+            <input id="keyword-input" type="search" placeholder="문항 검색" aria-label="검색할 단어 입력" />
+          </label>
+          <button class="button primary" type="submit">검색</button>
+        </form>
         <div class="toolbar-inline-actions" id="toolbar-inline-actions">
           <details class="filter-details" id="filter-details"><summary class="toolbar-icon" aria-label="상세 조건" title="상세 조건"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h5m4 0h7M4 12h9m4 0h3M4 18h2m4 0h10M9 3v6m4 0v6m-7 0v6"/></svg><span id="advanced-count"></span></summary>
             <div class="advanced-filters" aria-label="교육과정 필터">
               <label>교육과정 <select id="framework-filter" aria-label="교육과정"><option value="">전체</option></select></label>
               <label>단원 <select id="unit-filter" aria-label="단원"><option value="">전체</option></select></label>
+              <p id="unit-filter-note" class="filter-note"></p>
               <label>성취기준 <select id="standard-filter" aria-label="성취기준"><option value="">전체</option></select></label>
             </div>
           </details>
@@ -66,6 +67,7 @@
         </section>
         <div class="workspace-tools" id="workspace-tools">
           <label class="workspace-mode"><span class="sr-only">검색 결과 단위</span><select id="workspace-mode" aria-label="검색 결과 단위"><option value="questions">문항별</option><option value="files">시험지별</option></select></label>
+          <label class="page-size-control"><span class="sr-only">화면당 문항 수</span><select id="page-size" aria-label="화면당 문항 수"><option value="6">6개씩</option><option value="9" selected>9개씩</option><option value="18">18개씩</option><option value="36">36개씩</option></select></label>
           <button class="toolbar-icon preview-toggle" id="preview-toggle" type="button" aria-label="미리보기 열기" title="미리보기 열기" aria-controls="detail-pane" aria-pressed="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16"/></svg></button>
           <div class="file-workspace-tools" id="file-workspace-tools" hidden>
             <nav class="file-page-nav" aria-label="시험지 쪽 이동"><button class="toolbar-icon" id="file-page-previous" type="button" aria-label="이전 쪽" disabled>‹</button><span id="file-page-position" aria-live="polite">—</span><button class="toolbar-icon" id="file-page-next" type="button" aria-label="다음 쪽" disabled>›</button></nav>
@@ -94,6 +96,12 @@
         </details>
       </header>
 
+      <div class="search-readiness" id="search-readiness" role="status" aria-live="polite"><span id="search-readiness-text">목록을 준비하고 있습니다…</span><button id="search-retry" type="button" hidden>다시 시도</button><button id="catalog-update" type="button" onclick="location.reload()" hidden>새 자료가 있습니다 · 새로고침</button></div>
+      <section class="library-landing" id="library-landing" aria-labelledby="landing-title" hidden>
+        <div class="landing-intro"><span class="eyebrow">5E 기출 라이브러리</span><h1 id="landing-title">찾고 싶은 기출,<br>과목부터 골라 보세요.</h1><p>단원이나 검색어로 문항을 찾고, 원본을 대조하며<br>편집 가능한 한글 문서로 모으세요.</p><span id="landing-stats"></span></div>
+        <nav class="landing-subjects" id="landing-subjects" aria-label="과목으로 시작"></nav>
+        <div class="landing-footer"><span>과목 → 세부과목 → 연도 → 단원·검색어</span><button class="button secondary" id="landing-browse" type="button">시험지 전체 둘러보기 ↗</button></div>
+      </section>
       <main class="workspace" id="workspace">
         <section class="results-pane" aria-label="검색 결과">
           <div class="pane-header"><div class="pane-actions"></div></div>

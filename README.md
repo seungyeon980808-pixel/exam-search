@@ -4,6 +4,10 @@
 
 ## 구성
 
+첫 화면에서 과목을 고르면 가벼운 문항 목록부터 표시합니다. 본문 검색 색인은 과목별로 필요한 시점에 준비하며, 검색 중에도 이전 결과와 입력한 검색어를 유지합니다. 단원·성취기준은 선택한 과목과 연도에 맞춰 좁혀지고, 문항 표시 개수는 6·9·18·36개 중 고를 수 있습니다.
+
+`data/catalog.json`과 `data/browser/`는 기존 원본 색인에서 생성한 브라우저용 자료입니다. 원본 색인을 변경한 뒤에는 `npm run build:catalog`를 실행하고 생성물을 함께 배포합니다. 검수는 `npm test`, `npm run qa:library`, `npm run qa:library-state`, `npm run qa:search-response`로 수행합니다. 측정 조건과 성능·품질 검수 결과는 [검색 반응성 개선 기록](docs/SEARCH_RESPONSIVENESS.md)에 있습니다.
+
 - `data/questions.json`: 과학탐구·국어·영어·수학·사회탐구 19,760개 문항의 텍스트 색인과 메타데이터
 - `cards/`: PDF에서 미리 만든 문항별 WebP 이미지
 - `data/files.json`: 시험지의 페이지 수와 공개 공유 폴더 내 상대 경로. PDF 바이트나 비공개 파일 ID는 포함하지 않음

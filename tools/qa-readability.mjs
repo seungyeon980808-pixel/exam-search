@@ -275,10 +275,10 @@ async function localPdfMap() {
 
 async function collectQuestion(page, id, modes, captureSource) {
   return page.evaluate(async ({ id, modes, captureSource }) => {
-    const { getJson } = await import('./data.mjs');
+    const { getJson } = await import('./data.mjs?v=library-20261008-3');
     await getJson('/api/status');
     const q = await getJson(`/api/question?id=${encodeURIComponent(id)}`);
-    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=preview-crop-20261004-1');
+    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=library-20261008-3');
     const { inQuestion } = await import('./live-fonts.mjs');
     const { resolveEditableContent } = await import('./editable-source.mjs?v=preview-crop-20261004-1');
     const { createCollectionHwpx, equationScript, groupFractions } = await import('./editable-convert.mjs?v=typography-20261003-3');

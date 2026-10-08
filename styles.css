@@ -572,3 +572,48 @@ summary.toolbar-icon::-webkit-details-marker { display: none; }
   .editable-toolbar { overflow-x: auto; }
   .editable-more-panel, .editable-information-panel { position: fixed; top: 52px; right: 12px; left: auto; }
 }
+
+/* Compact library navigation: scope first, a bounded search input second. */
+.brand { padding: 0; border: 0; background: transparent; flex: none; }
+#basic-filters { order: 1; }
+.search-form, .search-form.has-details { order: 2; flex: 0 1 330px; max-width: 380px; }
+.toolbar-inline-actions { order: 3; }
+#toolbar-actions-anchor { order: 4; }
+.workspace-tools { order: 5; margin-inline-start: auto; }
+.toolbar-menu { order: 6; }
+.filter-toggle { order: 1; }
+.page-size-control select { min-height: 34px; padding: 0 5px; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--muted); background: var(--panel); }
+.search-readiness { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 27px; padding: 4px 16px; color: var(--muted); background: var(--panel-soft); border-bottom: 1px solid var(--line); font-size: var(--text-xs); }
+.search-readiness button { padding: 0; border: 0; color: var(--accent); background: transparent; text-decoration: underline; }
+.result-grid.is-refreshing { opacity: .65; }
+.app-shell.is-split, .app-shell.is-file-preview, .app-shell.is-detail { grid-template-rows: auto auto minmax(0,1fr); }
+.filter-note { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.library-landing { max-width: 1000px; margin: 0 auto; padding: clamp(28px,7vh,72px) 28px 40px; }
+.landing-intro h1 { margin: 12px 0 18px; font-size: clamp(30px,4vw,46px); line-height: 1.25; letter-spacing: -.04em; word-break: keep-all; }
+.landing-intro p { margin: 0 0 20px; color: var(--muted); font-size: 16px; line-height: 1.7; }
+#landing-stats { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.landing-subjects { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-top: 28px; }
+.landing-subject { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); text-align: left; color: var(--ink); }
+.landing-subject strong { font-size: 17px; }
+.landing-subject span { color: var(--muted); font-size: 12px; }
+.landing-subject:hover { border-color: var(--accent); background: var(--accent-soft); }
+.landing-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; font-size: 12px; color: var(--muted); }
+@media (max-width:1180px) {
+  .search-form, .search-form.has-details { flex: 1 1 200px; max-width: none; }
+  #toolbar-menu-panel .toolbar-inline-actions { order: initial; }
+}
+@media (max-width:600px) {
+  .library-landing { padding: 30px 18px; }
+  .landing-subjects { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  .landing-subject { padding: 16px 12px; display: grid; }
+  .page-size-control select { width: 64px; min-height: 40px; }
+  .landing-footer { display: grid; }
+}
+@media (max-width:420px) {
+  .workspace-tools .page-size-control { display: none; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .landing-subject { transition: none; }
+}
+/* Errors share the visible status row; they must not cover its retry button. */
+.topbar .search-help.is-error { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }

@@ -41,14 +41,14 @@ try {
     await page.goto(`${base}?q=${encodeURIComponent('빛 간섭 경로차')}&view=split&id=p2_2018_06_15`);
     await page.waitForFunction(() => document.querySelector('#result-count')?.textContent.includes('검색 결과'),
       { timeout: 30_000 });
-    assert.match(await page.locator('#result-count').innerText(), /6개/);
+    assert.match(await page.locator('#result-count').textContent(), /6개/);
     await page.locator('#source-image').waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('#source-image')?.src.startsWith('blob:'));
     assert.match(await page.locator('#open-pdf').getAttribute('href'), /#page=3$/u);
     await page.screenshot({ path: `${evidence}/questions-${width}.png`, fullPage: false });
 
     if (width <= 900) await page.locator('#mobile-back').click();
-    await page.locator('#mode-files').click();
+    await page.locator('#workspace-mode').selectOption('files');
     await page.locator('.file-row').first().waitFor();
     await page.locator('.file-row .file-select').first().click();
     assert.match(await page.locator('#file-preview-open').getAttribute('href'), /#page=\d+$/u);

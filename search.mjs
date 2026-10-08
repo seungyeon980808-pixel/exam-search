@@ -54,9 +54,35 @@ export function prepareQuestions(items, synonyms = {}) {
   });
 }
 
+// One normalized string, with ranges for ranking. Do not duplicate the body in
+// downloaded assets or include conversion geometry in the search index.
+export function compactSearchRecord(item, synonyms = {}) {
+  const hay = searchableText(item, synonyms);
+  const parts = [normalize(item.id), normalize(item.title),
+    normalize(item.textQuality === 'unreadable' ? '' : item.text), normalize((item.tags || []).join(' '))];
+  let start = 0;
+  for (const part of parts) {
+    if (hay.slice(start, start + part.length) !== part) throw new Error(`Search span mismatch: ${item.id}`);
+    start += part.length + 1;
+  }
+  const record = [item.id, hay, ...parts.map(part => part.length)];
+  if (item.textQuality === 'unreadable') record.push(normalize(item.text));
+  return record;
+}
+
+export function attachSearchRecord(item, record) {
+  const [id, hay, idLength, titleLength, textLength, tagsLength, unreadableText] = record;
+  if (id !== item.id) throw new Error('검색 자료의 문항 번호가 일치하지 않습니다.');
+  const titleAt = idLength + 1, textAt = titleAt + titleLength + 1, tagsAt = textAt + textLength + 1;
+  return {...item, _hay:hay, _hayNs:hay.replace(/\s+/gu, ''),
+    _scoreTitle:hay.slice(titleAt, titleAt + titleLength),
+    _scoreText:unreadableText ?? hay.slice(textAt, textAt + textLength),
+    _scoreTags:hay.slice(tagsAt, tagsAt + tagsLength)};
+}
+
 export function searchQuestions(items, query, filters = {}) {
   const tokens = parseTokens(query);
-  const prepared = items[0]?._hay === undefined ? prepareQuestions(items) : items;
+  const prepared = tokens.length && items[0]?._hay === undefined ? prepareQuestions(items) : items;
   const yearFrom = Number(filters.yearFrom) || 0;
   const yearTo = Number(filters.yearTo) || Infinity;
   const month = Number(filters.month) || 0;
@@ -70,20 +96,26 @@ export function searchQuestions(items, query, filters = {}) {
     // A mismatched legacy link cannot qualify a framework, unit, or standard filter.
     if ((filters.framework || filters.unit || filters.standard) && curriculumYearMismatch(item)) return false;
     if (filters.framework && curriculum.framework !== filters.framework) return false;
-    if (filters.unit && curriculum.unit !== filters.unit
+    if (filters.unit && curriculum.unit !== filters.unit && !(curriculum.unit || '').split(/\s*·\s*/u).includes(filters.unit)
       && !(curriculum.standards || []).some((standard) => standard.unit === filters.unit)) return false;
     if (filters.standard && !(curriculum.standards || [])
       .some((standard) => standard.code === filters.standard)) return false;
     return tokens.every((token) => item._hay.includes(token) || item._hayNs.includes(token));
   });
-  const score = (item) => tokens.reduce((sum, token) => {
-    const title = normalize(item.title);
-    const tags = normalize((item.tags || []).join(' '));
+  const scores = new Map();
+  const score = (item) => {
+    if (scores.has(item.id)) return scores.get(item.id);
+    const value = tokens.reduce((sum, token) => {
+    const title = item._scoreTitle ?? normalize(item.title);
+    const tags = item._scoreTags ?? normalize((item.tags || []).join(' '));
     return sum + (title.includes(token) ? 8 : 0) + (tags.includes(token) ? 5 : 0)
-      + (normalize(item.text).includes(token) ? 1 : 0);
-  }, 0);
+      + ((item._scoreText ?? normalize(item.text)).includes(token) ? 1 : 0);
+    }, 0);
+    scores.set(item.id, value);
+    return value;
+  };
   return hits.sort((a, b) => score(b) - score(a)
-    || b.year - a.year || b.month - a.month || a.no - b.no);
+    || b.year - a.year || b.month - a.month || a.no - b.no || (a._sourceOrder || 0) - (b._sourceOrder || 0));
 }
 
 const namePattern = /^([pbce][12])_(\d{4})_(06|09|11)\.pdf$/u;

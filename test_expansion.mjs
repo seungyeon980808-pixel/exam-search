@@ -1,3 +1,4 @@
+import {createCatalogMetadata} from './catalog-metadata.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -63,8 +64,8 @@ test('answer index is lazy, separate, and only verified answers are returned', a
   };
   try {
     const { getJson } = await import(`./data.mjs?test=${Date.now()}`);
-    const search = await getJson('/api/search?q=42');
-    assert.equal(search.total, 0);
+    assert.equal(searchQuestions(fixture, '42').length, 0);
+    assert.equal(requests.length, 0);
     assert.equal(requests.includes('answers.json'), false);
     const verified = await getJson('/api/answer?id=ko_2026_06_01');
     assert.equal(verified.answer, '3');
@@ -101,28 +102,14 @@ test('2015 links before 2021, including 2020, are unverified and absent from cur
   assert.match(app, /적용 연도 불일치 · 확인 필요/);
 });
 
-test('status options and mismatch count exclude pre-2021 wrong links', async () => {
-  const originalFetch = globalThis.fetch;
-  const originalLocation = globalThis.location;
+test('status options and mismatch count exclude pre-2021 wrong links', () => {
   const make = (year, code) => ({ id: `q${year}`, subject: 'p1', subjectLabel: '물리학Ⅰ',
     pdfFile: `p1_${year}_11.pdf`, year, month: 11, no: 1, page: 1, text: '운동',
     curriculum: { framework: '2015 개정 교육과정', unit: code,
       standards: [{ code, unit: code, text: code }] } });
   const questions = [make(2019, 'old-unit'), make(2020, 'transition-unit'), make(2021, 'valid-unit')];
-  const payloads = { 'questions.json': { pdfCount: 3, questionCount: 3, items: questions },
-    'files.json': questions.map((q) => ({ pdfFile: q.pdfFile, publicPath: `기출문제/${q.pdfFile}`, pageCount: 4 })),
-    'synonyms.json': { map: {} } };
-  globalThis.location = { href: 'https://example.test/' };
-  globalThis.fetch = async (url) => ({ ok: true, status: 200,
-    json: async () => payloads[String(url).split('/').at(-1)] });
-  try {
-    const { getJson } = await import(`./data.mjs?curriculumYearTest=${Date.now()}`);
-    const status = await getJson('/api/status');
-    assert.equal(status.curriculumYearMismatchCount, 2);
-    assert.deepEqual(status.units, ['valid-unit']);
-    assert.deepEqual(status.standards.map((s) => s.value), ['valid-unit']);
-  } finally {
-    globalThis.fetch = originalFetch;
-    globalThis.location = originalLocation;
-  }
+  const status = createCatalogMetadata({pdfCount:3,questionCount:3,items:questions}).status;
+  assert.equal(status.curriculumYearMismatchCount, 2);
+  assert.deepEqual(status.units, ['valid-unit']);
+  assert.deepEqual(status.standards.map((s) => s.value), ['valid-unit']);
 });

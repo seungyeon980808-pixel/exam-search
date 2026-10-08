@@ -1,110 +1,80 @@
-import { paperLabel, paperPages, paperReady } from './paper-profile.mjs';
-import { catalogFiles, curriculumYearMismatch, prepareQuestions, searchFiles, searchQuestions, subjectGroup, fileQuestions } from './search.mjs';
-
-let catalogPromise;
-let answersPromise;
-let publicPaths = new Map();
-
-// A separate, optional answer index is fetched only after the user turns answers on.
-async function answers() {
-  if (!answersPromise) answersPromise = fetch(new URL('./data/answers.json', import.meta.url))
-    .then(async (response) => response.status === 404 ? { items: [] }
-      : response.ok ? response.json() : Promise.reject(new Error('정답 색인을 불러오지 못했습니다.')))
-    .then((index) => new Map((index.items || []).map((entry) => [entry.questionId, entry])))
-    .catch((error) => { answersPromise = null; throw error; });
-  return answersPromise;
+import {loadCatalog} from './catalog-cache.mjs?v=library-20261008-3';
+import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=library-20261008-3';
+let catalogPromise, workerPromise,worker,answersPromise;
+let publicPaths=new Map(),nextId=0;
+const requests=new Map(),listeners=new Set();
+let searchState={phase:'idle',done:0,total:0};
+function emit(state){searchState=state;for(const listener of listeners)listener(state);}
+export function onSearchState(listener){listeners.add(listener);listener(searchState);return()=>listeners.delete(listener);}
+export function driveFilePath(name){return publicPaths.get(name)||'';}
+export async function browserCatalog(){
+ if(!catalogPromise)catalogPromise=loadCatalog(()=>emit({...searchState,updateAvailable:true})).then(value=>{
+  publicPaths=new Map(value.files.map(f=>[f.pdfFile,f.publicPath]));return value;
+ }).catch(e=>{catalogPromise=null;throw e;});return catalogPromise;
 }
-
-async function catalog() {
-  if (!catalogPromise) {
-    catalogPromise = Promise.all(['questions', 'files', 'synonyms'].map(async (name) => {
-      const response = await fetch(new URL(`./data/${name}.json`, import.meta.url));
-      if (!response.ok) throw new Error(`${name} 색인을 불러오지 못했습니다.`);
-      return response.json();
-    })).then(([index, sourceFiles, synonyms]) => {
-      const questions = prepareQuestions(index.items, synonyms.map || {});
-      publicPaths = new Map(sourceFiles.map((file) => [file.pdfFile, file.publicPath]));
-      return { index, questions, files: catalogFiles(sourceFiles, questions),
-        pageCounts: new Map(sourceFiles.map((file) => [file.pdfFile, file.pageCount])),
-        byId: new Map(questions.map((item) => [item.id, item])) };
-    });
-  }
-  return catalogPromise;
+function call(type,args={}, {signal,priority}={}){
+ signal?.throwIfAborted();
+ return new Promise((resolve,reject)=>{
+  const id=++nextId;
+  const cleanup=()=>signal?.removeEventListener('abort',cancel);
+  const cancel=()=>{if(!requests.delete(id))return;cleanup();worker.postMessage({id,type:'cancel'});reject(signal.reason);};
+  requests.set(id,{resolve:value=>{cleanup();resolve(value);},reject:error=>{cleanup();reject(error);}});
+  signal?.addEventListener('abort',cancel,{once:true});
+  worker.postMessage({id,type,priority,...args});
+ });
 }
-
-export function driveFilePath(name) {
-  return publicPaths.get(name) || '';
+async function searchWorker(){
+ if(!workerPromise)workerPromise=(async()=>{
+  const catalog=await browserCatalog();
+  worker=new Worker(new URL('./search-worker.mjs?v=library-20261008-3',import.meta.url),{type:'module'});
+  worker.onmessage=({data})=>{
+   if(data.type==='progress'){if(requests.has(data.id))emit({...searchState,phase:'preparing',done:data.done,total:data.total});return;}
+   const request=requests.get(data.id);if(!request)return;requests.delete(data.id);
+   if(data.error)request.reject(new Error(data.error));else request.resolve(data.value);
+  };
+  worker.onerror=()=>{
+   const error=new Error('검색 준비가 중단되었습니다. 다시 시도해 주세요.');
+   for(const request of requests.values())request.reject(error);requests.clear();worker.terminate();workerPromise=null;
+   emit({...searchState,phase:'error',message:error.message});
+  };
+  await call('init',{catalog});return worker;
+ })().catch(e=>{workerPromise=null;throw e;});return workerPromise;
 }
-
-export async function getJson(path) {
-  const { index, questions, files, pageCounts, byId } = await catalog();
-  const url = new URL(path, location.href);
-  const params = url.searchParams;
-  if (url.pathname === '/api/status') {
-    const subjects = [...new Map(questions.map((item) => [item.subject, item.subjectLabel || item.subject])).entries()]
-      .map(([value, label]) => ({ value, label, group: subjectGroup(value).value }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
-    const availableGroups = new Map(subjects.map(({ value }) => {
-      const entry = subjectGroup(value);
-      return [entry.value, entry];
-    }));
-    const groups = ['kor', 'eng', 'math', 'science', 'social', 'other']
-      .filter((value) => availableGroups.has(value)).map((value) => availableGroups.get(value));
-    const applicable = questions.filter((item) => !curriculumYearMismatch(item));
-    const curriculumYearMismatchCount = questions.length - applicable.length;
-    const frameworks = [...new Set(applicable.map((item) => item.curriculum?.framework).filter(Boolean))].sort();
-    const units = [...new Set(applicable.flatMap((item) => [item.curriculum?.unit,
-      ...(item.curriculum?.standards || []).map((standard) => standard.unit)].filter(Boolean)))].sort();
-    const standards = [...new Map(applicable.flatMap((item) => (item.curriculum?.standards || [])
-      .filter((standard) => standard.code).map((standard) => [standard.code, standard.text || standard.code]))).entries()]
-      .map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
-    return { pdfCount: index.pdfCount, questionCount: index.questionCount,
-      incomplete: index.incomplete || [], degradedPdfCount: index.degradedPdfCount,
-      years: [...new Set(questions.map((item) => item.year))].sort((a, b) => b - a),
-      groups, subjects, frameworks, units, standards, curriculumYearMismatchCount,
-      paperOptions: [...new Map(questions.filter((item) => ['math', 'kor'].includes(item.subject)).map((item) =>
-        [`${item.subject}:${item.year}:${item.month}:${item.track}:${item.variant}`,
-          { subject: item.subject, year: item.year, month: item.month, track: item.track, variant: item.variant }])).values()] };
-  }
-  if (url.pathname === '/api/question') {
-    const item = byId.get(params.get('id'));
-    if (!item) throw new Error('문항을 찾을 수 없습니다.');
-    return item;
-  }
-  if (url.pathname === '/api/answer') {
-    const entry = (await answers()).get(params.get('id'));
-    // Candidate and unverified entries never acquire a displayable answer by accident.
-    return entry?.verificationStatus === 'verified' ? entry : null;
-  }
-  if (url.pathname === '/api/file-questions') {
-    const filters = { track: params.get('track') || '', variant: params.get('variant') || 'odd', allProfiles: params.get('allProfiles') || '' };
-    const all = fileQuestions(questions, params.get('name'));
-    const items = fileQuestions(questions, params.get('name'), null, filters);
-    const scopedPages = all.length && ['math', 'kor'].includes(all[0].subject) ? paperPages(all, items) : null;
-    return { items, pages: scopedPages, label: paperLabel(items, filters), ready: paperReady(items, filters) };
-  }
-  if (url.pathname === '/api/file-pages') {
-    const pageCount = pageCounts.get(params.get('name'));
-    if (!pageCount) throw new Error('시험지를 찾을 수 없습니다.');
-    return { pageCount };
-  }
-  if (url.pathname === '/api/search' || url.pathname === '/api/files') {
-    const filters = { group: params.get('group') || '', subject: params.get('subject') || '',
-      yearFrom: params.get('yearFrom') || '', yearTo: params.get('yearTo') || '',
-      month: params.get('month') || '', framework: params.get('framework') || '',
-      unit: params.get('unit') || '', standard: params.get('standard') || '', track: params.get('track') || '',
-      variant: params.get('variant') || 'odd', allProfiles: params.get('allProfiles') || '' };
-    const query = params.get('q') || '';
-    const fileMode = url.pathname === '/api/files';
-    const found = fileMode ? searchFiles(files, questions, query, filters)
-      : searchQuestions(questions, query, filters);
-    const focus = params.get('focus');
-    const focusIndex = focus ? found.findIndex((item) => fileMode
-      ? item.pdfFile === focus : item.id === focus) : -1;
-    const pageSize = Math.max(1, Math.min(100, Number(params.get('pageSize')) || (fileMode ? 12 : 9)));
-    const requested = Math.max(0, Math.min(100_000, Number(params.get('offset')) || 0));
-    const offset = focusIndex < 0 ? requested : Math.floor(focusIndex / pageSize) * pageSize;
-    return { total: found.length, offset, limit: 40, items: found.slice(offset, offset + 40) };
-  }
-  throw new Error('지원하지 않는 요청입니다.');
+let preparePromise;
+export async function prepareSearch(filters={}){
+ const all=!filters.subject&&!filters.group;
+ if(all&&preparePromise)return preparePromise;
+ const work=(async()=>{emit({...searchState,phase:'preparing',done:0});await searchWorker();
+  const result=await call('prepare',{filters});emit({...searchState,phase:'ready',done:result.subjects,total:result.subjects});return result;
+ })().catch(e=>{emit({...searchState,phase:'error',message:e.message});if(all)preparePromise=null;throw e;});
+ if(all)preparePromise=work;return work;
+}
+// A chosen subject can prepare quietly while the user picks a year or types.
+// It never changes visible search readiness. Whole-library preparation requires
+// explicit keyword-input intent; opening the landing page does not trigger it.
+export async function prefetchSearch(filters,{signal,intent=false}={}){
+ if(!filters.subject&&!intent)return;
+ signal?.throwIfAborted();await searchWorker();signal?.throwIfAborted();
+ return call('prepare',{filters},{signal,priority:'background'});
+}
+async function answers(){
+ if(!answersPromise)answersPromise=fetch(new URL('./data/answers.json',import.meta.url)).then(async r=>r.status===404?{items:[]}:r.ok?r.json():Promise.reject(new Error('정답 색인을 불러오지 못했습니다.')))
+ .then(index=>new Map((index.items||[]).map(e=>[e.questionId,e]))).catch(e=>{answersPromise=null;throw e;});return answersPromise;
+}
+export async function getJson(path, options={}){
+ options.signal?.throwIfAborted();
+ const url=new URL(path,location.href),params=url.searchParams;
+ if(url.pathname==='/api/answer'){const entry=(await answers()).get(params.get('id'));return entry?.verificationStatus === 'verified'?entry:null;}
+ const catalog=await browserCatalog();
+ if(url.pathname==='/api/status')return catalog.status;
+ if(url.pathname==='/api/curriculum')return curriculumOptions(catalog,Object.fromEntries(params));
+ if(url.pathname==='/api/files' && !['q','framework','unit','standard'].some(k=>params.get(k))) {
+  const found=listFiles(catalog,Object.fromEntries(params)),size=Math.max(1,Math.min(100,Number(params.get('pageSize'))||12));
+  const focus=params.get('focus'),index=focus?found.findIndex(f=>f.pdfFile===focus):-1;
+  const offset=index<0?Math.max(0,Math.min(100000,Number(params.get('offset'))||0)):Math.floor(index/size)*size;
+  const limit=Math.ceil(40/size)*size;
+  return {total:found.length,offset,limit,items:found.slice(offset,offset+limit)};
+ }
+ if(url.pathname==='/api/file-pages'){const f=catalog.files.find(f=>f.pdfFile===params.get('name'));if(!f?.pageCount)throw new Error('시험지를 찾을 수 없습니다.');return{pageCount:f.pageCount};}
+ await searchWorker();options.signal?.throwIfAborted();return call('request',{path},options);
 }

@@ -1,5 +1,5 @@
-import { readQuestionPdf } from './pdf-viewer.mjs?v=preview-crop-20261004-1';
-import { questionFigures } from './figure-fallback.mjs?v=preview-crop-20261004-1';
+import { readQuestionPdf } from './pdf-viewer.mjs?v=library-20261008-3';
+import { questionFigures } from './figure-fallback.mjs?v=library-20261008-3';
 import { observedContentRegions } from './content-integrity.mjs?v=readability-20261004-4';
 import { appendLineRuns } from './prose-flow.mjs?v=readability-20261004-4';
 import { inQuestion, verifiedGlyphMap } from './live-fonts.mjs';

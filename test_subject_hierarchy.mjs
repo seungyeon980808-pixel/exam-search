@@ -1,3 +1,4 @@
+import {createCatalogMetadata} from './catalog-metadata.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { catalogFiles, prepareQuestions, searchFiles, searchQuestions, subjectGroup } from './search.mjs';
@@ -29,27 +30,11 @@ test('file view applies the same two-level filters', () => {
   assert.equal(searchFiles(files, questions, '', { group: 'math' })[0].subject, 'math');
 });
 
-test('status reports only available top-level groups in a stable order', async () => {
-  const originalFetch = globalThis.fetch;
-  const originalLocation = globalThis.location;
-  const payloads = {
-    'questions.json': { pdfCount: files.length, questionCount: questions.length, items: questions },
-    'files.json': files,
-    'synonyms.json': { map: {} },
-  };
-  globalThis.location = { href: 'https://example.test/' };
-  globalThis.fetch = async (url) => ({ ok: true, status: 200,
-    json: async () => payloads[String(url).split('/').at(-1)] });
-  try {
-    const { getJson } = await import(`./data.mjs?hierarchy=${Date.now()}`);
-    const status = await getJson('/api/status');
-    assert.deepEqual(status.groups.map(({ value }) => value), ['kor', 'eng', 'math', 'science', 'social']);
-    assert.deepEqual(status.subjects.filter(({ group }) => group === 'social')
-      .map(({ value }) => value).sort(), ['life_ethics', 'world_history']);
-    assert.equal((await getJson('/api/search?group=science&subject=p1')).total, 1);
-    assert.equal((await getJson('/api/files?group=social&subject=life_ethics')).total, 1);
-  } finally {
-    globalThis.fetch = originalFetch;
-    globalThis.location = originalLocation;
-  }
+test('status reports only available top-level groups in a stable order', () => {
+  const status = createCatalogMetadata({pdfCount:files.length,questionCount:questions.length,items:questions}).status;
+  assert.deepEqual(status.groups.map(({ value }) => value), ['kor', 'eng', 'math', 'science', 'social']);
+  assert.deepEqual(status.subjects.filter(({ group }) => group === 'social')
+    .map(({ value }) => value).sort(), ['life_ethics', 'world_history']);
+  assert.equal(searchQuestions(questions, '', {group:'science',subject:'p1'}).length, 1);
+  assert.equal(searchFiles(files, questions, '', {group:'social',subject:'life_ethics'}).length, 1);
 });

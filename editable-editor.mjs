@@ -1,10 +1,10 @@
-import { driveFilePath } from './data.mjs';
+import { driveFilePath } from './data.mjs?v=library-20261008-3';
 import { driveLink } from './drive-source.mjs';
-import { resolveEditableContent } from './editable-source.mjs?v=readability-20261004-4';
-import { createEditableBatch } from './editable-batch.mjs?v=readability-20261004-4';
+import { resolveEditableContent } from './editable-source.mjs?v=library-20261008-3';
+import { createEditableBatch } from './editable-batch.mjs?v=library-20261008-3';
 import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=readability-20261004-4';
-import { renderQuestion } from './pdf-viewer.mjs?v=preview-crop-20261004-1';
-import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=preview-crop-20261004-1';
+import { renderQuestion } from './pdf-viewer.mjs?v=library-20261008-3';
+import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-20261008-3';
 import { contentQualitySummary } from './content-quality.mjs?v=readability-20261004-4';
 
 import { columnViewport, columnPresentation, studioZoomSlider } from './editor-viewport.mjs?v=resizable-editor-20261003-1';
