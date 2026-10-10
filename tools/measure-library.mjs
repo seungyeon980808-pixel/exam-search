@@ -20,12 +20,12 @@ for(let run=0;run<5;run++) {
   await page.goto(`${base}?group=science&subject=p1&year=2025&month=11`,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.measure.list,null,{timeout:90000});
   const ready=await page.evaluate(async()=>{
-   const data=await import(document.documentElement.dataset.catalogReady ? './data.mjs?v=library-20261008-3' : './data.mjs');
+   const data=await import(document.documentElement.dataset.catalogReady ? './data.mjs?v=library-release-20261010-1' : './data.mjs');
    if(data.prepareSearch) await data.prepareSearch();
    else await data.getJson('/api/search?q=전자기파&group=science&subject=p1');
    return performance.now();
   });
-  const interaction=await page.evaluate(async()=>{const start=performance.now(); const d=await import(document.documentElement.dataset.catalogReady ? './data.mjs?v=library-20261008-3' : './data.mjs');await d.getJson('/api/search?q=전자기파&group=science&subject=p1&yearFrom=2025&yearTo=2025');return performance.now()-start;});
+  const interaction=await page.evaluate(async()=>{const start=performance.now(); const d=await import(document.documentElement.dataset.catalogReady ? './data.mjs?v=library-release-20261010-1' : './data.mjs');await d.getJson('/api/search?q=전자기파&group=science&subject=p1&yearFrom=2025&yearTo=2025');return performance.now()-start;});
   const before=await page.evaluate(()=>performance.now());
   await page.locator('.result-card').first().click();
   let source=null,sourceError='';

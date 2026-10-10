@@ -10,7 +10,9 @@
   --line-strong: #afb8c1;
   --accent: #0969da;
   --accent-hover: #0755b1;
+  --accent-pressed: #06458f;
   --accent-soft: #ddf4ff;
+  --accent-soft-pressed: #c5e8fb;
   --accent-wash: rgba(9, 105, 218, .09);
   --on-accent: #ffffff;
   --warning: #9a6700;
@@ -132,21 +134,34 @@ a { color: var(--accent); }
 .result-card:hover { background: var(--panel-soft); border-color: var(--line-strong); }
 .result-card:active { transform: translateY(0); }
 .result-card[aria-current="true"] { background: var(--accent-soft); }
+.result-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.result-card:focus-visible, .card-preview:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .result-meta { display: block; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); color: var(--ink); font-weight: 700; font-size: var(--text-sm); font-variant-numeric: tabular-nums; word-break: keep-all; text-wrap: balance; }
 .result-preview { display: grid; place-items: center; padding: var(--space-1); background: var(--paper); }
 .result-preview.is-loading { min-height: 220px; }
+.result-preview.has-dimensions { position: relative; box-sizing: content-box; aspect-ratio: var(--preview-ratio); }
+.result-preview.has-dimensions.is-loading { min-height: 0; }
+.result-preview.has-dimensions .preview-placeholder { position: absolute; inset: 0; }
+.file-thumbnail { position: relative; }
+.file-thumbnail.is-loading > span { position: absolute; inset: 0; display: grid; place-items: center; }
 .result-preview img { display: block; width: 100%; height: auto; }
+.result-preview.has-dimensions img { position: absolute; top: var(--space-1); left: var(--space-1); width: calc(100% - 2 * var(--space-1)); height: calc(100% - 2 * var(--space-1)); object-fit: contain; }
 .result-preview.is-loading img, .file-thumbnail.is-loading img { visibility: hidden; }
 .result-preview.is-error { color: var(--danger); font-size: var(--text-sm); text-align: center; }
 .result-preview.is-error img { display: none; }
+.result-preview.has-dimensions.is-error img { display: block; visibility: hidden; }
 .result-tags { display: block; min-height: 28px; padding: var(--space-1) var(--space-3); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .question-item { position: relative; min-width: 0; }
-.question-item .result-meta { min-height: var(--control-height); padding-inline-end: calc(var(--control-height) + var(--space-8)); display: flex; align-items: center; }
+.question-item .result-meta { min-height: var(--control-height); padding-inline-end: calc(2 * var(--control-height) + var(--space-8)); display: flex; align-items: center; }
 .question-selection { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control-height); padding-inline: var(--space-2); border-radius: var(--radius-md); color: var(--muted); font-size: var(--text-sm); white-space: nowrap; cursor: pointer; }
 .question-selection input { width: var(--space-4); height: var(--space-4); margin: 0; accent-color: var(--accent); cursor: pointer; }
 .question-selection:has(input:checked) { color: var(--accent); background: var(--accent-soft); }
 .question-selection:hover { background: var(--panel-soft); }
-.card-selection { position: absolute; inset-block-start: 0; inset-inline-end: var(--space-1); }
+.card-actions { position: absolute; inset-block-start: 0; inset-inline-end: var(--space-1); display: flex; align-items: center; }
+.card-preview { display: grid; place-items: center; width: var(--control-height); height: var(--control-height); padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--muted); }
+.card-preview svg { width: 18px; height: 18px; }
+.card-preview:hover { background: var(--panel-soft); color: var(--accent); }
+.card-preview:active { background: var(--accent-soft-pressed); }
 .selection-toolbar { display: flex; align-items: center; gap: var(--space-1); }
 .selection-toolbar .button, .selection-item-actions .button { padding-inline: var(--space-2); font-size: var(--text-sm); }
 #selection-toggle { display: inline-flex; align-items: center; gap: var(--space-1); }

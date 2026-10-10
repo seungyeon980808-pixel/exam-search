@@ -6,10 +6,16 @@ import {createCatalogMetadata} from '../catalog-metadata.mjs';
 const root = new URL('../', import.meta.url);
 const read = async name => JSON.parse(await readFile(new URL(`data/${name}.json`, root), 'utf8'));
 const [index, records, synonyms] = await Promise.all(['questions', 'files', 'synonyms'].map(read));
+const digest = value => createHash('sha256').update(value).digest('hex');
+const sourceRevision=digest(JSON.stringify([index,records,synonyms]));
+let previews;
+try { previews = JSON.parse(await readFile(new URL('data/preview-assets.json',root),'utf8')); }
+catch(error) { if(error.code!=='ENOENT')throw error; }
+if(previews && (previews.schema!=='exam-previews-v1'||previews.sourceRevision!==sourceRevision))
+ throw new Error('Preview assets do not match the current source index. Rebuild them first.');
 const directory = new URL('data/browser/', root);
 await mkdir(directory, {recursive:true});
 const keep = new Set();
-const digest = value => createHash('sha256').update(value).digest('hex');
 async function asset(label, value) {
   const json = JSON.stringify(value), hash = digest(json), name = `${label}-${hash.slice(0,16)}.json`;
   keep.add(name); await writeFile(new URL(name, directory), json);
@@ -27,6 +33,8 @@ for(const {value} of subjects){
   const item=Object.fromEntries(fields.filter(k=>rest[k]!==undefined).map(k=>[k,rest[k]]));
   if(curriculum)item.curriculum={framework:curriculum.framework,unit:curriculum.unit,
    standards:(curriculum.standards||[]).map(s=>({code:s.code,unit:s.unit}))};
+  const preview=previews?.questions?.[q.id];
+  if(preview)Object.assign(item,{cardPath:preview.path,cardWidth:preview.width,cardHeight:preview.height});
   item._sourceOrder = sourceOrder.get(q.id);
   return item;
  });
@@ -41,8 +49,8 @@ for(const q of index.items) {
   profile.questionCount++;profile.firstMatchPage=Math.min(profile.firstMatchPage,q.page);
   profiles.set(key,profile);fileProfiles.set(q.pdfFile,profiles);
 }
-const files=catalogFiles(records,index.items).map(f=>({...f,...records.find(r=>r.pdfFile===f.pdfFile),profiles:[...(fileProfiles.get(f.pdfFile)||new Map()).values()]}));
-const sourceRevision=digest(JSON.stringify([index,records,synonyms]));
+const files=catalogFiles(records,index.items).map(f=>({...f,...records.find(r=>r.pdfFile===f.pdfFile),profiles:[...(fileProfiles.get(f.pdfFile)||new Map()).values()],
+ ...(previews?.files?.[f.pdfFile]?{thumbnailPath:previews.files[f.pdfFile].path}:{})}));
 const contents={schema:'exam-browser-v3',sourceRevision,status,files,facets,shards,synonyms:synonyms.map||{}};
 const catalog={...contents,revision:digest(JSON.stringify(contents))};
 await writeFile(new URL('data/catalog.json',root),JSON.stringify(catalog));

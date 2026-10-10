@@ -1,0 +1,151 @@
+import assert from 'node:assert/strict';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chromium, webkit } from 'playwright';
+import init, { HwpDocument } from '../vendor/rhwp-studio/assets/rhwp-core.js';
+
+const base = process.env.EXAM_SEARCH_URL || 'http://127.0.0.1:8813/';
+const evidence = new URL('../_work/ux-implementation/', import.meta.url);
+await mkdir(evidence, { recursive: true });
+const observations = [];
+const done = page => page.waitForFunction(() => document.querySelector('#result-list').getAttribute('aria-busy') === 'false');
+const noOverflow = async page => assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'page overflow');
+for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
+  const browser = await type.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, acceptDownloads: true });
+    const page = await context.newPage(), errors = [], requests = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => requests.push(request.url()));
+    await page.goto(base);
+    await page.locator('.landing-subject').first().waitFor();
+    assert.equal(await page.locator('.landing-subject').count(), 5);
+    assert(!requests.some(url => /questions.json|pdf.mjs|editable-editor|google-drive-gateway/.test(url)), 'landing loads heavy modules');
+    await noOverflow(page);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: new URL(`${engine}-landing.png`, evidence).pathname, fullPage: true });
+    await page.waitForFunction(() => document.querySelector('[data-story-count]').textContent === '2 / 3', null, { timeout: 7500 });
+    await page.locator('[data-story-play]').click();
+    await page.locator('[data-story-step]').nth(2).click();
+    assert.equal(await page.locator('.story-slide:not([hidden]) h2').textContent(), '편집 가능한한글 자료로 만드세요.');
+    await page.locator('#keyword-input').fill('작성 중');
+    await page.locator('[data-story-step]').nth(0).click();
+    assert.equal(await page.locator('#keyword-input').inputValue(), '작성 중');
+    observations.push({ engine, scenario: 'landing', stages: 3, autoplay: true, pause: true, draftPreserved: true, heavyModules: 0 });
+
+    await page.goto(`${base}?group=science&subject=p1&year=2025&month=11`);
+    await done(page);
+    await page.locator('.card-selection input').nth(0).check();
+    await page.locator('.card-selection input').nth(1).check();
+    await page.locator('#selection-toggle').click();
+    await page.locator('#selection-list li').nth(1).locator('[data-action="up"]').click();
+    const ids = await page.locator('#selection-list li').evaluateAll(rows => rows.map(row => row.dataset.id));
+    assert.deepEqual(ids, ['p1_2025_11_02', 'p1_2025_11_01']);
+    await page.locator('#selection-list li').first().locator('[data-action="remove"]').click();
+    await page.locator('#selection-undo').click();
+    assert.deepEqual(await page.locator('#selection-list li').evaluateAll(rows => rows.map(row => row.dataset.id)), ids);
+    await page.reload(); await done(page);
+    assert.equal(await page.locator('#selection-count').textContent(), '선택 2개');
+    assert.match(await page.locator('#selection-notice-text').textContent(), /복원/);
+    await page.locator('#selection-toggle').click();
+    assert.deepEqual(await page.locator('#selection-list li').evaluateAll(rows => rows.map(row => row.dataset.id)), ids);
+    await page.locator('#selection-clear').click();
+    await page.locator('#selection-undo').click();
+    assert.equal(await page.locator('#selection-count').textContent(), '선택 2개');
+    await page.locator('#selection-toggle').click();
+    observations.push({ engine, scenario: 'selection', restore: true, order: ids, undoRemove: true, undoClear: true });
+
+    await page.locator('#unit-details > summary').click();
+    const units = await page.locator('#unit-filter option').allTextContents();
+    assert(units.some(unit => /파동|전자기/.test(unit)) && !units.some(unit => /유전|세포/.test(unit)), 'subject-specific units');
+    await page.locator('#unit-filter').selectOption({ index: 1 }); await done(page);
+    assert(await page.locator('#applied-filters').isVisible());
+    await page.locator('#applied-filters button').last().click(); await done(page);
+    assert.equal(await page.locator('#unit-filter').inputValue(), '');
+    await page.locator('#keyword-input').fill('없는문항x 없는문항y 없는문항z');
+    await page.locator('#search-form').evaluate(form => form.requestSubmit()); await done(page);
+    assert(await page.locator('.empty-results').isVisible());
+    assert(await page.locator('#keyword-input').isEnabled());
+    await page.locator('#keyword-input').fill('네번째단어');
+    await page.locator('#search-form').evaluate(form => form.requestSubmit());
+    assert.equal(await page.locator('#keyword-input').inputValue(), '네번째단어');
+    assert.match(await page.locator('#search-readiness-text').textContent(), /최대 세/);
+    await page.locator('.empty-results-actions button').filter({ hasText: '빼고 찾기' }).click(); await done(page);
+    assert.equal(await page.locator('.token').count(), 2);
+    assert.equal(await page.locator('#selection-count').textContent(), '선택 2개');
+    observations.push({ engine, scenario: 'search recovery', scopedUnits: true, appliedChips: true, threeTokenInputUsable: true, draftPreserved: true, emptyRecovery: true });
+
+    await page.goto(`${base}?group=science&subject=p1&year=2025&month=11&pageSize=6`); await done(page);
+    await page.locator('#load-more').click();
+    assert.equal(await page.locator('#page-position').textContent(), '2 / 4');
+    const first = page.locator('.question-item:not([hidden]) .result-card').first();
+    const focusId = await first.getAttribute('data-id');
+    const length = await page.evaluate(() => history.length);
+    await first.locator('..').locator('.card-preview').click(); await page.locator('#detail-content').waitFor();
+    assert.equal(await page.evaluate(() => history.length), length + 1);
+    await page.locator('#mobile-back').click(); await done(page);
+    await page.waitForFunction(() => !document.querySelector('.app-shell').classList.contains('is-detail'));
+    assert.equal(await page.locator('#page-position').textContent(), '2 / 4');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.id), focusId);
+    await page.goForward();
+    await page.waitForFunction(() => document.querySelector('.app-shell').classList.contains('is-detail'));
+    assert.equal(new URL(page.url()).searchParams.get('id'), focusId);
+    observations.push({ engine, scenario: 'detail navigation', backPage: 2, focusRestored: focusId, forward: true });
+
+    await page.goto(`${base}?group=science&subject=p1&year=2027&id=p1_2027_06_06`);
+    await page.locator('#open-editable').click();
+    await page.locator('#editable-dialog').waitFor();
+    await page.locator('#editable-document-settings > summary').click();
+    await page.locator('#editable-layout').selectOption('question');
+    await page.locator('#editable-image-mode').selectOption('exclude');
+    await page.locator('#editable-start').click();
+    await page.waitForFunction(() => !document.querySelector('#editable-download').disabled, null, { timeout: 90000 });
+    await page.locator('#editable-view-settings > summary').click();
+    await page.locator('#editable-zoom').fill('100');
+    await page.locator('#editable-zoom').dispatchEvent('change');
+    await page.waitForFunction(() => document.querySelector('#editable-view-label').textContent.includes('100%'));
+    await page.locator('#editable-document-settings > summary').click();
+    await page.locator('#editable-image-mode').selectOption('include');
+    assert.match(await page.locator('#editable-document-label').textContent(), /적용 대기/);
+    await page.locator('#editable-image-mode').selectOption('exclude');
+    assert(!/적용 대기/.test(await page.locator('#editable-document-label').textContent()));
+    await page.locator('#editable-document-settings > summary').click();
+    await page.screenshot({ path: new URL(`${engine}-editor.png`, evidence).pathname });
+    const downloading = page.waitForEvent('download'); await page.locator('#editable-download').click();
+    const download = await downloading;
+    const path = new URL(`${engine}-physics.hwpx`, evidence).pathname; await download.saveAs(path);
+    await init({ module_or_path: await readFile(new URL('../vendor/rhwp-studio/assets/rhwp_bg-PUGAA2uC.wasm', import.meta.url)) });
+    const doc = new HwpDocument(await readFile(path));
+    try {
+      const text = Array.from({ length: doc.getParagraphCount(0) }, (_, n) => doc.getTextRange(0, n, 0, 2000)).join('\n');
+      assert.match(text, /6\. 그림은 평면/);
+      const equations = JSON.parse(doc.getControls()).filter(control => control.ctrlId === 'eqed').length;
+      assert.equal(equations, 7);
+      observations.push({ engine, scenario: 'real HWPX', nativeEquations: equations, documentSettings: true, viewZoom: '100%', pendingSettings: true, download: path });
+    } finally { doc.free(); }
+    const sourceWarnings = errors.filter(error => /google-drive-gateway.*due to access control checks/u.test(error));
+    assert.deepEqual(errors.filter(error => !sourceWarnings.includes(error)), []);
+    if (sourceWarnings.length) observations.push({ engine, scenario: 'public PDF network', sourceWarnings });
+    await context.close();
+
+    for (const width of [320, 375, 768]) {
+      const mobile = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce', isMobile: true, hasTouch: true });
+      const phone = await mobile.newPage();
+      await phone.goto(base); await phone.locator('.landing-subject').first().waitFor(); await noOverflow(phone);
+      assert.equal(await phone.locator('[data-story-play]').getAttribute('aria-pressed'), 'false');
+      await phone.screenshot({ path: new URL(`${engine}-${width}-landing.png`, evidence).pathname, fullPage: true });
+      await phone.locator('.landing-subject').filter({ hasText: '과학탐구' }).click(); await done(phone);
+      await phone.locator('#filter-toggle').click(); await phone.locator('#subject-filter').selectOption('p1'); await done(phone);
+      if (!await phone.locator('#basic-filters').isVisible()) await phone.locator('#filter-toggle').click();
+      await phone.locator('#unit-details > summary').click(); assert(await phone.locator('#unit-filter').isVisible()); await noOverflow(phone);
+      await phone.screenshot({ path: new URL(`${engine}-${width}-units.png`, evidence).pathname });
+      await phone.locator('#unit-details > summary').click();
+      await phone.locator('#filter-toggle').click();
+      await phone.locator('.question-item:not([hidden]) .card-preview').first().click(); await phone.locator('#detail-content').waitFor(); await noOverflow(phone);
+      await phone.screenshot({ path: new URL(`${engine}-${width}-detail.png`, evidence).pathname });
+      observations.push({ engine, width, scenario: 'responsive', overflow: false, unitVisible: true, reducedMotion: true });
+      await mobile.close();
+    }
+  } finally { await browser.close(); }
+}
+await writeFile(new URL('results.json', evidence), JSON.stringify({ passed: true, observations }, null, 2));
+console.log(JSON.stringify({ passed: true, observations }, null, 2));

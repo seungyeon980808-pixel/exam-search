@@ -1,4 +1,4 @@
-import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-20261008-3';
+import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261010-1';
 import { validateParagraphs } from './editable-convert.mjs?v=readability-20261004-4';
 import { restoreProseBlocks } from './prose-flow.mjs?v=readability-20261004-4';
 const letters = (text) => text.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
@@ -52,9 +52,9 @@ export async function passageBlocks(question, deps = {}) {
   const indexed = split > 0 ? letters(question.text.slice(0, split)) : '';
   if (!indexed) return finish(reject('대조할 색인 지문이 없습니다.'));
   try {
-    const read = deps.readQuestionPdf || (await import('./pdf-viewer.mjs?v=library-20261008-3')).readQuestionPdf;
+    const read = deps.readQuestionPdf || (await import('./pdf-viewer.mjs?v=library-release-20261010-1')).readQuestionPdf;
     const glyphMap = deps.glyphMap || (await import('./live-fonts.mjs')).verifiedGlyphMap;
-    const build = deps.build || (await import('./live-convert.mjs?v=library-20261008-3')).buildLiveStructure;
+    const build = deps.build || (await import('./live-convert.mjs?v=library-release-20261010-1')).buildLiveStructure;
     const cache = passageCache.get(read) ?? new Map();
     passageCache.set(read, cache);
     const key = JSON.stringify([passageKey(question), indexed, includeImages]);

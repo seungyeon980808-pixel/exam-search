@@ -1,4 +1,4 @@
-const CACHE = 'exam-library-catalog-v3';
+const CACHE = 'exam-library-catalog-v4';
 const pending = new Map();
 export function validCatalog(value) {
   return value?.schema === 'exam-browser-v3' && /^[a-f\d]{64}$/u.test(value.revision || '')

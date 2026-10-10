@@ -1,0 +1,301 @@
+/* Aurora Light: mint/cyan/blue atmosphere; exam and document paper stay opaque. */
+:root {
+  --app: #e6f3f4;
+  --panel: #ffffff;
+  --panel-soft: #eff7f8;
+  --paper: #ffffff;
+  --ink: #12343f;
+  --muted: #244751;
+  --line: #bed6db;
+  --line-strong: #628796;
+  --accent: #006357;
+  --accent-hover: #005449;
+  --accent-pressed: #004339;
+  --accent-soft: #d5eee8;
+  --accent-soft-pressed: #c3e5dc;
+  --accent-wash: rgba(0, 99, 87, .09);
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 20px;
+  --canvas-blue: rgba(104, 168, 241, .55);
+  --canvas-mint: rgba(79, 194, 175, .48);
+  --canvas-cyan: rgba(166, 230, 239, .40);
+  --glass-surface: rgba(248, 254, 253, .88);
+  --glass-floating: rgba(250, 254, 253, .98);
+  --glass-highlight: rgba(255, 255, 255, .94);
+  --glass-edge: rgba(85, 138, 153, .28);
+  --glass-blur: blur(14px) saturate(135%);
+  --glass-shadow: 0 18px 42px rgba(24, 79, 95, .14), 0 3px 8px rgba(24, 79, 95, .05);
+  --control-surface: rgba(255, 255, 255, .91);
+  --action-gradient: linear-gradient(125deg, #007569, #1254ac);
+  --action-gradient-hover: linear-gradient(125deg, #005f55, #10478f);
+  --action-gradient-pressed: linear-gradient(125deg, #004a41, #103975);
+  --selection-surface: linear-gradient(115deg, #d5eee8, #e3efff);
+}
+
+body {
+  background-color: var(--app);
+  background-image:
+    radial-gradient(ellipse at 2% 10%, var(--canvas-mint), transparent 62%),
+    radial-gradient(ellipse at 98% 0%, var(--canvas-blue), transparent 60%),
+    radial-gradient(ellipse at 55% 86%, var(--canvas-cyan), transparent 64%),
+    linear-gradient(135deg, #e9f6f1, #e5effc 58%, #eef8f7);
+  background-size: 100% 1100px, 100% 1000px, 100% 1200px, 100% 100%;
+  background-repeat: no-repeat;
+}
+::selection { color: var(--ink); background: #bee6df; }
+input, textarea { caret-color: var(--accent); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+a { text-underline-offset: .18em; }
+html, .results-pane, .detail-scroll, .file-pages, .editable-reference-scroll {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* An opaque base also works in browsers without backdrop-filter. */
+.topbar {
+  background: #f7fcfb;
+  border-bottom-color: var(--glass-edge);
+  box-shadow: 0 3px 16px rgba(24, 79, 95, .05);
+}
+.search-readiness { background: rgba(235, 247, 248, .76); }
+.topbar .filter-row, .topbar .search-box {
+  background: var(--control-surface);
+  border-color: var(--line);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+.topbar .search-box:focus-within { border-color: var(--accent); }
+.topbar .workspace-mode select, .topbar .page-size-control select {
+  background-color: var(--control-surface);
+}
+.topbar .toolbar-icon:hover, .card-preview:hover { background: var(--accent-soft); }
+.filter-panel, .search-suggestions, .toolbar-menu-panel,
+.editable-settings-panel, .editable-information-panel, .editable-more-panel,
+.topbar.is-filters-open .filter-row {
+  background: #f9fdfc;
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+
+.brand-mark { background-color: var(--accent); background-image: var(--action-gradient); }
+.button.primary, .topbar .button.primary {
+  background-color: var(--accent);
+  background-image: var(--action-gradient);
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 10px rgba(0, 87, 78, .16);
+}
+.button.primary:hover, .topbar .button.primary:hover {
+  background-color: var(--accent-hover);
+  background-image: var(--action-gradient-hover);
+}
+.button:active, .topbar .button:active { transform: none; }
+.button.primary:active, .topbar .button.primary:active {
+  background-color: var(--accent-pressed);
+  background-image: var(--action-gradient-pressed);
+  transition-duration: 0s;
+}
+.button.secondary, .filter-chip {
+  background: var(--control-surface);
+  border-color: var(--line);
+}
+.button.secondary:hover, .filter-chip:hover { background: var(--accent-soft); }
+
+/* Atmosphere is strongest on the introduction, quiet behind the exam itself. */
+.landing-story {
+  background: #f8fdfc;
+  border-color: var(--glass-highlight);
+  box-shadow: var(--glass-shadow);
+}
+.landing-subject {
+  background: linear-gradient(125deg, rgba(255, 255, 255, .94), rgba(231, 247, 245, .88));
+  border-color: var(--glass-edge);
+  box-shadow: 0 3px 12px rgba(24, 79, 95, .05);
+}
+.landing-subject:hover { background: var(--selection-surface); border-color: var(--accent); }
+.landing-subject:active { background: var(--accent-soft-pressed); }
+.story-search-demo, .story-document-demo {
+  background: linear-gradient(125deg, #e5f5ef, #e8f1ff);
+}
+.story-try { background: var(--selection-surface); }
+.story-try:hover { background: var(--accent-soft-pressed); }
+.story-demo-selection, .story-collection-demo figcaption { background: var(--selection-surface); }
+
+.result-card { background: var(--panel); box-shadow: 0 3px 14px rgba(24, 79, 95, .045); }
+.result-meta, .result-tags { background: linear-gradient(110deg, #fbfefd, #f1f7fc); }
+.result-card:hover { border-color: var(--line-strong); }
+.result-card[aria-pressed="true"] { background: var(--panel); border-color: var(--accent); }
+.result-card[aria-pressed="true"] .result-meta,
+.result-card[aria-pressed="true"] .result-tags { background: var(--selection-surface); }
+/* The checkbox overlays the header: inherit its surface without a separate fill. */
+.question-item .question-selection,
+.question-item .question-selection:has(input:checked),
+.question-item .question-selection:hover { background: transparent; }
+.question-item .question-selection:hover { color: var(--accent); }
+.result-preview, .story-demo-paper { background: var(--paper); }
+.result-preview img { filter: none; opacity: 1; }
+.selection-notice { background: var(--selection-surface); }
+.selection-tray, .empty-results, .app-shell.is-files .result-grid { background: #fafffd; }
+.file-row[aria-current="true"] { background: var(--selection-surface); }
+.detail-pane, .editable-reference {
+  background: linear-gradient(140deg, #e3f2ed, #e6effb);
+}
+.app-shell.is-split .pane-header, .app-shell.is-file-preview .pane-header {
+  background: #f1f8f8;
+}
+.detail-header, .file-preview-header, .editable-toolbar,
+.editable-reference-heading { background: #f9fdfc; }
+.editable-dialog { border-color: var(--glass-edge); box-shadow: var(--glass-shadow); }
+
+/* Only a few elevated surfaces blur. No blur on cards, PDF pixels or the editor. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .topbar {
+    background: var(--glass-surface);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .landing-story {
+    background: linear-gradient(125deg, rgba(255, 255, 255, .89), rgba(244, 253, 251, .81));
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .filter-panel, .search-suggestions, .toolbar-menu-panel,
+  .editable-settings-panel, .editable-information-panel, .editable-more-panel,
+  .topbar.is-filters-open .filter-row {
+    background: var(--glass-floating);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+/* Inside the compact conditions panel, nested controls need no extra blur/layer. */
+@media (max-width: 1360px) {
+  .topbar .filter-panel {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+}
+@media (max-width: 820px) {
+  .topbar, .landing-story, .topbar.is-filters-open .filter-row {
+    --glass-blur: blur(8px) saturate(125%);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .topbar, .landing-story, .filter-panel, .search-suggestions,
+  .toolbar-menu-panel, .editable-settings-panel, .editable-information-panel,
+  .editable-more-panel, .topbar.is-filters-open .filter-row {
+    background: #f9fdfc;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (forced-colors: active) {
+  body, .topbar, .landing-story, .landing-subject, .result-card,
+  .result-meta, .result-tags, .search-readiness, .filter-panel,
+  .search-suggestions, .toolbar-menu-panel, .selection-notice,
+  .button.primary, .topbar .button.primary, .brand-mark,
+  .story-try, .story-search-demo, .story-document-demo {
+    background-image: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+}
+
+
+/* Aurora's broad introduction, subject rail and horizontal feature story. */
+.library-landing {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto;
+  row-gap: var(--space-6);
+  max-width: 1120px;
+  padding-block: clamp(32px, 5vh, 52px) 36px;
+}
+.landing-intro {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-3) clamp(32px, 5vw, 64px);
+  align-items: center;
+}
+.landing-intro > .eyebrow { display: none; }
+.landing-intro h1 { grid-column: 1; grid-row: 1 / 3; margin: 0; }
+.landing-intro p { grid-column: 2; grid-row: 1; margin: 0; align-self: end; }
+#landing-stats { grid-column: 2; grid-row: 2; align-self: start; }
+.landing-subjects {
+  grid-column: 1;
+  grid-row: 2;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.landing-subject {
+  min-width: 0;
+  background: linear-gradient(125deg, rgba(255, 255, 255, .94), rgba(231, 247, 245, .88));
+  border-color: var(--glass-highlight);
+  box-shadow: 0 5px 16px rgba(24, 79, 95, .055);
+}
+.landing-subject:last-child { grid-column: auto; }
+.landing-story {
+  grid-column: 1;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-8);
+  margin: 0;
+}
+.story-top, .story-stage { grid-column: 1 / -1; }
+.story-stage { min-height: 300px; }
+.story-slide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto auto auto;
+  gap: var(--space-3) var(--space-8);
+  min-height: 300px;
+}
+.story-step-label { grid-column: 1; grid-row: 1; margin: 0; align-self: end; }
+.story-slide h2 { grid-column: 1; grid-row: 2; margin: 0; align-self: center; }
+.story-slide > p { grid-column: 1; grid-row: 3; margin: 0; align-self: start; }
+.story-slide > :is(.story-search-demo, .story-collection-demo, .story-document-demo) {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
+  width: 100%;
+}
+.story-navigation { grid-column: 1; padding-top: 0; border-top: 0; }
+.story-navigation button[aria-current="step"] { background: var(--selection-surface); }
+.story-try {
+  grid-column: 2;
+  margin-top: 0;
+  background-color: var(--accent);
+  background-image: var(--action-gradient);
+  color: var(--on-accent);
+}
+.story-try:hover { background-color: var(--accent-hover); background-image: var(--action-gradient-hover); }
+.story-try:active { background-color: var(--accent-pressed); background-image: var(--action-gradient-pressed); }
+.landing-footer { grid-column: 1; grid-row: 4; display: flex; justify-content: flex-end; margin: 0; }
+
+@media (max-width: 820px) {
+  .library-landing { max-width: 640px; row-gap: var(--space-6); padding: var(--space-8) var(--space-6); }
+  .landing-intro { display: block; }
+  .landing-intro h1 { margin-bottom: var(--space-4); }
+  .landing-intro p { margin-bottom: var(--space-3); }
+  .landing-subjects { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .landing-subject:last-child { grid-column: 1 / -1; }
+  .landing-story { display: block; margin: 0; }
+  .story-stage, .story-slide { min-height: 390px; }
+  .story-slide { display: block; }
+  .story-step-label { margin: var(--space-3) 0; }
+  .story-slide h2 { margin-bottom: var(--space-4); }
+  .story-slide > p { margin-bottom: var(--space-6); }
+  .story-navigation { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+  .story-try { margin-top: var(--space-2); }
+}
+@media (max-width: 420px) {
+  .library-landing { padding: var(--space-6) var(--space-4); }
+  .story-stage, .story-slide { min-height: 360px; }
+}
+@media (forced-colors: active) {
+  .story-navigation button[aria-current="step"], .story-try,
+  .story-try:hover, .story-try:active { background-image: none; }
+}

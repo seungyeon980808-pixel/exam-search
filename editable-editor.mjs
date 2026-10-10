@@ -1,10 +1,10 @@
-import { driveFilePath } from './data.mjs?v=library-20261008-3';
+import { driveFilePath } from './data.mjs?v=library-release-20261010-1';
 import { driveLink } from './drive-source.mjs';
-import { resolveEditableContent } from './editable-source.mjs?v=library-20261008-3';
-import { createEditableBatch } from './editable-batch.mjs?v=library-20261008-3';
+import { resolveEditableContent } from './editable-source.mjs?v=library-release-20261010-1';
+import { createEditableBatch } from './editable-batch.mjs?v=library-release-20261010-1';
 import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=readability-20261004-4';
-import { renderQuestion } from './pdf-viewer.mjs?v=library-20261008-3';
-import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-20261008-3';
+import { renderQuestion } from './pdf-viewer.mjs?v=library-release-20261010-1';
+import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261010-1';
 import { contentQualitySummary } from './content-quality.mjs?v=readability-20261004-4';
 
 import { columnViewport, columnPresentation, studioZoomSlider } from './editor-viewport.mjs?v=resizable-editor-20261003-1';
@@ -39,6 +39,9 @@ const statusLabel = document.querySelector('#editable-status-label');
 const reviewIssues = document.querySelector('#editable-review-issues');
 const more = document.querySelector('#editable-more');
 const layoutMode = document.querySelector('#editable-layout');
+const documentSettings = document.querySelector('#editable-document-settings');
+const viewSettings = document.querySelector('#editable-view-settings');
+const settingsNote = document.querySelector('#editable-settings-note');
 const zoomInput = document.querySelector('#editable-zoom');
 const zoomOut = document.querySelector('#editable-zoom-out');
 const zoomIn = document.querySelector('#editable-zoom-in');
@@ -55,6 +58,29 @@ let intent = 0;
 let loadQueue = Promise.resolve();
 let dirtyTimer;
 let referenceUrls = [];
+
+function syncDocumentSettings() {
+  const pending = session?.loaded && (session.includeImages !== (imageMode.value === 'include')
+    || session.pagePerQuestion !== (layoutMode.value === 'question'));
+  document.querySelector('#editable-document-label').textContent = `그림 ${imageMode.value === 'include' ? '포함' : '제외'}${pending ? ' · 적용 대기' : ''}`;
+  settingsNote.textContent = pending ? '변경한 설정은 다시 변환을 눌러야 적용됩니다. 편집한 내용이 있다면 먼저 내려받으세요.' : '설정은 변환할 때 적용됩니다.';
+  settingsNote.classList.toggle('is-pending', !!pending);
+}
+const settingsPopovers = [information, more, documentSettings, viewSettings];
+new ResizeObserver(() => dialog.style.setProperty('--editor-tools-bottom', `${Math.ceil(document.querySelector('.editable-toolbar').getBoundingClientRect().bottom) + 8}px`))
+  .observe(document.querySelector('.editable-toolbar'));
+for (const panel of settingsPopovers) panel.addEventListener('toggle', () => {
+  if (panel.open) for (const other of settingsPopovers) if (other !== panel) other.open = false;
+});
+dialog.addEventListener('pointerdown', event => {
+  if (!event.target.closest('.editable-toolbar')) settingsPopovers.forEach(panel => { panel.open = false; });
+});
+dialog.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const panel = settingsPopovers.find(panel => panel.open);
+  if (!panel) return;
+  event.preventDefault(); event.stopPropagation(); panel.open = false; panel.querySelector('summary').focus();
+});
 
 const active = (value) => session === value && dialog.open;
 const ready = (item) => item.status === 'ready' || item.status === 'draft';
@@ -86,7 +112,9 @@ reviewIssues.addEventListener('click', () => {
 function setBusy(value, busy) {
   if (!active(value)) return;
   loading.hidden = !busy;
+  imageMode.disabled = busy;
   layoutMode.disabled = busy;
+  reconvert.disabled = busy;
   for (const control of [zoomInput, zoomOut, zoomIn, zoomFit]) control.disabled = busy || !value.loaded;
   content.setAttribute('aria-busy', String(busy));
   status.setAttribute('aria-live', busy ? 'off' : 'polite');
@@ -166,6 +194,8 @@ async function showCollectionReference(value, items) {
     caption.textContent = `${item.question.exam} ${item.question.subjectLabel} ${item.passage ? '공통 지문' : `${item.question.no}번`}`;
     const note = document.createElement('p');
     note.textContent = '원본 문항을 불러오는 중입니다.';
+    const previewPath = !item.passage && (item.question.cardPath || (/^[pbce][12]_\d{4}_(06|09|11)_\d{2}$/u.test(item.question.id) ? `./cards/${encodeURIComponent(item.question.id)}.webp` : ''));
+    let previewImage;
     if (item.passage) figure.append(caption, note);
     else {
       const button = document.createElement('button');
@@ -178,25 +208,37 @@ async function showCollectionReference(value, items) {
       button.append(caption, note);
       figure.append(button);
     }
+    if (previewPath) {
+      previewImage = document.createElement('img');
+      previewImage.src = previewPath;
+      previewImage.alt = `${caption.textContent} 원본 미리보기`;
+      previewImage.onerror = () => { previewImage.remove(); previewImage = null; };
+      note.before(previewImage);
+      note.textContent = '선명한 PDF 원본을 준비하고 있습니다.';
+    }
     referenceScroll.append(figure);
-    return { item, figure, note };
+    return { item, figure, note, get previewImage() { return previewImage; } };
   });
-  for (const { item, figure, note } of slots) {
+  for (const slot of slots) {
+    const { item, figure, note } = slot;
     if (!active(value)) return;
     try {
-      const url = await renderQuestion(item.question, 2);
+      const url = await renderQuestion(item.question, 2, { signal: value.controller.signal });
       if (!active(value)) { URL.revokeObjectURL(url); return; }
       referenceUrls.push(url);
       const image = document.createElement('img');
       image.alt = `${item.question.exam} ${item.question.subjectLabel} ${item.passage ? '공통 지문' : `${item.question.no}번`} PDF 원본`;
       image.src = url;
-      note.replaceWith(image);
+      const scroll = referenceScroll.scrollTop;
+      image.onload = () => { if (active(value)) referenceScroll.scrollTop = scroll; };
+      if (slot.previewImage?.isConnected) { slot.previewImage.replaceWith(image); note.remove(); }
+      else note.replaceWith(image);
       if (!value.collection && !item.passage) {
         original.href = url;
         original.hidden = false;
       }
     } catch {
-      if (active(value)) note.textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
+      if (active(value)) note.textContent = slot.previewImage?.isConnected ? '선명한 원본을 불러오지 못했습니다. 미리보기 또는 시험지 PDF로 확인해 주세요.' : '원본 이미지를 불러오지 못했습니다. 시험지 PDF에서 확인해 주세요.';
     }
     if (!figure.isConnected) return;
   }
@@ -325,6 +367,7 @@ function syncZoomDisplay() {
   if (!canvas || !session.geometry?.width) return;
   const percent = Math.round(nativeZoom(studio) * 100);
   if (document.activeElement !== zoomInput) zoomInput.value = String(percent);
+  document.querySelector('#editable-view-label').textContent = `${paperView === 'column' ? '문항 폭' : '전체 용지'} · ${percent}%`;
 }
 function setManualZoom(percent) {
   if (!session?.loaded || !Number.isFinite(percent)) return;
@@ -350,6 +393,7 @@ zoomOut.addEventListener('click', () => setManualZoom(Number(zoomInput.value) - 
 zoomIn.addEventListener('click', () => setManualZoom(Number(zoomInput.value) + 10));
 zoomFit.addEventListener('click', () => { manualZoom = null; void fitEditorView().then(syncZoomDisplay); });
 layoutMode.addEventListener('change', () => {
+  syncDocumentSettings();
   if (session?.phase === 'loaded') setStatus('문항 배치를 변경했습니다. 다시 변환을 누르면 적용됩니다.');
 });
 function scheduleEditorFit() {
@@ -517,11 +561,13 @@ async function begin(title, collection, context = {}) {
   content.classList.toggle('has-reference', !collection);
   sources.hidden = !collection;
   sources.open = false;
-  information.open = more.open = false;
+  information.open = more.open = documentSettings.open = viewSettings.open = false;
   referenceToggle.setAttribute('aria-pressed', 'true');
   referenceToggle.disabled = true;
   columnView.disabled = pageView.disabled = true;
   layoutMode.disabled = false;
+  imageMode.disabled = reconvert.disabled = false;
+  syncDocumentSettings();
   for (const control of [zoomInput, zoomOut, zoomIn, zoomFit]) control.disabled = true;
   host.hidden = true;
   host.style.visibility = '';
@@ -535,7 +581,7 @@ async function begin(title, collection, context = {}) {
   loading.hidden = false;
   loadingSpinner.hidden = true;
   loadingTitle.textContent = '그림을 포함할까요?';
-  loadingDetail.textContent = '본문·수식·보기는 편집 가능한 문서로 변환합니다. 그림 제외는 이미지 처리를 건너뛰고, 그림 포함은 그림 영역만 추가합니다.';
+  loadingDetail.textContent = '상단 문서 설정에서 그림 포함 여부와 문항 배치를 고르세요. 본문·수식·보기는 편집 가능하게 변환하고, 그림 포함은 그림 영역만 추가합니다.';
   start.hidden = false;
   reconvert.hidden = true;
   const chosen = await new Promise((resolve) => { value.choose = resolve; });
@@ -564,6 +610,7 @@ async function loadDocument(value, bytes, filename) {
       value.loaded = true;
       value.phase = 'loaded';
       value.dirty = false;
+      syncDocumentSettings();
       value.filename = filename;
       value.targets = await readQuestionTargets(bytes);
       value.geometry = await readEditablePageGeometry(bytes);
@@ -710,6 +757,7 @@ document.querySelector('#editable-close').addEventListener('click', requestClose
 dialog.addEventListener('cancel', (event) => { event.preventDefault(); requestClose(); });
 start.addEventListener('click', () => { if (session?.phase === 'options') session.choose?.(true); });
 imageMode.addEventListener('change', () => {
+  syncDocumentSettings();
   if (session?.phase === 'loaded') setStatus('그림 옵션을 변경했습니다. 다시 변환을 누르면 적용됩니다.');
 });
 reconvert.addEventListener('click', () => {

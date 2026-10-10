@@ -63,7 +63,11 @@ try {
     assert.equal(await page.locator('#subject-filter').inputValue(), '');
     assert.equal(await page.locator('#subject-filter option').count(), 11);
     await page.locator('#subject-filter').selectOption('life_ethics');
-    await page.locator('#year-filter').selectOption('2026');
+    if (!await page.locator('#basic-filters').isVisible()) await page.locator('#filter-toggle').click();
+    await page.locator('#year-details > summary').click();
+    await page.locator('#year-from').selectOption('2026');
+    await page.locator('#year-to').selectOption('2026');
+    await page.locator('#year-apply').click();
     await page.waitForFunction(() => [...document.querySelectorAll('.result-card:not([hidden])')]
       .slice(0, innerWidth >= 1000 ? 3 : innerWidth >= 600 ? 2 : 1).every((card) => {
         const image = card.querySelector('img');

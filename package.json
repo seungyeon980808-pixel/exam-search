@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test_search.mjs test_drive_source.mjs test_expansion.mjs test_subject_hierarchy.mjs test_editable_convert.mjs test_editable_source.mjs test_content_quality.mjs test_editable_batch.mjs test_editable_collection.mjs test_question_selection.mjs test_release_data.mjs test_live_fonts.mjs test_live_equations.mjs test_pdf_text_geometry.mjs test_live_pdf_fixtures.mjs test_legacy_pdf.mjs test_stretchy_equations.mjs test_question_region.mjs test_preview_crop.mjs test_pdf_drawings.mjs test_legacy_text.mjs test_shared_passage.mjs test_hanyang_pua.mjs test_live_tables.mjs test_choice_structure.mjs test_text_quality.mjs test_paper_profile.mjs test_editable_layout.mjs test_optional_figures.mjs test_prose_flow.mjs test_math_choice_layout.mjs test_equation_spacing.mjs test_math_layout.mjs test_document_typography.mjs test_equation_alignment.mjs test_readability_harness.mjs test_embedded_host.mjs test_browser_catalog.mjs",
+    "test": "node --test test_search.mjs test_drive_source.mjs test_expansion.mjs test_subject_hierarchy.mjs test_editable_convert.mjs test_editable_source.mjs test_content_quality.mjs test_editable_batch.mjs test_editable_collection.mjs test_question_selection.mjs test_library_preferences.mjs test_release_data.mjs test_live_fonts.mjs test_live_equations.mjs test_pdf_text_geometry.mjs test_live_pdf_fixtures.mjs test_legacy_pdf.mjs test_stretchy_equations.mjs test_question_region.mjs test_preview_crop.mjs test_pdf_drawings.mjs test_legacy_text.mjs test_shared_passage.mjs test_hanyang_pua.mjs test_live_tables.mjs test_choice_structure.mjs test_text_quality.mjs test_paper_profile.mjs test_editable_layout.mjs test_optional_figures.mjs test_prose_flow.mjs test_math_choice_layout.mjs test_equation_spacing.mjs test_math_layout.mjs test_document_typography.mjs test_equation_alignment.mjs test_readability_harness.mjs test_embedded_host.mjs test_browser_catalog.mjs test_year_range.mjs test_preview_assets.mjs",
     "qa": "node qa.mjs",
     "qa:editable": "node qa_editable.mjs",
     "qa:batch": "node qa_batch_editable.mjs",
@@ -14,10 +14,16 @@
     "qa:readability-ui": "node tools/qa-content-quality-ui.mjs",
     "build:catalog": "node tools/build-browser-catalog.mjs",
     "qa:library": "node tools/qa-library.mjs",
+    "qa:library-ux": "node tools/qa-library-ux.mjs",
     "qa:library-state": "node tools/qa-library-state.mjs",
     "qa:search-response": "node tools/qa-search-response.mjs",
     "measure:search-response": "node tools/measure-search-response.mjs",
-    "measure:library": "node tools/measure-library.mjs"
+    "measure:library": "node tools/measure-library.mjs",
+    "qa:toolbar": "node tools/qa-toolbar.mjs",
+    "qa:card-selection": "node tools/qa-card-selection.mjs",
+    "build:previews": "node tools/build-preview-assets.mjs",
+    "qa:images": "node tools/qa-image-loading.mjs",
+    "measure:images": "node tools/measure-image-loading.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

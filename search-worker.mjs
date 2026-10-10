@@ -1,5 +1,5 @@
-import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=library-20261008-3';
-import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions} from './search.mjs?v=library-20261008-3';
+import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=library-release-20261010-1';
+import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions} from './search.mjs?v=library-release-20261010-1';
 import {paperLabel,paperPages,paperReady} from './paper-profile.mjs';
 let catalog,running=0;
 const loaded=new Map(),loading=new Map(),results=new Map(),indexes=new Map(),indexing=new Map(),active=new Map(),queue=[];

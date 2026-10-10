@@ -1,8 +1,9 @@
 import {matchesPaper} from './paper-profile.mjs';
-import { subjectGroup } from './search.mjs?v=library-20261008-3';
+import { subjectGroup } from './search.mjs?v=library-release-20261010-1';
 export function curriculumOptions(catalog, filters = {}) {
+  const from = Number(filters.yearFrom || filters.year) || 0, to = Number(filters.yearTo || filters.year) || Infinity;
   const rows=catalog.facets.filter(f=>(!filters.group||subjectGroup(f.subject).value===filters.group)
-    &&(!filters.subject||f.subject===filters.subject)&&(!filters.year||f.year===Number(filters.year))
+    &&(!filters.subject||f.subject===filters.subject)&&f.year>=from&&f.year<=to
     &&(!filters.month||f.month===Number(filters.month))&&matchesPaper(f,filters));
   const frameworks=[...new Set(rows.map(f=>f.framework).filter(Boolean))].sort();
   const applicable=rows.filter(f=>!filters.framework||f.framework===filters.framework);

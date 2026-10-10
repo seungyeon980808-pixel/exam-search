@@ -1,29 +1,36 @@
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-20261008-3';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261010-1';
 import { driveLink } from './drive-source.mjs';
+import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-20261008-3').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261010-1').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=library-20261008-3';
-import { curriculumOptions } from './catalog-filters.mjs?v=library-20261008-3';
+import { curriculumDisplayState } from './search.mjs?v=library-release-20261010-1';
+import { curriculumOptions } from './catalog-filters.mjs?v=library-toolbar-20261009-1';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=library-20261008-3').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=library-release-20261010-1').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }
 const openEditable = (...args) => openEditor('openEditable', args);
 const openEditableCollection = (...args) => openEditor('openEditableCollection', args);
 import { createQuestionSelection } from './question-selection.mjs';
+import { createLibraryPreferences } from './library-preferences.mjs';
+import { mountLandingStory } from './landing-story.mjs';
+import { readYearRange, writeYearRange, validYearRange, yearRangeLabel, includesYear } from './year-range.mjs';
 import { createEmbeddedHost } from './embedded-host.mjs';
 
 const publishEmbeddedAddress = createEmbeddedHost(window);
 
 const $ = (selector) => document.querySelector(selector);
+let preferenceStorage;
+try { preferenceStorage = localStorage; } catch { /* Browsers can deny persistent storage. */ }
+const preferences = createLibraryPreferences(preferenceStorage);
 const shell = $('.app-shell');
 const tokensNode = $('#tokens');
 const input = $('#keyword-input');
@@ -42,7 +49,9 @@ const loadMore = $('#load-more');
 const previewToggle = $('#preview-toggle');
 const group = $('#group-filter');
 const subject = $('#subject-filter');
-const year = $('#year-filter');
+const yearFrom = $('#year-from');
+const yearTo = $('#year-to');
+let yearRange = { from: '', to: '' };
 const month = $('#month-filter');
 const track = $('#track-filter');
 const variant = $('#variant-filter');
@@ -62,6 +71,9 @@ const state = { mode: 'questions', tokens: [], total: 0, baseOffset: 0, offset: 
 const initialParams = new URLSearchParams(location.search);
 state.tokens = (initialParams.get('q') || '').trim().split(/\s+/u).filter(Boolean).slice(0, 3);
 let initialSelectionPending = true;
+let restoringHistory = false;
+let historyOffset = 0;
+let historyNavigation = 0;
 let catalogData;
 let sourceController;
 let fileRenderController;
@@ -82,17 +94,28 @@ function warmSelectedSubject({intent=false}={}) {
   warmTimer=window.requestIdleCallback?requestIdleCallback(prepare,{timeout:300}):setTimeout(prepare,80);
 }
 let landingOpen = !initialParams.size;
+const story = mountLandingStory($('#landing-story'), { isVisible: () => landingOpen, onTry: async step => {
+  if (step === 0) { $('#landing-subjects').querySelector('button')?.focus(); return; }
+  if (!catalogData) return;
+  const params = new URLSearchParams('group=science&subject=p1&year=2025&month=11');
+  applySearchAddress(params);
+  await search();
+  if (step === 1) { list.querySelector('.question-item .question-selection input')?.focus(); return; }
+  try { const item = await getJson('/api/question?id=p1_2025_11_01'); void openEditable(item); }
+  catch (error) { setHelp(error.message, true); }
+} });
 $('#library-landing').hidden = !landingOpen;
 $('#workspace').hidden = landingOpen;
-function leaveLanding() { landingOpen = false; $('#library-landing').hidden = true; $('#workspace').hidden = false; }
-function setReadiness(text, retry = false) {
+function leaveLanding() { landingOpen = false; $('#library-landing').hidden = true; $('#workspace').hidden = false; story.refresh(); }
+function setReadiness(text, retry = false, ready = false) {
+  $('#search-readiness').classList.toggle('is-ready', ready);
   $('#search-readiness-text').textContent = text;
   $('#search-retry').hidden = !retry;
 }
 onSearchState(status => {
   if (status.updateAvailable) { $('#catalog-update').hidden = false; }
   if (status.phase === 'preparing') setReadiness(`본문 검색 준비 중${status.total ? ` · ${status.done}/${status.total} 과목` : ''}`);
-  if (status.phase === 'ready') setReadiness('전체 본문 검색 준비 완료');
+  if (status.phase === 'ready') setReadiness('전체 본문 검색 준비 완료', false, true);
   if (status.phase === 'error') setReadiness(status.message, true);
 });
 $('#search-retry').addEventListener('click', () => void (catalogData ? search() : start()));
@@ -105,72 +128,23 @@ let activeQuestionObjectUrl = null;
 let stopFileRendering = null;
 let answerRequestId = 0;
 let availableSubjects = [];
-const previewUrls = new Map();
-const previewQueue = [];
-let activePreviews = 0;
-const previewObserver = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (!entry.isIntersecting || entry.target.hidden) continue;
-    previewObserver.unobserve(entry.target);
-    const task = entry.target.previewTask;
-    if (task) {
-      previewQueue.push(task);
-      runPreviewQueue();
-    }
-  }
-}, { rootMargin: '200px 0px' });
-
-function runPreviewQueue() {
-  while (activePreviews < 2 && previewQueue.length) {
-    const task = previewQueue.shift();
-    if (!task.element.isConnected || task.element.closest('[hidden]')) continue;
-    activePreviews += 1;
-    void task.render().then((url) => {
-      if (!task.element.isConnected) { URL.revokeObjectURL(url); return; }
-      previewUrls.set(task.element, url);
-      task.image.onload = () => {
-        if (!task.element.isConnected) return;
-        task.placeholder?.remove();
-        task.preview.classList.remove('is-loading', 'is-error');
-      };
-      task.image.onerror = () => {
-        if (!task.element.isConnected) return;
-        task.preview.classList.remove('is-loading');
-        task.preview.classList.add('is-error');
-        task.preview.textContent = '원본 PDF에서 확인';
-      };
-      task.image.hidden = false;
-      task.image.src = url;
-    }).catch(() => {
-      if (task.element.isConnected) {
-        // A prebuilt card stays usable while the source PDF is temporarily unavailable.
-        if (task.fallback) return;
-        task.preview.classList.remove('is-loading');
-        task.preview.classList.add('is-error');
-        task.preview.textContent = '원본 PDF에서 확인';
-      }
-    }).finally(() => { activePreviews -= 1; runPreviewQueue(); });
-  }
-}
-
+const previewLoader = createPreviewLoader();
+const cardPreviews = new Map();
 function clearPreviews() {
-  previewObserver.disconnect();
-  previewQueue.length = 0;
-  for (const url of previewUrls.values()) URL.revokeObjectURL(url);
-  previewUrls.clear();
+  previewLoader.clear();
+  cardPreviews.clear();
 }
 
 const toolbar = $('.topbar');
 const filterToggle = $('#filter-toggle');
 const toolbarActions = $('#toolbar-inline-actions');
-const compactToolbar = matchMedia('(max-width: 1180px)');
+const compactToolbar = matchMedia('(max-width: 1360px)');
 const mobileWorkspace = matchMedia('(max-width: 820px)');
 const minimalWorkspace = matchMedia('(max-width: 420px)');
 const fileTools = $('#file-workspace-tools');
 let fileItems = [];
 let fileConversionReady = false;
 let activeFilePage = 0;
-const filterMeasure = document.createElement('canvas').getContext('2d');
 const toolbarDetails = [...toolbar.querySelectorAll('details')];
 
 function closeToolbarPopovers() {
@@ -182,6 +156,8 @@ function closeToolbarPopovers() {
 function syncToolbar() {
   toolbar.dataset.group = group.value;
   const previewParent = minimalWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
+  const modeControl = $('#workspace-mode').closest('label');
+  if (modeControl.parentElement !== previewParent) previewParent.prepend(modeControl);
   const sizeControl = $('#page-size').closest('label');
   if (sizeControl.parentElement !== previewParent) previewParent.append(sizeControl);
   if (previewToggle.parentElement !== previewParent) {
@@ -190,17 +166,13 @@ function syncToolbar() {
   }
   const fileParent = mobileWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
   if (fileTools.parentElement !== fileParent) fileParent.append(fileTools);
-  const description = [group, subject, year, month, track, variant]
+  const description = [group, subject, month, track, variant, framework, unit, standard]
     .filter((control) => !control.disabled && !control.closest('[hidden]'))
     .map((control) => control.selectedOptions[0]?.textContent).filter(Boolean).join(' · ');
-  filterToggle.title = description || '검색 조건';
-  for (const control of [group, subject, year, month, track, variant]) {
+  filterToggle.title = [description, yearRangeLabel(yearRange)].filter(Boolean).join(' · ');
+  for (const control of [group, subject, month, track, variant]) {
     const text = control.selectedOptions[0]?.textContent || '';
-    control.title = control === year && control.value ? `${control.value}학년도` : text;
-    if (filterMeasure) {
-      filterMeasure.font = getComputedStyle(control).font;
-      control.style.width = `${Math.ceil(filterMeasure.measureText(text).width) + 32}px`;
-    }
+    control.title = text;
   }
   const parent = compactToolbar.matches ? $('#toolbar-menu-panel') : $('.search-panel');
   if (toolbarActions.parentElement !== parent) {
@@ -218,10 +190,13 @@ filterToggle.addEventListener('click', () => {
   toolbar.classList.toggle('is-filters-open', open);
   filterToggle.setAttribute('aria-expanded', String(open));
 });
-for (const detail of toolbarDetails) detail.addEventListener('toggle', () => {
-  if (!detail.open) return;
-  toolbar.classList.remove('is-filters-open');
-  filterToggle.setAttribute('aria-expanded', 'false');
+for (const detail of toolbarDetails) detail.querySelector('summary')?.addEventListener('click', () => {
+  if (detail.open) return;
+  if (!detail.closest('#basic-filters')) {
+    toolbar.classList.remove('is-filters-open');
+    filterToggle.setAttribute('aria-expanded', 'false');
+  }
+  if (detail.id === 'year-details') resetYearDraft();
   for (const other of toolbarDetails) {
     if (other !== detail && !other.contains(detail) && !detail.contains(other)) other.open = false;
   }
@@ -257,16 +232,48 @@ function updateSubjectOptions(selected = '') {
   syncToolbar();
 }
 
-function updateYearOptions(selected = year.value) {
+function updateYearOptions() {
   if (!catalogData) return;
-  const years = [...new Set(catalogData.files.filter(file => (!group.value || availableSubjects.find(s => s.value === file.subject)?.group === group.value) && (!subject.value || file.subject === subject.value)).map(file => file.year))].sort((a, b) => b - a);
-  year.replaceChildren(new Option('전체 연도', ''), ...years.map(value => new Option(String(value), String(value))));
-  year.value = years.includes(Number(selected)) ? selected : '';
+  // Keep bounds stable when changing subject, including endpoints without that subject's papers.
+  const years = [...new Set([...catalogData.status.years, yearRange.from, yearRange.to].filter(Boolean).map(Number))].sort((a, b) => b - a);
+  for (const control of [yearFrom, yearTo]) control.replaceChildren(new Option('제한 없음', ''), ...years.map(value => new Option(String(value), String(value))));
+  resetYearDraft();
+}
+
+function resetYearDraft() {
+  yearFrom.value = yearRange.from; yearTo.value = yearRange.to;
+  validateYearDraft();
+}
+
+function validateYearDraft() {
+  const valid = validYearRange({ from: yearFrom.value, to: yearTo.value });
+  $('#year-error').textContent = valid ? '' : '시작 학년도가 종료 학년도보다 늦습니다.';
+  $('#year-apply').disabled = !valid;
+  yearFrom.setAttribute('aria-invalid', String(!valid)); yearTo.setAttribute('aria-invalid', String(!valid));
+  return valid;
+}
+
+function setYearRange(value) {
+  yearRange = value;
+  $('#year-summary').textContent = yearRangeLabel(yearRange);
+  $('#year-details').classList.toggle('is-applied', !!(value.from || value.to));
+  $('#year-details > summary').setAttribute('aria-label', `연도 범위: ${yearRangeLabel(yearRange)}`);
+  updateYearOptions();
+}
+
+function applyYearRange(value) {
+  if (!validYearRange(value)) return;
+  const changed = value.from !== yearRange.from || value.to !== yearRange.to;
+  setYearRange(value);
+  closeToolbarPopovers();
+  (compactToolbar.matches ? filterToggle : $('#year-details > summary')).focus({ preventScroll: true });
+  if (!changed) return;
+  updatePaperOptions(); updateCurriculumOptions(); rememberProfile(); void search();
 }
 
 function updateCurriculumOptions(preferred = {}) {
   if (!catalogData) return;
-  const filters = { group: group.value, subject: subject.value, year: year.value, month: month.value, track: track.value, variant: variant.value, allProfiles: allProfiles.checked };
+  const filters = { group: group.value, subject: subject.value, yearFrom: yearRange.from, yearTo: yearRange.to, month: month.value, track: track.value, variant: variant.value, allProfiles: allProfiles.checked };
   const replace = (control, values, chosen) => {
     control.replaceChildren(new Option('전체', ''), ...values.map(value => new Option(value.label || value, value.value || value)));
     control.value = [...control.options].some(option => option.value === chosen) ? chosen : '';
@@ -282,13 +289,19 @@ function updateCurriculumOptions(preferred = {}) {
   const scoped = group.value && (!subject.disabled ? subject.value : true);
   unit.disabled = !scoped; standard.disabled = !scoped;
   $('#unit-filter-note').textContent = !scoped ? '과목과 세부과목을 먼저 골라 주세요.' : !options.units.length ? '이 조건에는 연결된 단원이 없습니다. 키워드로 검색해 주세요.' : '';
+  for (const [id, control, name] of [['framework', framework, '교육과정'], ['unit', unit, '단원'], ['standard', standard, '성취기준']]) {
+    const details = $(`#${id}-details`), label = control.value ? `${name}: ${control.selectedOptions[0].textContent}` : name;
+    details.classList.toggle('is-applied', !!control.value);
+    details.querySelector('summary').title = label;
+    details.querySelector('summary').setAttribute('aria-label', label);
+  }
   updatePaperOptions();
 }
 
 function updatePaperOptions(preferredTrack = track.value, preferredVariant = variant.value) {
   const applicable = ['math', 'kor'].includes(group.value);
   const entries = paperOptions.filter((entry) => entry.subject === group.value
-    && (!year.value || entry.year === Number(year.value)) && (!month.value || entry.month === Number(month.value)));
+    && includesYear(entry.year, yearRange) && (!month.value || entry.month === Number(month.value)));
   const tracks = [...new Set(entries.map((entry) => entry.track))].filter((value) => !['common', 'all'].includes(value));
   const variants = [...new Set(entries.map((entry) => entry.variant))].filter((value) => value && value !== 'single');
   const modern = entries.some((entry) => entry.track === 'common');
@@ -305,9 +318,6 @@ function updatePaperOptions(preferredTrack = track.value, preferredVariant = var
   $('#profile-summary').textContent = !applicable ? '' : allProfiles.checked ? '모든 과목·유형 포함'
     : modern && !track.value ? '공통 문항만 표시 · 전체 변환은 선택과목을 고른 뒤 사용할 수 있습니다.'
       : [trackLabels[track.value], variantLabels[variant.value]].filter(Boolean).join(' · ');
-  $('#advanced-count').textContent = [framework, unit, standard].filter((control) => control.value).length
-    ? ` ${[framework, unit, standard].filter((control) => control.value).length}` : '';
-  $('#filter-details summary').setAttribute('aria-label', `상세 조건${$('#advanced-count').textContent ? ` · ${$('#advanced-count').textContent.trim()}개 적용` : ''}`);
   syncToolbar();
 }
 
@@ -375,8 +385,11 @@ async function renderAnswers() {
 }
 
 let selectedQuestion = null;
-const selection = createQuestionSelection();
-const selectionLabels = new Map();
+const restoredSelection = preferences.selection();
+const selection = createQuestionSelection(restoredSelection.map(item => item.id));
+const selectionLabels = new Map(restoredSelection.map(item => [item.id, item.label]));
+let selectionUndo = null;
+let selectionStored = true;
 const selectionToolbar = $('#selection-toolbar');
 $('.pane-actions').prepend(selectionToolbar);
 
@@ -388,7 +401,10 @@ function renderSelection() {
   if (!ids.length) $('#selection-toggle').setAttribute('aria-expanded', 'false');
   $('#selection-tray').hidden = !ids.length || $('#selection-toggle').getAttribute('aria-expanded') !== 'true';
   for (const checkbox of list.querySelectorAll('.question-selection input')) {
-    checkbox.checked = selection.has(checkbox.closest('.question-item').dataset.id);
+    const wrapper = checkbox.closest('.question-item');
+    const selected = selection.has(wrapper.dataset.id);
+    checkbox.checked = selected;
+    wrapper.querySelector('.result-card').setAttribute('aria-pressed', String(selected));
   }
   $('#detail-selection').disabled = !selectedQuestion;
   $('#detail-selection').checked = !!selectedQuestion && selection.has(selectedQuestion.id);
@@ -414,12 +430,42 @@ function renderSelection() {
     return row;
   });
   $('#selection-list').replaceChildren(...items);
+  const saved = preferences.saveSelection(ids.map(id => ({ id, label: selectionLabels.get(id) || id })));
+  selectionStored = saved;
+  $('#selection-toggle').title = saved ? '선택한 문항은 이 브라우저에 보관됩니다.' : '이 브라우저에서는 저장할 수 없습니다. 현재 탭에서만 유지됩니다.';
 }
+
+function notifySelection(message, undo = null) {
+  selectionUndo = undo;
+  $('#selection-notice-text').textContent = message;
+  $('#selection-undo').hidden = !undo;
+  $('#selection-notice').hidden = false;
+}
+function selectionChanged(id) {
+  const before = selection.snapshot();
+  const removing = selection.has(id);
+  selection.toggle(id);
+  renderSelection();
+  if (removing) notifySelection('선택에서 문항을 제거했습니다.', before);
+  else if (!selectionStored) notifySelection('선택한 문항은 현재 탭에서 유지됩니다. 이 브라우저에 저장하지 못했으므로 새로고침 전에 내려받아 주세요.');
+  else { selectionUndo = null; $('#selection-notice').hidden = true; }
+}
+$('#selection-undo').addEventListener('click', () => {
+  if (!selectionUndo) return;
+  selection.clear();
+  selectionUndo.forEach(id => selection.toggle(id));
+  renderSelection();
+  notifySelection('선택한 문항을 되돌렸습니다.');
+  $('#selection-toggle').focus();
+});
+$('#selection-notice-close').addEventListener('click', () => { $('#selection-notice').hidden = true; selectionUndo = null; });
+renderSelection();
+if (restoredSelection.length) notifySelection(`이전에 선택한 ${restoredSelection.length}개 문항을 복원했습니다.`);
 
 function setHelp(message, error = false) {
   help.textContent = message;
   help.classList.toggle('is-error', error);
-  if (error) $('#search-readiness-text').textContent = message;
+  if (error) { $('#search-readiness').classList.remove('is-ready'); $('#search-readiness-text').textContent = message; }
 }
 
 function renderTokens() {
@@ -438,8 +484,8 @@ function renderTokens() {
     token.append(label, remove);
     tokensNode.append(token);
   }
-  input.placeholder = state.tokens.length === 3 ? '' : '문항 검색';
-  input.disabled = state.tokens.length === 3;
+  input.placeholder = state.tokens.length === 3 ? '최대 3단어' : '키워드 검색';
+  input.disabled = false;
 }
 
 function addInputWords() {
@@ -451,7 +497,9 @@ function addInputWords() {
     return false;
   }
   state.tokens = joined;
+  preferences.rememberSearch(warmScope(), joined);
   input.value = '';
+  $('#search-suggestions').hidden = true;
   renderTokens();
   setHelp(joined.length ? `${joined.length}개 단어를 모두 포함하는 문항을 찾습니다.` : '단어를 입력하고 Enter를 누르세요.');
   return true;
@@ -462,7 +510,7 @@ function queryUrl(offset) {
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
   if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
-  if (year.value) { params.set('yearFrom', year.value); params.set('yearTo', year.value); }
+  writeYearRange(params, yearRange);
   if (month.value) params.set('month', month.value);
   if (framework.value) params.set('framework', framework.value);
   if (unit.value) params.set('unit', unit.value);
@@ -480,14 +528,107 @@ function queryUrl(offset) {
   return `/${state.mode === 'files' ? 'api/files' : 'api/search'}?${params}`;
 }
 
-function updateAddress() {
-  if (landingOpen) return;
+function applySearchAddress(params) {
+  const legacySubject = params.get('subject') || '';
+  group.value = params.get('group') || availableSubjects.find(entry => entry.value === legacySubject)?.group || '';
+  updateSubjectOptions(legacySubject);
+  setYearRange(readYearRange(params));
+  month.value = params.get('month') || '';
+  allProfiles.checked = params.get('allProfiles') === '1';
+  const saved = savedProfiles[group.value] || {};
+  updatePaperOptions(params.has('track') ? params.get('track') : saved.track || '', params.get('variant') || saved.variant || 'odd');
+  updateCurriculumOptions({ framework: params.get('framework') || '', unit: params.get('unit') || '', standard: params.get('standard') || '' });
+  state.tokens = (params.get('q') || '').trim().split(/\s+/u).filter(Boolean).slice(0, 3);
+  answerToggle.checked = false;
+  void renderAnswers();
+  renderTokens();
+  setResultMode(params.get('mode') === 'files' ? 'files' : 'questions');
+}
+
+function rememberResultsPosition(focus) {
+  history.replaceState({ ...history.state, library: true, page: state.page, windowY: window.scrollY,
+    resultsY: $('.results-pane').scrollTop, focus }, '');
+}
+
+window.addEventListener('popstate', async event => {
+  if (!catalogData) return;
+  const navigation = ++historyNavigation;
+  const snapshot = event.state || {};
+  const params = new URLSearchParams(location.search);
+  restoringHistory = true;
+  try {
+    sourceController?.abort(); detailController?.abort(); fileRenderController?.abort(); stopFileRendering?.();
+    state.selectionRequestId++; state.fileRequestId++;
+    shell.classList.remove('is-detail', 'is-split', 'is-file-preview');
+    previewToggle.setAttribute('aria-pressed', 'false');
+    if (!params.size) {
+      searchController?.abort(); state.requestId++; state.searchPending = false; list.inert = false;
+      landingOpen = true; $('#library-landing').hidden = false; $('#workspace').hidden = true; story.refresh();
+      return;
+    }
+    applySearchAddress(params);
+    for (const key of [...initialParams.keys()]) initialParams.delete(key);
+    for (const [key, value] of params) initialParams.set(key, value);
+    initialSelectionPending = true;
+    pageSize = [6,9,18,36].includes(Number(snapshot.pageSize || params.get('pageSize'))) ? Number(snapshot.pageSize || params.get('pageSize')) : 9;
+    $('#page-size').value = String(pageSize);
+    historyOffset = Math.max(0, Number(snapshot.page) || 0) * (state.mode === 'files' ? filePageSize : pageSize);
+    const request = state.requestId + 1;
+    await search(true, { historyNavigation: true });
+    if (state.requestId !== request) return;
+    window.scrollTo(0, snapshot.windowY || 0);
+    $('.results-pane').scrollTop = snapshot.resultsY || 0;
+    if (!params.has('id') && !params.has('file')) {
+      const target = [...list.querySelectorAll('.result-card, .file-row')].find(card => (card.dataset.id || card.dataset.file) === snapshot.focus);
+      (target?.matches('button') ? target : target?.querySelector('button'))?.focus({ preventScroll: true });
+    }
+  } finally { if (navigation === historyNavigation) { historyOffset = 0; restoringHistory = false; publishEmbeddedAddress(); } }
+});
+
+function renderAppliedFilters() {
+  const controls = [group, subject, month, track, variant, framework, unit, standard];
+  const chips = controls.filter(control => control.value && !control.disabled && !control.closest('[hidden]')).map(control => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'filter-chip';
+    const label = document.createElement('span'); label.textContent = control.selectedOptions[0]?.textContent || control.value;
+    const close = document.createElement('span'); close.textContent = '×'; close.setAttribute('aria-hidden', 'true');
+    button.append(label, close); button.setAttribute('aria-label', `${label.textContent} 조건 해제`);
+    // A paper must retain a valid variant. Clearing it selects the default instead.
+    if (control === variant) { button.disabled = true; close.hidden = true; button.setAttribute('aria-label', `${label.textContent} 적용`); }
+    else button.addEventListener('click', () => { control.value = ''; control.dispatchEvent(new Event('change')); });
+    return button;
+  });
+  if (yearRange.from || yearRange.to) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'filter-chip';
+    button.textContent = `${yearRangeLabel(yearRange)} ×`; button.setAttribute('aria-label', '연도 범위 조건 해제');
+    button.onclick = () => applyYearRange({ from: '', to: '' }); chips.splice(2, 0, button);
+  }
+  if (allProfiles.checked) { const label = document.createElement('span'); label.className = 'filter-chip'; label.textContent = '모든 선택과목·유형'; chips.push(label); }
+  $('#applied-filters').replaceChildren(...chips); $('#applied-filters').hidden = !chips.length;
+}
+
+function emptyResults(filesMode) {
+  const box = document.createElement('section'); box.className = 'empty-results';
+  const title = document.createElement('h2'); title.textContent = `조건에 맞는 ${filesMode ? '시험지가' : '문항이'} 없습니다.`;
+  const description = document.createElement('p'); description.textContent = '조건을 하나씩 넓혀 다시 찾아보세요.';
+  const actions = document.createElement('div'); actions.className = 'empty-results-actions';
+  function action(text, run) { const button = document.createElement('button'); button.type = 'button'; button.className = 'button secondary'; button.textContent = text; button.addEventListener('click', run); actions.append(button); }
+  if (yearRange.from || yearRange.to) action('전체 연도로 찾기', () => applyYearRange({ from: '', to: '' }));
+  if (unit.value) action('단원 조건 해제', () => { unit.value = ''; unit.dispatchEvent(new Event('change')); });
+  if (state.tokens.length) action(`‘${state.tokens.at(-1)}’ 빼고 찾기`, () => { state.tokens.pop(); renderTokens(); void search(); });
+  action('조건 초기화', () => $('#clear-search').click());
+  const note = document.createElement('small'); note.textContent = '선택해 둔 문항은 그대로 유지됩니다.';
+  box.append(title, description, actions, note); return box;
+}
+
+function updateAddress({ push = false } = {}) {
+  if (landingOpen || restoringHistory) return;
   const params = profileParams();
   if (pageSize !== 9) params.set('pageSize', String(pageSize));
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
   if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
-  if (year.value) params.set('year', year.value);
+  writeYearRange(params, yearRange);
   if (month.value) params.set('month', month.value);
   if (framework.value) params.set('framework', framework.value);
   if (unit.value) params.set('unit', unit.value);
@@ -496,7 +637,12 @@ function updateAddress() {
   if (shell.classList.contains('is-split') || shell.classList.contains('is-file-preview')) params.set('view', 'split');
   if ((shell.classList.contains('is-detail') || shell.classList.contains('is-split')) && state.selectedId) params.set('id', state.selectedId);
   if (shell.classList.contains('is-file-preview') && state.selectedFile) params.set('file', state.selectedFile);
-  history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}`);
+  const address = `${location.pathname}${params.size ? `?${params}` : ''}`;
+  const inDetail = shell.classList.contains('is-detail') || shell.classList.contains('is-file-preview');
+  const snapshot = { library: true, page: state.page, pageSize, windowY: window.scrollY, resultsY: $('.results-pane').scrollTop,
+    detailEntry: inDetail && (push || !!history.state?.detailEntry) };
+  if (push && !restoringHistory) history.pushState(snapshot, '', address);
+  else history.replaceState(snapshot, '', address);
   publishEmbeddedAddress();
 }
 
@@ -511,7 +657,7 @@ function setPreviewMode(open) {
   updateAddress();
 }
 
-function setFilePreviewMode(open) {
+function setFilePreviewMode(open, { push = false } = {}) {
   shell.classList.toggle('is-file-preview', open);
   previewToggle.setAttribute('aria-pressed', String(open));
   previewToggle.setAttribute('aria-label', open ? '미리보기 닫기' : '미리보기 열기');
@@ -519,7 +665,7 @@ function setFilePreviewMode(open) {
   if (!open) { $('#file-preview').hidden = true; fileRenderController?.abort(); stopFileRendering?.(); stopFileRendering = null; }
   fileTools.hidden = !open;
   $('#file-preview-back').hidden = !open;
-  updateAddress();
+  updateAddress({ push });
 }
 
 function setResultMode(mode) {
@@ -550,7 +696,8 @@ function setResultMode(mode) {
 
 function cardUrl(item) {
   if (item.cardPath) return item.cardPath;
-  // Existing science assets remain available; newly indexed subjects render from PDF on demand.
+  if (cardPreviews.has(item.id)) return cardPreviews.get(item.id);
+  // Retain the legacy science path when older detail metadata has no preview entry.
   return /^[pbce][12]_\d{4}_(06|09|11)_\d{2}$/u.test(item.id)
     ? `./cards/${encodeURIComponent(item.id)}.webp` : '';
 }
@@ -566,6 +713,8 @@ function cardFor(item) {
   button.className = 'result-card';
   button.dataset.id = item.id;
   button.setAttribute('aria-current', String(item.id === state.selectedId));
+  button.setAttribute('aria-pressed', String(selection.has(item.id)));
+  button.setAttribute('aria-label', `${labelText} 선택`);
   const meta = document.createElement('span');
   meta.className = 'result-meta';
   meta.textContent = labelText;
@@ -576,28 +725,21 @@ function cardFor(item) {
   image.decoding = 'async';
   const thumbnail = cardUrl(item);
   const placeholder = document.createElement('span');
-  placeholder.textContent = '원본 미리보기를 만드는 중…';
+  placeholder.className = 'preview-placeholder';
+  placeholder.textContent = thumbnail ? '문항 이미지 불러오는 중…' : '원본 미리보기를 만드는 중…';
   image.alt = `${item.exam} ${item.subjectLabel} ${item.no}번 PDF 원본 문항`;
-  if (thumbnail) {
-    placeholder.hidden = true;
-    image.src = thumbnail;
-    image.onload = () => preview.classList.remove('is-loading');
-    image.onerror = () => {
-      preview.classList.remove('is-loading');
-      preview.classList.add('is-error');
-      placeholder.hidden = false;
-      placeholder.textContent = '원본 미리보기를 준비하고 있습니다.';
-      preview.classList.add('is-loading');
-      button.previewTask.fallback = '';
-      previewObserver.observe(button);
-    };
-  } else {
-    image.hidden = true;
+  if (item.cardWidth && item.cardHeight) {
+    image.width = item.cardWidth; image.height = item.cardHeight;
+    // WebKit uses the alt-text height until load unless the ratio is explicit.
+    image.style.aspectRatio = `${item.cardWidth} / ${item.cardHeight}`;
+    preview.style.setProperty('--preview-ratio', `${item.cardWidth} / ${item.cardHeight}`);
+    preview.classList.add('has-dimensions');
   }
+  image.hidden = !thumbnail;
   preview.append(image, placeholder);
-  button.previewTask = { element: button, image, preview, placeholder, fallback: thumbnail,
-    render: () => renderQuestion(item, 1.3) };
-  if (!thumbnail) previewObserver.observe(button);
+  if (thumbnail) cardPreviews.set(item.id, thumbnail);
+  previewLoader.observe({ element: button, image, preview, placeholder, source: thumbnail,
+    render: signal => renderQuestion(item, 1.3, { signal }) });
   button.append(meta, preview);
   const tags = document.createElement('span');
   tags.className = 'result-tags';
@@ -612,7 +754,17 @@ function cardFor(item) {
   const caption = document.createElement('span');
   caption.textContent = '선택';
   label.append(checkbox, caption);
-  wrapper.append(button, label);
+  const actions = document.createElement('div');
+  actions.className = 'card-actions';
+  const openPreview = document.createElement('button');
+  openPreview.type = 'button';
+  openPreview.className = 'card-preview';
+  openPreview.dataset.id = item.id;
+  openPreview.title = '문항 미리보기';
+  openPreview.setAttribute('aria-label', `${labelText} 미리보기`);
+  openPreview.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  actions.append(openPreview, label);
+  wrapper.append(button, actions);
   cardLayoutObserver.observe(wrapper);
   return wrapper;
 }
@@ -626,7 +778,7 @@ function fileRowFor(item) {
   select.type = 'button';
   select.className = 'file-select';
   select.setAttribute('aria-label', `${item.pdfFile} 시험지 미리보기`);
-  select.addEventListener('click', () => selectFile(item));
+  select.addEventListener('click', () => selectFile(item, { push: !shell.classList.contains('is-file-preview') }));
   const preview = document.createElement('span');
   preview.className = 'file-thumbnail';
   const image = document.createElement('img');
@@ -635,21 +787,13 @@ function fileRowFor(item) {
   image.width = 100;
   image.height = 130;
   const hasStaticThumbnail = /^[pbce][12]_\d{4}_(06|09|11)\.pdf$/u.test(item.pdfFile);
-  if (hasStaticThumbnail) image.src = `./thumbnails/${encodeURIComponent(item.pdfFile.replace(/\.pdf$/u, ''))}.webp`;
+  const thumbnail = item.thumbnailPath || (hasStaticThumbnail ? `./thumbnails/${encodeURIComponent(item.pdfFile.replace(/\.pdf$/u, ''))}.webp` : '');
   image.alt = `${item.pdfFile} 첫 페이지 미리보기`;
-  image.onerror = () => {
-    image.remove();
-    preview.textContent = '미리보기 없음';
-  };
-  let placeholder;
-  if (!hasStaticThumbnail) {
-    preview.classList.add('is-loading');
-    image.hidden = true;
-    placeholder = document.createElement('span');
-    placeholder.textContent = '미리보기 생성 중';
-  }
-  preview.append(image);
-  if (placeholder) preview.append(placeholder);
+  preview.classList.add('is-loading');
+  image.hidden = !thumbnail;
+  const placeholder = document.createElement('span');
+  placeholder.textContent = thumbnail ? '불러오는 중' : '미리보기 생성 중';
+  preview.append(image, placeholder);
   const text = document.createElement('span');
   text.className = 'file-description';
   const name = document.createElement('strong');
@@ -671,14 +815,13 @@ function fileRowFor(item) {
   open.textContent = 'PDF 열기 ↗';
   select.append(preview, text);
   row.append(select, open);
-  if (!hasStaticThumbnail) {
-    row.previewTask = { element: row, image, preview, placeholder, render: () => renderFileThumbnail(item.pdfFile) };
-    previewObserver.observe(row);
-  }
+  previewLoader.observe({ element: row, image, preview, placeholder, source: thumbnail,
+    render: signal => renderFileThumbnail(item.pdfFile, { signal }) });
   return row;
 }
 
-async function selectFile(item) {
+async function selectFile(item, { push = false } = {}) {
+  if (push) rememberResultsPosition(item.pdfFile);
   fileRenderController?.abort();
   fileRenderController = new AbortController();
   const fileSignal = fileRenderController.signal;
@@ -697,7 +840,7 @@ async function selectFile(item) {
   configure.hidden = !['math', 'kor'].includes(item.subject) || group.value === item.subject;
   configure.onclick = async () => {
     group.value = item.subject;
-    year.value = String(item.year);
+    setYearRange({ from: String(item.year), to: String(item.year) });
     month.value = String(item.month);
     allProfiles.checked = false;
     updateSubjectOptions();
@@ -727,7 +870,7 @@ async function selectFile(item) {
   $('#file-preview').hidden = false;
   const pages = $('#file-preview-pages');
   pages.textContent = '시험지 페이지를 불러오는 중…';
-  setFilePreviewMode(true);
+  setFilePreviewMode(true, { push });
   stopFileRendering?.();
   stopFileRendering = null;
   const questionsPromise = getJson(`/api/file-questions?name=${encodeURIComponent(item.pdfFile)}&${profileParams()}`);
@@ -752,8 +895,8 @@ async function selectFile(item) {
 function updateWorkspaceMode() {
   $('#page-size').closest('label').hidden = state.mode === 'files';
   const picker = $('#workspace-mode');
-  picker.options[0].textContent = state.mode === 'questions' ? `문항 ${state.total.toLocaleString('ko-KR')}개` : '문항별';
-  picker.options[1].textContent = state.mode === 'files' ? `시험지 ${state.total.toLocaleString('ko-KR')}개` : '시험지별';
+  picker.options[0].textContent = '문항별';
+  picker.options[1].textContent = '시험지별';
   picker.value = state.mode;
 }
 function updateFilePageControls() {
@@ -805,9 +948,8 @@ function showPage(page) {
   for (const [index, card] of cards.entries()) {
     if (index >= keepFrom && index < keepTo) continue;
     const preview = card.querySelector('.result-card') || card;
-    previewObserver.unobserve(preview); cardLayoutObserver.unobserve(card);
-    const url = previewUrls.get(preview);
-    if (url) { URL.revokeObjectURL(url); previewUrls.delete(preview); }
+    previewLoader.release(preview); cardLayoutObserver.unobserve(card);
+    cardPreviews.delete(card.dataset.id);
     if (card.dataset.id && !selection.has(card.dataset.id)) selectionLabels.delete(card.dataset.id);
     card.remove();
   }
@@ -829,9 +971,12 @@ function updateNavigation() {
   $('#next-question').disabled = position < 0 || (position === cards.length - 1 && state.offset >= state.total);
 }
 
-async function search(reset = true) {
+async function search(reset = true, { historyNavigation: fromHistory = false } = {}) {
+  if (restoringHistory && !fromHistory) { restoringHistory = false; historyOffset = 0; initialSelectionPending = false; }
   leaveLanding();
   closeToolbarPopovers();
+  $('#search-suggestions').hidden = true;
+  renderAppliedFilters();
   const requestId = ++state.requestId;
   searchController?.abort();searchController=new AbortController();
   const signal=searchController.signal;
@@ -844,7 +989,7 @@ async function search(reset = true) {
   // Visible feedback is immediate; search input and filters remain operable.
   setReadiness(retained?'새 조건으로 검색 중 · 이전 결과를 표시하고 있습니다':'검색 중…');
   try {
-    const data = await getJson(queryUrl(reset?0:state.offset),{signal});
+    const data = await getJson(queryUrl(reset ? historyOffset : state.offset),{signal});
     if (requestId !== state.requestId) return;
     if(reset){
       // Replace only when a complete result is ready. A failed search leaves the
@@ -861,7 +1006,7 @@ async function search(reset = true) {
       clearPreviews();cardLayoutObserver.disconnect();
       list.replaceChildren();
     }
-    setReadiness(state.tokens.length ? '본문 검색 완료' : '목록 준비 완료 · 키워드나 단원으로 좁혀 보세요');
+    setReadiness(state.tokens.length ? '본문 검색 완료' : '목록 준비 완료 · 키워드나 단원으로 좁혀 보세요', false, true);
     state.total = data.total;
     updateWorkspaceMode();
     previewToggle.disabled = !data.total;
@@ -869,12 +1014,7 @@ async function search(reset = true) {
     $('#result-count').textContent = `${filesMode ? '시험지' : '검색 결과'} ${data.total.toLocaleString('ko-KR')}개`;
     if (reset && !data.total) {
       if (shell.classList.contains('is-split')) setPreviewMode(false);
-      const empty = document.createElement('p');
-      empty.className = 'list-message';
-      empty.textContent = filesMode
-        ? '조건에 맞는 시험지가 없습니다. 검색어를 줄이거나 필터를 바꿔 보세요.'
-        : '조건에 맞는 문항이 없습니다. 단어를 하나 줄이거나 과목·연도 필터를 바꿔 보세요.';
-      list.append(empty);
+      list.append(emptyResults(filesMode));
       $('#detail-content').hidden = true;
       $('#detail-empty').hidden = false;
       updateNavigation();
@@ -895,7 +1035,7 @@ async function search(reset = true) {
       const preferred = initialParams.get('file');
       const target = data.items.find((item) => item.pdfFile === preferred)
         || (initialParams.get('view') === 'split' ? data.items[0] : null);
-      if (target) selectFile(target);
+      if (target) void selectFile(target);
     }
     if (reset && !filesMode) {
       let preferred = null;
@@ -906,7 +1046,7 @@ async function search(reset = true) {
       }
       const target = data.items.find((item) => item.id === preferred)?.id
         || (shell.classList.contains('is-split') ? data.items[0]?.id : null);
-      if (target && target!==state.selectedId) void selectQuestion(target, !shell.classList.contains('is-split'));
+      if (target && (target!==state.selectedId || restoringHistory)) await selectQuestion(target, !shell.classList.contains('is-split'));
     }
     if (!filesMode) updateNavigation();
     updateAddress();
@@ -988,14 +1128,16 @@ function renderCurriculum(item) {
   }
 }
 
-async function selectQuestion(id, openDetail = true) {
+async function selectQuestion(id, openDetail = true, { push = false } = {}) {
   if (!id) return;
+  if (push) rememberResultsPosition(id);
+  const searchRequestId = state.requestId;
   const selectionRequestId = ++state.selectionRequestId;
   detailController?.abort();detailController=new AbortController();
   const detailSignal=detailController.signal;
   try {
     const item = await getJson(`/api/question?id=${encodeURIComponent(id)}`,{signal:detailSignal});
-    if (selectionRequestId !== state.selectionRequestId) return;
+    if (selectionRequestId !== state.selectionRequestId || searchRequestId !== state.requestId) return;
     state.selectedId = id;
     selectedQuestion = item;
     selectionLabels.set(id, `${item.exam} · ${item.subjectLabel} ${item.no}번`);
@@ -1076,7 +1218,7 @@ async function selectQuestion(id, openDetail = true) {
     }
     $('.detail-scroll').scrollTop = 0;
     updateNavigation();
-    updateAddress();
+    updateAddress({ push });
   } catch (error) {
     if(selectionRequestId===state.selectionRequestId&&!detailSignal.aborted)setHelp(error.message, true);
   }
@@ -1180,7 +1322,30 @@ $('#search-form').addEventListener('submit', (event) => {
   event.preventDefault();
   if (addInputWords()) search();
 });
-input.addEventListener('input',()=>{if(input.value.trim())warmSelectedSubject({intent:true});});
+function renderSearchSuggestions() {
+  const suggestions = $('#search-suggestions');
+  const draft = input.value.trim();
+  const recent = preferences.searches(warmScope()).filter(row => !draft || row.words.join(' ').includes(draft));
+  suggestions.replaceChildren();
+  const heading = document.createElement('strong'); heading.textContent = '이 과목에서 최근 검색'; suggestions.append(heading);
+  for (const row of recent) {
+    const button = document.createElement('button'); button.type = 'button';
+    const label = document.createElement('span'); label.textContent = row.words.join(' · ');
+    const caption = document.createElement('small'); caption.textContent = '다시 찾기'; button.append(label, caption);
+    button.addEventListener('click', () => { state.tokens = [...row.words]; input.value = ''; renderTokens(); void search(); });
+    suggestions.append(button);
+  }
+  suggestions.hidden = !recent.length;
+}
+input.addEventListener('focus', renderSearchSuggestions);
+input.addEventListener('input',()=>{ if(input.value.trim())warmSelectedSubject({intent:true}); renderSearchSuggestions(); });
+input.addEventListener('keydown', event => {
+  if (event.key === 'Escape') $('#search-suggestions').hidden = true;
+  if (event.key === 'ArrowDown' && !$('#search-suggestions').hidden) { event.preventDefault(); $('#search-suggestions button')?.focus(); }
+});
+$('#search-form').addEventListener('focusout', () => queueMicrotask(() => {
+  if (!$('#search-form').contains(document.activeElement)) $('#search-suggestions').hidden = true;
+}));
 tokensNode.addEventListener('click', (event) => {
   const word = event.target.closest('button')?.dataset.word;
   if (!word) return;
@@ -1195,7 +1360,7 @@ $('#clear-search').addEventListener('click', () => {
   group.value = '';
   updateSubjectOptions();
   subject.value = '';
-  year.value = '';
+  setYearRange({ from: '', to: '' });
   month.value = '';
   allProfiles.checked = false;
   framework.value = '';
@@ -1207,14 +1372,24 @@ $('#clear-search').addEventListener('click', () => {
   setHelp(state.mode === 'files' ? '모든 시험지를 표시합니다.' : '모든 문항을 표시합니다.');
   search();
 });
+function restoreFilterFocus(control) {
+  const opener = compactToolbar.matches && control.closest('#basic-filters') ? filterToggle
+    : control.closest('details')?.querySelector('summary');
+  opener?.focus({ preventScroll: true });
+}
 group.addEventListener('change', () => { updateSubjectOptions(); allProfiles.checked = false;
-  const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); updateCurriculumOptions({ framework: '', unit: '', standard: '' }); search(); });
-for (const select of [subject, year, month, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
+  const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); updateCurriculumOptions({ framework: '', unit: '', standard: '' }); search(); restoreFilterFocus(group); });
+for (const select of [subject, month, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
   if (select === subject) updateYearOptions();
-  if ([subject, year, month].includes(select)) { framework.value = ''; unit.value = ''; standard.value = ''; }
-  if (select === framework) { unit.value = ''; standard.value = ''; }
-  if (select === unit) standard.value = '';
-  updatePaperOptions(); updateCurriculumOptions(); rememberProfile(); search();
+  if (select === subject) { framework.value = ''; unit.value = ''; standard.value = ''; }
+  updatePaperOptions(); updateCurriculumOptions(); rememberProfile(); search(); restoreFilterFocus(select);
+});
+for (const control of [yearFrom, yearTo]) control.addEventListener('change', validateYearDraft);
+$('#year-apply').addEventListener('click', () => { if (validateYearDraft()) applyYearRange({ from: yearFrom.value, to: yearTo.value }); });
+$('#year-all').addEventListener('click', () => { yearFrom.value = ''; yearTo.value = ''; validateYearDraft(); });
+$('#year-recent').addEventListener('click', () => {
+  const years = [...(catalogData?.status.years || [])].sort((a, b) => b - a).slice(0, 5);
+  if (years.length) { yearFrom.value = String(years.at(-1)); yearTo.value = String(years[0]); validateYearDraft(); }
 });
 answerToggle.addEventListener('change', () => {
   void renderAnswers().catch((error) => setHelp(error.message, true));
@@ -1242,19 +1417,22 @@ previewToggle.addEventListener('click', async () => {
   await selectQuestion(card.dataset.id, false);
 });
 list.addEventListener('click', (event) => {
+  const preview = event.target.closest('.card-preview');
+  if (preview) {
+    selectQuestion(preview.dataset.id, !shell.classList.contains('is-split'), { push: !shell.classList.contains('is-split') && !shell.classList.contains('is-detail') });
+    return;
+  }
   const card = event.target.closest('.result-card');
-  if (card) selectQuestion(card.dataset.id, !shell.classList.contains('is-split'));
+  if (card) selectionChanged(card.dataset.id);
 });
 list.addEventListener('change', (event) => {
   const wrapper = event.target.closest('.question-item');
   if (!wrapper || !event.target.matches('.question-selection input')) return;
-  selection.toggle(wrapper.dataset.id);
-  renderSelection();
+  selectionChanged(wrapper.dataset.id);
 });
 $('#detail-selection').addEventListener('change', () => {
   if (!selectedQuestion) return;
-  selection.toggle(selectedQuestion.id);
-  renderSelection();
+  selectionChanged(selectedQuestion.id);
 });
 $('#selection-toggle').addEventListener('click', () => {
   const expanded = $('#selection-toggle').getAttribute('aria-expanded') === 'true';
@@ -1262,9 +1440,11 @@ $('#selection-toggle').addEventListener('click', () => {
   $('#selection-tray').hidden = expanded;
 });
 $('#selection-clear').addEventListener('click', () => {
+  const before = selection.snapshot();
   selection.clear();
   renderSelection();
-  $('#mode-questions').focus();
+  notifySelection('선택한 문항을 모두 해제했습니다.', before);
+  $('#selection-undo').focus();
 });
 $('#selection-list').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-action]');
@@ -1273,13 +1453,13 @@ $('#selection-list').addEventListener('click', (event) => {
   const id = row.dataset.id;
   const action = button.dataset.action;
   const index = selection.snapshot().indexOf(id);
-  if (action === 'remove') selection.remove(id);
-  else selection.move(id, action === 'up' ? -1 : 1);
+  if (action === 'remove') { const before = selection.snapshot(); selection.remove(id); notifySelection('선택에서 문항을 제거했습니다.', before); }
+  else { selection.move(id, action === 'up' ? -1 : 1); selectionUndo = null; $('#selection-notice').hidden = true; }
   renderSelection();
   const rows = [...$('#selection-list').children];
   const target = action === 'remove' ? rows[Math.min(index, rows.length - 1)] : rows.find((item) => item.dataset.id === id);
   const sameAction = target?.querySelector(`[data-action="${action}"]:not(:disabled)`);
-  (sameAction || target?.querySelector('button:not(:disabled)') || $('#mode-questions')).focus();
+  (sameAction || target?.querySelector('button:not(:disabled)') || $('#selection-undo')).focus();
 });
 $('#selection-open').addEventListener('click', () => {
   const ids = selection.snapshot();
@@ -1288,6 +1468,7 @@ $('#selection-open').addEventListener('click', () => {
 loadMore.addEventListener('click', () => changePage(1));
 $('#previous-page').addEventListener('click', () => changePage(-1));
 $('#mobile-back').addEventListener('click', () => {
+  if (history.state?.detailEntry && shell.classList.contains('is-detail')) { history.back(); return; }
   if (shell.classList.contains('is-split')) setPreviewMode(false);
   else shell.classList.remove('is-detail');
   updateAddress();
@@ -1296,6 +1477,7 @@ $('#mobile-back').addEventListener('click', () => {
   card?.focus({ preventScroll: true });
 });
 $('#file-preview-back').addEventListener('click', () => {
+  if (history.state?.detailEntry) { history.back(); return; }
   setFilePreviewMode(false);
   const row = [...list.querySelectorAll('.file-row')].find((entry) => entry.dataset.file === state.selectedFile);
   row?.querySelector('.file-select')?.focus({ preventScroll: true });
@@ -1338,7 +1520,7 @@ async function start() {
   try {
     catalogData = await browserCatalog();
     const status = catalogData.status;
-    setReadiness('과목을 고르면 바로 시작할 수 있습니다');
+    setReadiness('과목을 고르면 바로 시작할 수 있습니다', false, true);
     const issues = status.incomplete.length;
     const missingPdfs = status.incomplete.filter((issue) => issue.pdfFile);
     const unverifiedCandidates = status.incomplete.filter((issue) => issue.reason === 'new_candidates_unverified');
@@ -1379,13 +1561,6 @@ async function start() {
         issueList.append(line);
       }
     }
-    const years = status.years || [];
-    for (const value of years) {
-      const option = document.createElement('option');
-      option.value = String(value);
-      option.textContent = String(value);
-      year.append(option);
-    }
     availableSubjects = status.subjects || [];
     paperOptions = status.paperOptions || [];
     for (const { value, label } of status.groups || []) group.add(new Option(label, value));
@@ -1396,7 +1571,7 @@ async function start() {
     const legacySubject = initialParams.get('subject') || '';
     group.value = initialParams.get('group') || availableSubjects.find((entry) => entry.value === legacySubject)?.group || '';
     updateSubjectOptions(legacySubject);
-    year.value = initialParams.get('year') || '';
+    setYearRange(readYearRange(initialParams));
     month.value = initialParams.get('month') || '';
     framework.value = initialParams.get('framework') || '';
     unit.value = initialParams.get('unit') || '';
@@ -1405,10 +1580,6 @@ async function start() {
     const saved = savedProfiles[group.value] || {};
     updatePaperOptions(initialParams.has('track') ? initialParams.get('track') : saved.track || '',
       initialParams.get('variant') || saved.variant || 'odd');
-    if (framework.value || unit.value || standard.value) {
-      if (compactToolbar.matches) $('#toolbar-menu').open = true;
-      $('#filter-details').open = true;
-    }
     // Answer visibility is never restored from URL, history, or persistent storage.
     answerToggle.checked = false;
     if (initialParams.get('mode') === 'files') {
@@ -1447,6 +1618,7 @@ $('.brand').addEventListener('click', () => {
   state.requestId++; state.selectionRequestId++; state.fileRequestId++;
   shell.classList.remove('is-detail', 'is-split', 'is-file-preview');
   landingOpen = true; $('#library-landing').hidden = false; $('#workspace').hidden = true;
+  story.refresh();
   history.replaceState(null, '', location.pathname); publishEmbeddedAddress();
 });
 start();

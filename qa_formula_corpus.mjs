@@ -86,7 +86,7 @@ try {
   await page.goto(base);
   for (const question of questions) {
     const result = await page.evaluate(async (question) => {
-      const { readQuestionPdf } = await import('./pdf-viewer.mjs?v=library-20261008-3');
+      const { readQuestionPdf } = await import('./pdf-viewer.mjs?v=library-release-20261010-1');
       const { verifiedGlyphMap, inQuestion } = await import('./live-fonts.mjs');
       const { buildLiveStructure } = await import('./live-convert.mjs');
       let pdf, map;
@@ -121,7 +121,7 @@ try {
         result.raw = { question, content: pdf.content, equationItems: pdf.equationItems, glyphs: pdf.glyphs, pageHeight: pdf.pageHeight, fonts: Object.fromEntries(Object.entries(pdf.fonts).map(([id, font]) => [id, { name: font.name, data: font.data ? Array.from(font.data) : null }])) };
         if (question.no <= 2) {
           const pdfjs = await import('./vendor/pdfjs/pdf.mjs');
-          const { driveFilePath } = await import('./data.mjs?v=library-20261008-3');
+          const { driveFilePath } = await import('./data.mjs?v=library-release-20261010-1');
           const { downloadDriveFile } = await import('./drive-source.mjs');
           const task = pdfjs.getDocument({ data: new Uint8Array(await downloadDriveFile(driveFilePath(question.pdfFile))), fontExtraProperties: true, cMapUrl: new URL('./vendor/pdfjs/cmaps/', location.href).href, cMapPacked: true, standardFontDataUrl: new URL('./vendor/pdfjs/standard_fonts/', location.href).href });
           try {

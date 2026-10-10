@@ -27,7 +27,9 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    await page.screenshot({path:new URL(`${engine}-landing-${width}.png`,evidence).pathname});
    await page.locator('.landing-subject').filter({hasText:'과학탐구'}).click();
-   await basic(page,'#subject-filter','p1');await basic(page,'#year-filter','2025');await basic(page,'#month-filter','11');await count(page,20);
+   await basic(page,'#subject-filter','p1');
+   if(!await page.locator('#basic-filters').isVisible())await page.locator('#filter-toggle').click();
+   await page.locator('#year-details > summary').click();await page.locator('#year-from').selectOption('2025');await page.locator('#year-to').selectOption('2025');await page.locator('#year-apply').click();await basic(page,'#month-filter','11');await count(page,20);
    const physics=await page.locator('#unit-filter option').allTextContents();assert(physics.includes('파동과 정보통신'));assert(!physics.includes('유전'));
    if(!await page.locator('#page-size').isVisible())await page.locator('#toolbar-menu > summary').click();
    await page.locator('#page-size').selectOption('6');await count(page,20);
@@ -62,7 +64,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    // Corrupt the cached listing. A verified network asset replaces it on revisit.
    await page.goto(`${base}?group=science&subject=p1&year=2025&month=11`);await count(page,20);
    const listPath=catalog.shards.p1.browse.path;
-   await page.evaluate(async(path)=>{const c=await caches.open('exam-library-catalog-v3');await c.put(new URL(path,location.href),new Response('[{"id":"bad","pdfFile":"bad"}]'));},listPath);
+   await page.evaluate(async(path)=>{const c=await caches.open('exam-library-catalog-v4');await c.put(new URL(path,location.href),new Response('[{"id":"bad","pdfFile":"bad"}]'));},listPath);
    let repaired=0;page.on('request',r=>{if(r.url().endsWith(listPath))repaired++;});
    await page.reload();await count(page,20);assert(repaired>0);
    // Failed full-text asset requests can be retried without losing URL search words.
@@ -75,7 +77,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    // All subject worker results agree with the previous full-index engine.
    const queries={p1:'전자기파',p2:'빛 간섭 경로차',c1:'원자',c2:'평형',b1:'유전',b2:'DNA',e1:'별',e2:'지구',kor:'동형이의어 문맥 의미',eng:'price',math:'확률',life_ethics:'윤리'};
    for(const [subject,q] of Object.entries(queries)){
-    const actual=await page.evaluate(async({subject,q})=>(await(await import('./data.mjs?v=library-20261008-3')).getJson(`/api/search?subject=${subject}&q=${encodeURIComponent(q)}&pageSize=36`)),{subject,q});
+    const actual=await page.evaluate(async({subject,q})=>(await(await import('./data.mjs?v=library-release-20261010-1')).getJson(`/api/search?subject=${subject}&q=${encodeURIComponent(q)}&pageSize=36`)),{subject,q});
     const expected=searchQuestions(prepared,q,{subject,variant:'odd'});
     assert.equal(actual.total,expected.length);assert.deepEqual(actual.items.map(i=>i.id),expected.slice(0,72).map(i=>i.id));
    }

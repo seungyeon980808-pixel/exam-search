@@ -1,6 +1,6 @@
 import './stream-iterator-polyfill.mjs';
 import * as pdfjs from './vendor/pdfjs/pdf.mjs';
-import { driveFilePath } from './data.mjs?v=library-20261008-3';
+import { driveFilePath } from './data.mjs?v=library-release-20261010-1';
 import { downloadDriveFile } from './drive-source.mjs';
 import { equationTextItems } from './pdf-text-geometry.mjs';
 import { PREVIEW_VERTICAL_PADDING_PT, previewCropBounds, previewPaperEnd, previewQuestionBox } from './preview-crop.mjs?v=preview-crop-20261004-1';

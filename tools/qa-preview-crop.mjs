@@ -33,9 +33,9 @@ try {
   await page.goto(base);
   for (const { key, question } of selected) {
     const result = await page.evaluate(async ({ item }) => {
-      const { getJson, driveFilePath } = await import('./data.mjs?v=library-20261008-3');
+      const { getJson, driveFilePath } = await import('./data.mjs?v=library-release-20261010-1');
       const { driveLink } = await import('./drive-source.mjs');
-      const { renderQuestion } = await import('./pdf-viewer.mjs?v=library-20261008-3');
+      const { renderQuestion } = await import('./pdf-viewer.mjs?v=library-release-20261010-1');
       const { PREVIEW_VERTICAL_PADDING_PT, previewQuestionBox, previewPaperEnd, previewCropBounds } = await import('./preview-crop.mjs');
       const pdfjs = await import('./vendor/pdfjs/pdf.mjs');
       await getJson('/api/status');

@@ -14,7 +14,7 @@ try{
  });
  await page.goto(`${base}?group=science&subject=p1&year=2025&month=11&view=split`);
  await page.waitForFunction(()=>document.querySelector('#detail-heading')?.textContent==='물리학Ⅰ 1번');
- await page.locator('.result-card[data-id="p1_2025_11_02"]').click();
+ await page.locator('.card-preview[data-id="p1_2025_11_02"]').click();
  await page.waitForFunction(()=>document.querySelector('#detail-heading')?.textContent==='물리학Ⅰ 2번'&&document.querySelector('#source-image')?.naturalWidth>0);
  await page.locator('#open-viewer').click();await page.locator('#zoom-in').click();
  const zoom=await page.locator('#zoom-level').textContent();
@@ -56,6 +56,7 @@ try{
  await edit.locator('#open-editable').click();await edit.locator('#editable-start').click();
  await edit.waitForFunction(()=>!document.querySelector('#editable-download').disabled,null,{timeout:60000});
  await edit.frameLocator('iframe').getByRole('textbox',{name:'문서 편집 입력'}).press('z');
+ await edit.locator('#editable-view-settings > summary').click();
  await edit.locator('#editable-zoom').fill('90');await edit.locator('#editable-zoom').press('Enter');
  releaseCatalog();await edit.locator('#catalog-update').waitFor();
  assert.equal(await edit.locator('#editable-dialog').isVisible(),true);
