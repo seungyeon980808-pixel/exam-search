@@ -8,6 +8,15 @@ const mode = () => ({ includeImages: true, sourcePage: 4, provenance: 'pdf', nat
   quality: { state: 'review', scope: 'observed-source-regions', regions: [], unresolvedCount: 0, excludedCount: 0 } });
 const failures = (checks) => checks.filter((c) => c.status === 'fail').map((c) => c.name);
 
+test('source word-fraction oracle rejects separated prose and verifies repeated native ratios', () => {
+  const record = { id: 'ratio', subject: 'e1', questionText: '①②③④⑤' }, observed = mode();
+  const expected = { wordFractions: [{ numerator: '자원소 함량', denominator: '방사성 원소 함량', count: 2 }] };
+  observed.nativeContent += ' 자원소 함량 방사성 원소 함량';
+  assert(failures(analyzeMode(record, observed, expected)).includes('source-word-fraction:자원소 함량'));
+  observed.scripts = observed.sourceScripts = Array(2).fill('{{"자원소 함량"} over {"방사성 원소 함량"}}');
+  assert(!failures(analyzeMode(record, observed, expected)).includes('source-word-fraction:자원소 함량'));
+});
+
 test('a saveable native document cannot hide a missing critical sequence image', () => {
   const observed = mode();
   observed.quality.regions = [{ ...sourceRegion, state: 'image' }];

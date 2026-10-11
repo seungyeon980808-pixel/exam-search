@@ -1,7 +1,8 @@
-import { readQuestionPdf } from './pdf-viewer.mjs?v=library-release-20261011-2';
-import { questionFigures } from './figure-fallback.mjs?v=library-release-20261011-2';
+import { readQuestionPdf } from './pdf-viewer.mjs?v=library-release-20261011-3';
+import { questionFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
 import { observedContentRegions } from './content-integrity.mjs?v=readability-20261004-4';
 import { appendLineRuns } from './prose-flow.mjs?v=readability-20261004-4';
+import { ruledTextFractions } from './ruled-text-fractions.mjs?v=subject-review-20261011-1';
 import { inQuestion, verifiedGlyphMap } from './live-fonts.mjs';
 import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from './live-equations.mjs?v=typography-20261003-3';
 import { attachedScript, legacyTable, legacyText } from './legacy-glyphs.mjs';
@@ -422,9 +423,16 @@ export function stackTextFractions(items) {
 export function buildLiveStructure(question, pdf, glyphs, options = {}) {
   // --- data-table hook: keep cell equations out of the surrounding line grouping.
   const flow = tableFlow(extractTables(clipItems(question, pdf, glyphs), pdf, question), pdf.pageHeight,
-    (items) => findLines(recoverStretchyBrackets(recoverPiecewiseItems(items))).flatMap((line, index) =>
-      [...(index ? [{ kind: 'text', value: '\n' }] : []), ...lineRuns(line)]));
-  const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(flow.items))));
+    (items) => findLines(recoverStretchyBrackets(recoverPiecewiseItems(ruledTextFractions(items, clipItems.lastPrimitives, pdf.pageHeight)))).flatMap((line, index) =>
+      [...(index ? [{ kind: 'text', value: '\n' }] : []), ...lineRuns(line).flatMap((run, at, runs) => {
+        // A word fraction is an unbreakable equation. Put adjacent cell notes on
+        // their own line so the imported core cannot push them out of the cell.
+        if (run.kind !== 'equation' || !/\\frac\{[\s\S]*\\text\{/u.test(run.script)) return [run];
+        return [...(at && runs[at - 1].kind === 'text' && runs[at - 1].value.trim() ? [{ kind: 'text', value: '\n' }] : []),
+          run, ...(runs[at + 1]?.kind === 'text' && runs[at + 1].value.trim() ? [{ kind: 'text', value: '\n' }] : [])];
+      })]));
+  const lines = findLines(stackTextFractions(recoverStretchyBrackets(recoverPiecewiseItems(
+    ruledTextFractions(flow.items, clipItems.lastPrimitives, pdf.pageHeight)))));
   const figureDropped = clipItems.lastDropped > 0;
   const blocks = [];
   const tops = new WeakMap();

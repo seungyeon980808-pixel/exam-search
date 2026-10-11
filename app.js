@@ -1,20 +1,20 @@
 import { mountCompactToolbar } from './compact-toolbar.mjs?v=compact-20261011-1';
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-2';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-3';
 import { driveLink } from './drive-source.mjs';
 import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261011-2').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261011-3').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-2';
-import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-2';
+import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-3';
+import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-3';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=library-release-20261011-2').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=library-release-20261011-3').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }

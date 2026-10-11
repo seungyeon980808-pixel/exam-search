@@ -608,6 +608,16 @@ export function repairSavedTextBounds(document) {
           const wordEnd = [...prefix.matchAll(/\s+/gu)].at(-1);
           const relative = wordEnd ? wordEnd.index + wordEnd[0].length : fit;
           let offset = run.charStart + relative;
+          // The importer keeps a long word fraction's advance on wrapped text
+          // rows too. Move its overflowing suffix together to a full-width
+          // paragraph instead of leaving one-word lines beside the equation.
+          const wordFraction = run.charStart > 0 && JSON.parse(saved.getPageControlLayout(p)).controls.some(control => {
+            if (control.type !== 'equation' || control.cellIdx !== undefined || control.paraIdx !== run.paraIdx
+              || control.x + control.w > run.x + 2) return false;
+            const props = JSON.parse(saved.getEquationProperties(control.secIdx, control.paraIdx, control.controlIdx, -1, -1));
+            return /\bover\b/u.test(props.script) && /"[^"]*[가-힣]/u.test(props.script);
+          });
+          if (wordFraction) offset = run.charStart;
           // Prefer moving an unbroken word with its preceding formula when its
           // start is already near the edge; never insert/delete content to fit.
           if (!wordEnd && run.charStart > 0) offset = run.charStart;

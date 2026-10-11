@@ -1,6 +1,6 @@
-import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=readability-20261004-4';
-import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-2';
-import { passageBlocks, passageKey } from './shared-passage.mjs?v=library-release-20261011-2';
+import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=subject-review-20261011-1';
+import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
+import { passageBlocks, passageKey } from './shared-passage.mjs?v=library-release-20261011-3';
 import { finalizeContentQuality } from './content-quality.mjs?v=readability-20261004-4';
 
 let indexPromise;
@@ -76,7 +76,7 @@ export async function resolveEditableContent(question, dependencies = {}) {
   }
   let prepared;
   try {
-    const convert = dependencies.convert || (await import('./live-convert.mjs?v=library-release-20261011-2')).convertQuestionNow;
+    const convert = dependencies.convert || (await import('./live-convert.mjs?v=library-release-20261011-3')).convertQuestionNow;
     check();
     prepared = await convert(question, { includeImages, signal: dependencies.signal });
     check();

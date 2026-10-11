@@ -77,7 +77,7 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    // All subject worker results agree with the previous full-index engine.
    const queries={p1:'전자기파',p2:'빛 간섭 경로차',c1:'원자',c2:'평형',b1:'유전',b2:'DNA',e1:'별',e2:'지구',kor:'동형이의어 문맥 의미',eng:'price',math:'확률',life_ethics:'윤리'};
    for(const [subject,q] of Object.entries(queries)){
-    const actual=await page.evaluate(async({subject,q})=>(await(await import('./data.mjs?v=library-release-20261011-2')).getJson(`/api/search?subject=${subject}&q=${encodeURIComponent(q)}&pageSize=36`)),{subject,q});
+    const actual=await page.evaluate(async({subject,q})=>(await(await import('./data.mjs?v=library-release-20261011-3')).getJson(`/api/search?subject=${subject}&q=${encodeURIComponent(q)}&pageSize=36`)),{subject,q});
     const expected=searchQuestions(prepared,q,{subject,variant:'odd'});
     assert.equal(actual.total,expected.length);assert.deepEqual(actual.items.map(i=>i.id),expected.slice(0,72).map(i=>i.id));
    }

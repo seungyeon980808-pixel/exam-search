@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {questionSubject} from './question-id.mjs';
 import {validCatalog} from './catalog-cache.mjs';
 import {curriculumOptions,listFiles} from './catalog-filters.mjs';
 import {searchQuestions,searchFiles,catalogFiles,prepareQuestions,normalize,attachSearchRecord} from './search.mjs';
@@ -77,4 +78,11 @@ test('light paper catalog preserves profile counts and first pages without loadi
   const expected=searchFiles(catalogFiles(files,index.items),index.items,'',filters);
   assert.deepEqual(actual.map(f=>[f.pdfFile,f.questionCount,f.firstMatchPage]),expected.map(f=>[f.pdfFile,f.questionCount,f.firstMatchPage]));
  }
+});
+
+// Search results must be openable, including the expanded date-first IDs.
+test('every catalog question routes to its actual subject detail shard',()=>{
+ for(const q of index.items)assert.equal(questionSubject(q.id,catalog.status.subjects),q.subject,q.id);
+ for(const id of ['',null,'unknown_2025_11_01','2025_11_missing_all_single_01'])
+  assert.equal(questionSubject(id,catalog.status.subjects),undefined);
 });

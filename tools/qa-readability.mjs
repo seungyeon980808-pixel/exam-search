@@ -164,6 +164,12 @@ export function analyzeMode(record, mode, expectations = {}) {
   checks.push(passFail('source-choice-labels-preserved', missingChoices.length === 0, { expected: expectedChoices, missing: missingChoices }));
   checks.push(passFail('serialized-equation-scripts-preserved', JSON.stringify(mode.scripts || []) === JSON.stringify(mode.sourceScripts || []),
     { sourceCount: mode.sourceScripts?.length, savedCount: mode.scripts?.length }));
+  for (const { numerator, denominator, count = 1 } of expectations.wordFractions || []) {
+    const matches = (mode.scripts || []).filter(script => /\bover\b/u.test(script)
+      && compact(script.replace(/[{}"]/gu, '')).includes(compact(numerator))
+      && compact(script.replace(/[{}"]/gu, '')).includes(compact(denominator)));
+    checks.push(passFail(`source-word-fraction:${numerator}`, matches.length >= count, { numerator, denominator, count, matches }));
+  }
   for (const charge of expectations.nativeCharges || []) {
     const exact = compact(nativeContent).includes(charge);
     const scripted = charge === 'NH4⁺' ? /NH\s*_?\s*\{?4\}?\s*\^\s*\{?\+\}?/u.test(nativeContent)
@@ -236,7 +242,7 @@ export function analyzeMode(record, mode, expectations = {}) {
 
 function savedXml(bytes) {
   // Caller writes the archive first, so this helper never substitutes success for a save/reopen.
-  const unescape = (value) => value.replace(/&lt;/gu, '<').replace(/&gt;/gu, '>').replace(/&amp;/gu, '&');
+  const unescape = (value) => value.replace(/&lt;/gu, '<').replace(/&gt;/gu, '>').replace(/&quot;/gu, '"').replace(/&apos;/gu, "'").replace(/&amp;/gu, '&');
   return { scripts: [...bytes.matchAll(/<hp:script>([\s\S]*?)<\/hp:script>/gu)].map((m) => unescape(m[1])),
     nativeContent: [...bytes.matchAll(/<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>/gu)].map((m) => unescape(m[1])).join('') };
 }
@@ -275,13 +281,13 @@ async function localPdfMap() {
 
 async function collectQuestion(page, id, modes, captureSource) {
   return page.evaluate(async ({ id, modes, captureSource }) => {
-    const { getJson } = await import('./data.mjs?v=library-release-20261011-2');
+    const { getJson } = await import('./data.mjs?v=library-release-20261011-3');
     await getJson('/api/status');
     const q = await getJson(`/api/question?id=${encodeURIComponent(id)}`);
-    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=library-release-20261011-2');
+    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=library-release-20261011-3');
     const { inQuestion } = await import('./live-fonts.mjs');
     const { resolveEditableContent } = await import('./editable-source.mjs?v=preview-crop-20261004-1');
-    const { createCollectionHwpx, equationScript, groupFractions } = await import('./editable-convert.mjs?v=typography-20261003-3');
+    const { createCollectionHwpx, equationScript, groupFractions } = await import('./editable-convert.mjs?v=subject-review-20261011-1');
     const { equationLineCollisions } = await import('./equation-spacing.mjs');
     const { default: init, HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     await init('./vendor/rhwp-studio/assets/rhwp_bg-PUGAA2uC.wasm');
@@ -340,7 +346,7 @@ async function collectQuestion(page, id, modes, captureSource) {
 
 async function collectCollections(page, ids) {
   return page.evaluate(async (ids) => {
-    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=typography-20261003-3');
+    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=subject-review-20261011-1');
     const { equationLineCollisions } = await import('./equation-spacing.mjs');
     const { HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     const b64 = (bytes) => { let raw = ''; for (let i = 0; i < bytes.length; i += 32768) raw += String.fromCharCode(...bytes.subarray(i, i + 32768)); return btoa(raw); };
@@ -365,7 +371,7 @@ async function collectCollections(page, ids) {
 async function collectOverflow(page) {
   return page.evaluate(async () => {
     const { longQuestionFixture, longQuestionSentinels, equationOverflowFixture } = await import('./test-fixtures/readability-overflow.mjs');
-    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=typography-20261003-3');
+    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=subject-review-20261011-1');
     const { HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     const result = { scope: 'synthetic-native-layout-only', longQuestion: [], equationOverflow: {} };
     for (const pagePerQuestion of [false, true]) {
@@ -496,7 +502,7 @@ export async function runReadabilityQA(options = {}) {
           Object.assign(mode, savedXml(xml));
         }
         for (const p of mode.pages || []) { await writeFile(join(output, `${name}-page-${p.page + 1}.svg`), p.svg); delete p.svg; }
-        mode.checks = analyzeMode(record, mode, { nativeCharges: fixtures.nativeCharges[id], criticalRegions: fixtures.criticalRegions[id], proseOracle: fixtures.proseOracles[id] });
+        mode.checks = analyzeMode(record, mode, { nativeCharges: fixtures.nativeCharges[id], criticalRegions: fixtures.criticalRegions[id], proseOracle: fixtures.proseOracles[id], wordFractions: fixtures.wordFractions?.[id] });
         mode.pass = mode.checks.every((c) => c.status !== 'fail');
         mode.failures = mode.checks.filter((c) => c.status === 'fail').map((c) => c.name);
       }

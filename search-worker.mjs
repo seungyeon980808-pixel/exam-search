@@ -1,5 +1,6 @@
-import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=library-release-20261011-2';
-import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions} from './search.mjs?v=library-release-20261011-2';
+import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=library-release-20261011-3';
+import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions} from './search.mjs?v=library-release-20261011-3';
+import {questionSubject} from './question-id.mjs?v=subject-review-20261011-1';
 import {paperLabel,paperPages,paperReady} from './paper-profile.mjs';
 let catalog,running=0;
 const loaded=new Map(),loading=new Map(),results=new Map(),indexes=new Map(),indexing=new Map(),active=new Map(),queue=[];
@@ -75,7 +76,7 @@ async function request(path,ctx){
  const url=new URL(path,'https://exam.local/'),p=url.searchParams;
  const filters=Object.fromEntries(['group','subject','yearFrom','yearTo','month','framework','unit','standard','track','allProfiles'].map(k=>[k,p.get(k)||'']));filters.variant=p.get('variant')||'odd';
  if(url.pathname==='/api/question'){
-  const id=p.get('id'),subject=catalog.status.subjects.find(s=>id.startsWith(`${s.value}_`))?.value;
+  const id=p.get('id'),subject=questionSubject(id,catalog.status.subjects);
   if(!subject)throw new Error('문항을 찾을 수 없습니다.');
   const item=(await items(subject,'detail',ctx)).find(q=>q.id===id);guard(ctx);
   if(!item)throw new Error('문항을 찾을 수 없습니다.');return clean(item);

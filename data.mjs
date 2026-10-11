@@ -1,5 +1,5 @@
-import {loadCatalog} from './catalog-cache.mjs?v=library-release-20261011-2';
-import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=library-release-20261011-2';
+import {loadCatalog} from './catalog-cache.mjs?v=library-release-20261011-3';
+import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=library-release-20261011-3';
 let catalogPromise, workerPromise,worker,answersPromise;
 let publicPaths=new Map(),nextId=0;
 const requests=new Map(),listeners=new Set();
@@ -26,7 +26,7 @@ function call(type,args={}, {signal,priority}={}){
 async function searchWorker(){
  if(!workerPromise)workerPromise=(async()=>{
   const catalog=await browserCatalog();
-  worker=new Worker(new URL('./search-worker.mjs?v=library-release-20261011-2',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./search-worker.mjs?v=library-release-20261011-3',import.meta.url),{type:'module'});
   worker.onmessage=({data})=>{
    if(data.type==='progress'){if(requests.has(data.id))emit({...searchState,phase:'preparing',done:data.done,total:data.total});return;}
    const request=requests.get(data.id);if(!request)return;requests.delete(data.id);

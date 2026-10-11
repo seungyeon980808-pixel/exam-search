@@ -1,5 +1,15 @@
 {
   "schema": 1,
+  "wordFractions": {
+    "e1_2027_06_20": [
+      { "numerator": "자원소 함량", "denominator": "방사성 원소 함량", "count": 2 },
+      { "numerator": "A", "denominator": "B에 포함된 방사성 원소 함량" }
+    ],
+    "c1_2027_06_20": [
+      { "numerator": "남은 반응물의 질량", "denominator": "전체 기체의 부피" },
+      { "numerator": "Ⅱ에서 반응 후 전체 기체의 부피", "denominator": "Ⅲ에서 반응 후 전체 기체의 부피" }
+    ]
+  },
   "scope": "Actual resolver path; observed content regions and native layout, not semantic correctness",
   "biology": [
     "b1_2025_11_17",
