@@ -1,10 +1,10 @@
-import { driveFilePath } from './data.mjs?v=library-release-20261010-1';
+import { driveFilePath } from './data.mjs?v=library-release-20261011-1';
 import { driveLink } from './drive-source.mjs';
-import { resolveEditableContent } from './editable-source.mjs?v=library-release-20261010-1';
-import { createEditableBatch } from './editable-batch.mjs?v=library-release-20261010-1';
+import { resolveEditableContent } from './editable-source.mjs?v=library-release-20261011-1';
+import { createEditableBatch } from './editable-batch.mjs?v=library-release-20261011-1';
 import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=readability-20261004-4';
-import { renderQuestion } from './pdf-viewer.mjs?v=library-release-20261010-1';
-import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261010-1';
+import { renderQuestion } from './pdf-viewer.mjs?v=library-release-20261011-1';
+import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261011-1';
 import { contentQualitySummary } from './content-quality.mjs?v=readability-20261004-4';
 
 import { columnViewport, columnPresentation, studioZoomSlider } from './editor-viewport.mjs?v=resizable-editor-20261003-1';
@@ -70,7 +70,7 @@ const settingsPopovers = [information, more, documentSettings, viewSettings];
 new ResizeObserver(() => dialog.style.setProperty('--editor-tools-bottom', `${Math.ceil(document.querySelector('.editable-toolbar').getBoundingClientRect().bottom) + 8}px`))
   .observe(document.querySelector('.editable-toolbar'));
 for (const panel of settingsPopovers) panel.addEventListener('toggle', () => {
-  if (panel.open) for (const other of settingsPopovers) if (other !== panel) other.open = false;
+  if (panel.open) for (const other of settingsPopovers) if (other !== panel && !other.contains(panel) && !panel.contains(other)) other.open = false;
 });
 dialog.addEventListener('pointerdown', event => {
   if (!event.target.closest('.editable-toolbar')) settingsPopovers.forEach(panel => { panel.open = false; });
@@ -80,6 +80,15 @@ dialog.addEventListener('keydown', event => {
   const panel = settingsPopovers.find(panel => panel.open);
   if (!panel) return;
   event.preventDefault(); event.stopPropagation(); panel.open = false; panel.querySelector('summary').focus();
+});
+
+document.querySelector('#editable-format-toggle').addEventListener('click', () => {
+  const button = document.querySelector('#editable-format-toggle');
+  const visible = button.getAttribute('aria-pressed') !== 'true';
+  button.setAttribute('aria-pressed', String(visible));
+  if (editor?.element.contentDocument) editor.element.contentDocument.documentElement.dataset.examFormat = String(visible);
+  more.open = false;
+  scheduleEditorFit();
 });
 
 const active = (value) => session === value && dialog.open;
@@ -101,6 +110,7 @@ function setStatus(message, isError = false) {
     information.open = true;
   }
   if (isError) information.open = true;
+  if (information.open && more.contains(information)) more.open = true;
   status.classList.toggle('is-error', isError);
   if (!loading.hidden) loadingDetail.textContent = message;
 }
@@ -493,7 +503,7 @@ async function prepareEditor() {
     const stylesheet = studio.createElement('link');
     stylesheet.id = 'exam-compact-chrome';
     stylesheet.rel = 'stylesheet';
-    stylesheet.href = new URL('./editable-studio.css?v=resizable-editor-20261003-1', import.meta.url).href;
+    stylesheet.href = new URL('./editable-studio.css?v=compact-20261011-1', import.meta.url).href;
     const styled = new Promise((resolve) => {
       stylesheet.addEventListener('load', resolve, { once: true });
       stylesheet.addEventListener('error', resolve, { once: true });
@@ -553,6 +563,7 @@ async function begin(title, collection, context = {}) {
   const value = { ...context, collection, includeImages: imageMode.value === 'include', phase: 'options', items: [], loaded: false, dirty: false, savedSha: '', batch: null, controller: new AbortController() };
   session = value;
   download.disabled = true;
+  document.querySelector('#editable-format-toggle').disabled = true;
   retry.hidden = partial.hidden = true;
   const questionPdf = context.question ? pdfHref(context.question) : '';
   if (questionPdf) pdfLink.href = questionPdf;
@@ -562,7 +573,7 @@ async function begin(title, collection, context = {}) {
   sources.hidden = !collection;
   sources.open = false;
   information.open = more.open = documentSettings.open = viewSettings.open = false;
-  referenceToggle.setAttribute('aria-pressed', 'true');
+  referenceToggle.setAttribute('aria-pressed', String(!matchMedia('(max-width: 820px)').matches));
   referenceToggle.disabled = true;
   columnView.disabled = pageView.disabled = true;
   layoutMode.disabled = false;
@@ -626,6 +637,7 @@ async function loadDocument(value, bytes, filename) {
       const initialScroll = instance.element.contentDocument?.getElementById('scroll-container');
       if (initialScroll) initialScroll.scrollTop = 0;
       referenceToggle.disabled = columnView.disabled = pageView.disabled = false;
+      document.querySelector('#editable-format-toggle').disabled = false;
       syncReferenceView();
       host.style.visibility = '';
       setBusy(value, false);

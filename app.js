@@ -1,19 +1,20 @@
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261010-1';
+import { mountCompactToolbar } from './compact-toolbar.mjs?v=compact-20261011-1';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-1';
 import { driveLink } from './drive-source.mjs';
 import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261010-1').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261011-1').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=library-release-20261010-1';
-import { curriculumOptions } from './catalog-filters.mjs?v=library-toolbar-20261009-1';
+import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-1';
+import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-1';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=library-release-20261010-1').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=library-release-20261011-1').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }
@@ -93,7 +94,8 @@ function warmSelectedSubject({intent=false}={}) {
   const prepare=()=>{warmTimer=undefined;if(!signal.aborted)void prefetchSearch(filters,{signal,intent}).catch(()=>{});};
   warmTimer=window.requestIdleCallback?requestIdleCallback(prepare,{timeout:300}):setTimeout(prepare,80);
 }
-let landingOpen = !initialParams.size;
+const searchAddressKeys = ['q', 'group', 'subject', 'year', 'yearFrom', 'yearTo', 'month', 'mode', 'id', 'file', 'unit', 'framework', 'standard'];
+let landingOpen = !searchAddressKeys.some(key => initialParams.has(key));
 const story = mountLandingStory($('#landing-story'), { isVisible: () => landingOpen, onTry: async step => {
   if (step === 0) { $('#landing-subjects').querySelector('button')?.focus(); return; }
   if (!catalogData) return;
@@ -140,7 +142,7 @@ const filterToggle = $('#filter-toggle');
 const toolbarActions = $('#toolbar-inline-actions');
 const compactToolbar = matchMedia('(max-width: 1360px)');
 const mobileWorkspace = matchMedia('(max-width: 820px)');
-const minimalWorkspace = matchMedia('(max-width: 420px)');
+const minimalWorkspace = matchMedia('(max-width: 820px)');
 const fileTools = $('#file-workspace-tools');
 let fileItems = [];
 let fileConversionReady = false;
@@ -834,7 +836,7 @@ async function selectFile(item, { push = false } = {}) {
   $('#file-page-position').textContent = '—';
   const convert = $('#file-preview-editable');
   convert.disabled = true;
-  convert.textContent = '전체 문항 한글로';
+  convert.textContent = '전체 문항 Hwp';
   convert.onclick = null;
   const configure = $('#file-preview-profile');
   configure.hidden = !['math', 'kor'].includes(item.subject) || group.value === item.subject;
@@ -880,7 +882,7 @@ async function selectFile(item, { push = false } = {}) {
     fileItems = items;
     fileConversionReady = ready;
     convert.disabled = !ready || !items.length;
-    convert.textContent = !ready && items.length ? '선택과목을 먼저 골라주세요' : items.length ? `${label ? `${label} ` : '전체 '}${items.length}문항 한글로` : '색인된 문항 없음';
+    convert.textContent = !ready && items.length ? '선택과목을 먼저 골라주세요' : items.length ? `${label ? `${label} ` : '전체 '}${items.length}문항 Hwp` : '색인된 문항 없음';
     convert.title = '전체 문항을 한 문서로 변환합니다. 변환 전에 그림 포함·제외를 선택할 수 있습니다. 본문·수식·보기는 편집 가능한 문서로 만듭니다.';
     convert.onclick = () => { $('#workspace-convert').open = false; void openEditableCollection(items.map((entry) => entry.id)); };
     stopFileRendering = await renderFilePages(item.pdfFile, pages, item.firstMatchPage || 1,
@@ -913,7 +915,7 @@ function updateFilePageControls() {
   const items = fileItems.filter((item) => item.page === activeFilePage);
   const convert = $('#file-page-editable');
   convert.disabled = !fileConversionReady || !items.length;
-  convert.textContent = items.length ? `${activeFilePage}쪽 ${items.length}문항 한글로` : '이 쪽에 색인된 문항 없음';
+  convert.textContent = items.length ? `${activeFilePage}쪽 ${items.length}문항 Hwp` : '이 쪽에 색인된 문항 없음';
   $('#file-preview-open').href = $('#file-preview-open').href.replace(/#page=\d+/u, `#page=${activeFilePage || 1}`);
 }
 function moveFilePage(direction) {
@@ -1463,7 +1465,7 @@ $('#selection-list').addEventListener('click', (event) => {
 });
 $('#selection-open').addEventListener('click', () => {
   const ids = selection.snapshot();
-  if (ids.length) document.dispatchEvent(new CustomEvent('open-editable-collection', { detail: { ids } }));
+  if (ids.length) void openEditableCollection(ids);
 });
 loadMore.addEventListener('click', () => changePage(1));
 $('#previous-page').addEventListener('click', () => changePage(-1));
@@ -1621,4 +1623,5 @@ $('.brand').addEventListener('click', () => {
   story.refresh();
   history.replaceState(null, '', location.pathname); publishEmbeddedAddress();
 });
+mountCompactToolbar();
 start();

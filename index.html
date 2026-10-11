@@ -2,16 +2,17 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="평가원 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
     <title>기출 탐색기</title>
     <link rel="stylesheet" href="./styles.css?v=preview-speed-20261009-1" />
     <link rel="stylesheet" href="./library-ux.css?v=library-compact-results-20261009-1" />
     <link rel="stylesheet" href="./library-glass.css?v=library-aurora-selection-20261009-1" />
+    <link rel="stylesheet" href="./compact-toolbar.css?v=compact-20261011-1" />
     <script>
       if (location.protocol === 'file:') document.documentElement.classList.add('local-file');
     </script>
-    <script src="./app.js?v=library-release-20261010-1" type="module"></script>
+    <script src="./app.js?v=library-release-20261011-1" type="module"></script>
   </head>
   <body>
     <main class="local-file-notice" hidden>
@@ -71,7 +72,7 @@
           <button class="toolbar-icon preview-toggle" id="preview-toggle" type="button" aria-label="미리보기 열기" title="미리보기 열기" aria-controls="detail-pane" aria-pressed="false" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16"/></svg></button>
           <div class="file-workspace-tools" id="file-workspace-tools" hidden>
             <nav class="file-page-nav" aria-label="시험지 쪽 이동"><button class="toolbar-icon" id="file-page-previous" type="button" aria-label="이전 쪽" disabled>‹</button><span id="file-page-position" aria-live="polite">—</span><button class="toolbar-icon" id="file-page-next" type="button" aria-label="다음 쪽" disabled>›</button></nav>
-            <details class="workspace-convert" id="workspace-convert"><summary class="button primary">한글로 ⌄</summary><div class="workspace-convert-panel"><button class="button secondary" id="file-preview-editable" type="button" disabled>전체 문항 한글로</button><button class="button secondary" id="file-page-editable" type="button" disabled>현재 쪽 한글로</button><button class="button secondary" id="file-preview-profile" type="button" hidden>선택과목 설정</button></div></details>
+            <details class="workspace-convert" id="workspace-convert"><summary class="button primary">Hwp ⌄</summary><div class="workspace-convert-panel"><button class="button secondary" id="file-preview-editable" type="button" disabled>전체 문항 Hwp</button><button class="button secondary" id="file-page-editable" type="button" disabled>현재 쪽 Hwp</button><button class="button secondary" id="file-preview-profile" type="button" hidden>선택과목 설정</button></div></details>
             <a class="toolbar-icon workspace-pdf" id="file-preview-open" target="_blank" rel="noopener" title="시험지 PDF 열기" aria-label="시험지 PDF 열기">↗</a>
           </div>
         </div>
@@ -114,7 +115,7 @@
         <section class="results-pane" aria-label="검색 결과">
           <div class="pane-header"><div class="results-heading"><h1 class="workspace-count" id="result-count">문항을 불러오는 중</h1><span class="result-sort" id="result-sort">관련도 · 최신순</span></div><div class="applied-filters" id="applied-filters" role="group" aria-label="적용한 검색 조건" tabindex="0" hidden></div><div class="pane-actions"></div></div>
           <div class="selection-notice" id="selection-notice" role="status" hidden><span id="selection-notice-text"></span><button id="selection-undo" type="button" hidden>되돌리기</button><button id="selection-notice-close" type="button" aria-label="선택 안내 닫기">×</button></div>
-          <div class="selection-toolbar" id="selection-toolbar" role="group" aria-label="선택 문항" hidden><button class="button secondary" id="selection-toggle" type="button" aria-expanded="false" aria-controls="selection-tray"><span id="selection-count" aria-live="polite">선택 0개</span><span aria-hidden="true">⌄</span></button><button class="button primary" id="selection-open" type="button" disabled>모아 보기</button><button class="button secondary" id="selection-clear" type="button">해제</button></div>
+          <div class="selection-toolbar" id="selection-toolbar" role="group" aria-label="선택 문항" hidden><button class="button secondary" id="selection-toggle" type="button" aria-expanded="false" aria-controls="selection-tray"><span id="selection-count" aria-live="polite">선택 0개</span><span aria-hidden="true">⌄</span></button><button class="button primary" id="selection-open" type="button" disabled>Hwp</button><button class="button secondary" id="selection-clear" type="button">해제</button></div>
           <section class="selection-tray" id="selection-tray" aria-label="선택한 문항 순서" hidden><ol id="selection-list"></ol></section>
           <div class="result-grid" id="result-list"></div>
           <nav class="results-pagination" id="results-pagination" aria-label="검색 결과 페이지" hidden><button class="button secondary" id="previous-page" type="button">이전</button><span id="page-position" aria-live="polite"></span><button class="button secondary" id="load-more" type="button">다음</button></nav>
@@ -128,18 +129,15 @@
           </div>
           <div class="detail-content" id="detail-content" hidden>
             <header class="detail-header">
-              <button class="detail-back" id="mobile-back" type="button">← 검색 결과</button>
-              <div class="detail-title"><h2 id="detail-heading"></h2><p id="detail-subheading"></p></div>
-              <nav class="question-nav" aria-label="검색 결과 문항 이동">
-                <button class="nav-button" id="previous-question" type="button" aria-label="이전 문항" aria-keyshortcuts="ArrowLeft ArrowUp" title="이전 문항 (← 또는 ↑)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-                <span class="nav-position" id="nav-position" aria-live="polite"></span>
-                <button class="nav-button" id="next-question" type="button" aria-label="다음 문항" aria-keyshortcuts="ArrowRight ArrowDown" title="다음 문항 (→ 또는 ↓)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
-              </nav>
-              <a class="button secondary pdf-link" id="open-pdf" target="_blank" rel="noopener">시험지 PDF 열기 ↗</a>
+              <button class="detail-back compact-control" id="mobile-back" type="button" aria-label="검색 결과로 돌아가기" title="검색 결과"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg></button>
+              <details class="detail-info"><summary class="compact-control" aria-label="문항 정보"><span id="detail-compact-title">문항</span><span aria-hidden="true">⌄</span></summary><div class="detail-popover"><h2 id="detail-heading"></h2><p id="detail-subheading"></p><nav class="question-nav" aria-label="검색 결과 문항 이동"><button class="nav-button" id="previous-question" type="button" aria-label="이전 문항" aria-keyshortcuts="ArrowLeft ArrowUp" disabled>‹</button><span class="nav-position" id="nav-position" aria-live="polite"></span><button class="nav-button" id="next-question" type="button" aria-label="다음 문항" aria-keyshortcuts="ArrowRight ArrowDown" disabled>›</button></nav></div></details>
+              <label class="question-selection detail-check" title="문항 선택"><input id="detail-selection" type="checkbox" aria-label="문항 선택" disabled /><span class="sr-only">문항 선택</span></label>
+              <button class="button primary editable-open" id="open-editable" type="button">Hwp</button>
+              <details class="detail-more"><summary class="compact-control" aria-label="문항 도구" title="문항 도구"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></summary><div class="detail-popover"><button class="button secondary" id="open-viewer" type="button">이미지 확대</button><a class="button secondary pdf-link" id="open-pdf" target="_blank" rel="noopener">시험지 PDF 열기 ↗</a><button class="button secondary" id="detail-results" type="button">검색 결과로 돌아가기</button><button class="button secondary" id="detail-home" type="button">처음 화면</button></div></details>
             </header>
             <div class="detail-scroll">
               <section class="source-section" aria-label="문항 원본 이미지">
-                <div class="section-bar"><strong>문항 원본</strong><div class="source-actions"><label class="question-selection"><input id="detail-selection" type="checkbox" disabled /><span>문항 선택</span></label><button class="button secondary" id="open-viewer" type="button">이미지 확대</button><button class="button secondary editable-open" id="open-editable" type="button">한글 문서에서 보기</button></div></div>
+
                 <button id="source-image-link" class="source-image-link" type="button" aria-label="이 문항 이미지를 편집 문서로 변환해서 보기"><img id="source-image" alt="" /><span class="zoom-hint">눌러서 편집 문서로 변환</span></button>
                 <p class="source-note" id="source-note"></p>
               </section>
@@ -162,13 +160,13 @@
     <dialog class="editable-dialog" id="editable-dialog" aria-labelledby="editable-title">
       <div class="editable-shell">
         <header class="editable-toolbar">
-          <strong id="editable-title">편집 문서</strong>
+          <strong id="editable-title">편집 문서</strong><span id="editable-compact-title" aria-hidden="true">문서</span>
           <details class="editable-information" id="editable-information"><summary id="editable-status-label">변환 옵션 ⓘ</summary><div class="editable-information-panel"><p class="editable-status" id="editable-status" role="status" aria-live="polite"></p><button class="button secondary" id="editable-review-issues" type="button" hidden>문항별 확인 사항 보기</button></div></details>
-          <details class="editable-settings" id="editable-document-settings"><summary class="button secondary">문서 설정 <span id="editable-document-label">그림 제외</span><span aria-hidden="true">⌄</span></summary><div class="editable-settings-panel"><strong>변환할 문서</strong><div class="editable-conversion-options"><label for="editable-image-mode">그림</label><select id="editable-image-mode"><option value="exclude">제외</option><option value="include">포함</option></select></div><label class="editable-layout-option" for="editable-layout">문항 배치 <select id="editable-layout"><option value="continuous">이어 배치</option><option value="question">문항별 새 페이지</option></select></label><p id="editable-settings-note">설정은 변환할 때 적용됩니다.</p></div></details>
+          <details class="editable-settings" id="editable-document-settings"><summary class="button secondary" aria-label="문서 설정" title="문서 설정"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span class="sr-only">문서 설정</span></summary><div class="editable-settings-panel"><strong>문서 설정</strong><span id="editable-document-label">그림 제외</span><div class="editable-conversion-options"><label for="editable-image-mode">그림</label><select id="editable-image-mode"><option value="exclude">제외</option><option value="include">포함</option></select></div><label class="editable-layout-option" for="editable-layout">문항 배치 <select id="editable-layout"><option value="continuous">이어 배치</option><option value="question">문항별 새 페이지</option></select></label><p id="editable-settings-note">설정은 변환할 때 적용됩니다.</p></div></details>
           <button class="button secondary" id="editable-reconvert" type="button" hidden>다시 변환</button>
           <details class="editable-settings" id="editable-view-settings"><summary class="button secondary">화면 보기 <span id="editable-view-label">문항 폭</span><span aria-hidden="true">⌄</span></summary><div class="editable-settings-panel"><strong>편집 화면</strong><div class="editable-view-switch" role="group" aria-label="편집 화면 용지 보기"><button type="button" id="editable-column-view" aria-pressed="true">문항 폭</button><button type="button" id="editable-page-view" aria-pressed="false">전체 용지</button></div><div class="editable-zoom" role="group" aria-label="편집 화면 확대 비율"><button type="button" id="editable-zoom-out" aria-label="편집 화면 축소">−</button><input id="editable-zoom" type="number" min="10" max="500" step="5" value="100" aria-label="편집 화면 배율 (%)" /><span>%</span><button type="button" id="editable-zoom-in" aria-label="편집 화면 확대">+</button><button type="button" id="editable-zoom-fit">너비 맞춤</button></div><button class="button secondary" id="editable-reference-toggle" type="button" aria-pressed="true" aria-controls="editable-reference">원본 대조</button><p>배율과 원본 대조는 내려받는 문서에 영향을 주지 않습니다.</p></div></details>
-          <details class="editable-more" id="editable-more"><summary class="toolbar-icon" aria-label="변환 문항·원본·재시도" title="변환 문항·원본·재시도">⋯</summary><div class="editable-more-panel"><small>배치 변경은 다시 변환할 때 적용됩니다. 긴 문항은 다음 페이지로 이어지고, 공통 지문은 각 문항에 포함됩니다.</small><a class="button secondary" id="editable-pdf" target="_blank" rel="noopener" hidden>시험지 PDF ↗</a><a class="button secondary" id="editable-original" target="_blank" rel="noopener" hidden>원본 이미지 ↗</a><div class="editable-batch-controls"><details id="editable-sources" hidden><summary>문항 목록·원본</summary><ol id="editable-items"></ol></details><button class="button secondary" id="editable-retry" type="button" hidden>실패 문항 재시도</button><button class="button secondary" id="editable-partial" type="button" hidden>성공한 문항만 열기</button></div></div></details>
-          <div class="editable-actions"><button class="button primary" id="editable-download" type="button" disabled>HWPX 내려받기</button><button class="button secondary" id="editable-close" type="button">닫기</button></div>
+          <details class="editable-more" id="editable-more"><summary class="toolbar-icon" aria-label="변환 문항·원본·재시도" title="변환 문항·원본·재시도">⋯</summary><div class="editable-more-panel"><button class="button secondary" id="editable-format-toggle" type="button" aria-pressed="false" disabled>서식 도구</button><small>배치 변경은 다시 변환할 때 적용됩니다. 긴 문항은 다음 페이지로 이어지고, 공통 지문은 각 문항에 포함됩니다.</small><a class="button secondary" id="editable-pdf" target="_blank" rel="noopener" hidden>시험지 PDF ↗</a><a class="button secondary" id="editable-original" target="_blank" rel="noopener" hidden>원본 이미지 ↗</a><div class="editable-batch-controls"><details id="editable-sources" hidden><summary>문항 목록·원본</summary><ol id="editable-items"></ol></details><button class="button secondary" id="editable-retry" type="button" hidden>실패 문항 재시도</button><button class="button secondary" id="editable-partial" type="button" hidden>성공한 문항만 열기</button></div></div></details>
+          <div class="editable-actions"><button class="button primary" id="editable-download" type="button" title="HWPX 내려받기" aria-label="HWPX 내려받기" disabled>저장</button><button class="button secondary" id="editable-close" type="button" aria-label="편집 닫기" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
         </header>
         <div class="editable-content" id="editable-content">
           <section class="editable-reference" id="editable-reference" aria-label="원본 문항 이미지" hidden>

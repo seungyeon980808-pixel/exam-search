@@ -23,7 +23,8 @@
     "qa:card-selection": "node tools/qa-card-selection.mjs",
     "build:previews": "node tools/build-preview-assets.mjs",
     "qa:images": "node tools/qa-image-loading.mjs",
-    "measure:images": "node tools/measure-image-loading.mjs"
+    "measure:images": "node tools/measure-image-loading.mjs",
+    "qa:compact": "node tools/qa-compact-toolbar.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

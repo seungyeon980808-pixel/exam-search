@@ -31,3 +31,6 @@
 :root[data-exam-paper-view="column"] #scroll-content > .document-page-canvas,
 :root[data-exam-paper-view="column"] #scroll-content > .page-placeholder,
 :root[data-exam-paper-view="column"] #scroll-content > [data-rhwp-overlay-page] { clip-path: inset(0 var(--exam-column-crop, 45%) 0 var(--exam-column-left-crop, 0%)); }
+
+/* Formatting is available from the host toolbar without consuming reading space. */
+:root:not([data-exam-format="true"]) #studio-header { display: none; }
