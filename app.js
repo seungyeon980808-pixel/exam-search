@@ -1,20 +1,20 @@
 import { mountCompactToolbar } from './compact-toolbar.mjs?v=compact-20261011-1';
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-1';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-2';
 import { driveLink } from './drive-source.mjs';
 import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261011-1').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=library-release-20261011-2').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-1';
-import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-1';
+import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-2';
+import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-2';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=library-release-20261011-1').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=library-release-20261011-2').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }
@@ -655,7 +655,8 @@ function setPreviewMode(open) {
   previewToggle.setAttribute('aria-pressed', String(open));
   previewToggle.setAttribute('aria-label', open ? '미리보기 닫기' : '미리보기 열기');
   previewToggle.title = open ? '미리보기 닫기' : '미리보기 열기';
-  $('#mobile-back').textContent = open ? '← 결과만 보기' : '← 검색 결과';
+  $('#mobile-back').setAttribute('aria-label', open ? '검색 결과만 보기' : '검색 결과로 돌아가기');
+  $('#mobile-back').title = open ? '결과만 보기' : '검색 결과';
   updateAddress();
 }
 
@@ -1196,8 +1197,14 @@ async function selectQuestion(id, openDetail = true, { push = false } = {}) {
     }).catch((error) => {
       scroll.removeEventListener('scroll', preserve);
       if (selectionRequestId === state.selectionRequestId && !signal.aborted) {
-        $('#source-note').textContent = `${error.message} ${imageUrl ? '카드 이미지로 확인하거나' : ''} 시험지 PDF 원본으로 확인해 주세요.`;
-        setHelp(error.message, true);
+        imageLink.classList.remove('is-loading');
+        // A failed high-resolution upgrade must not turn a usable preview into an error screen.
+        if (imageUrl && image.complete && image.naturalWidth) {
+          $('#source-note').textContent = '문항 미리보기입니다. 고해상도 원본은 시험지 PDF에서 확인할 수 있습니다.';
+        } else {
+          $('#source-note').textContent = '원본 이미지를 불러오지 못했습니다. 시험지 PDF로 확인해 주세요.';
+          setHelp('원본 이미지를 불러오지 못했습니다. 시험지 PDF로 확인해 주세요.', true);
+        }
       }
     });
     $('#source-note').textContent = `${item.pdfFile} · ${item.page}쪽 원본입니다. 수식과 그림은 PDF에서 대조하세요.`;

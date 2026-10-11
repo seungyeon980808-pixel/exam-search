@@ -1,5 +1,5 @@
 import {matchesPaper} from './paper-profile.mjs';
-import { subjectGroup } from './search.mjs?v=library-release-20261011-1';
+import { subjectGroup } from './search.mjs?v=library-release-20261011-2';
 export function curriculumOptions(catalog, filters = {}) {
   const from = Number(filters.yearFrom || filters.year) || 0, to = Number(filters.yearTo || filters.year) || Infinity;
   const rows=catalog.facets.filter(f=>(!filters.group||subjectGroup(f.subject).value===filters.group)

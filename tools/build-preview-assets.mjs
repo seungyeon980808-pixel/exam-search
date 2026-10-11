@@ -75,7 +75,7 @@ try {
    catch {await route.fulfill({status:404,body:'Missing local source'});}
   });
   await page.goto(new URL('_work/preview-build.html',base).href);
-  await page.evaluate(async()=>{await (await import('../data.mjs?v=library-release-20261011-1')).browserCatalog();});
+  await page.evaluate(async()=>{await (await import('../data.mjs?v=library-release-20261011-2')).browserCatalog();});
   while(next<jobs.length) {
    const job=jobs[next++];
    try {
@@ -84,7 +84,7 @@ try {
      const old=(file?previous?.files:previous?.questions)?.[file?job.file.pdfFile:q.id];
      if(previous?.sourceRevision===manifest.sourceRevision&&previous?.recipe===recipe&&old?.sourceHash===sourceHash&&await existing(old.path))return old;
      const image=await page.evaluate(async({q,name,file})=>{
-      const viewer=await import('../pdf-viewer.mjs?v=library-release-20261011-1');
+      const viewer=await import('../pdf-viewer.mjs?v=library-release-20261011-2');
       const url=await(file?viewer.renderFileThumbnail(name):viewer.renderQuestion(q,1.6));
       try {const blob=await(await fetch(url)).blob();const bmp=await createImageBitmap(blob);
        const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});
