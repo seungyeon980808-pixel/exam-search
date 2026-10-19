@@ -1,7 +1,7 @@
 import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=frame-20261020-1';
 import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
 import { passageBlocks, passageKey } from './shared-passage.mjs?v=library-release-20261011-3';
-import { finalizeContentQuality } from './content-quality.mjs?v=readability-20261004-4';
+import { finalizeContentQuality } from './content-quality.mjs?v=frame-20261020-1';
 
 let indexPromise;
 export async function editableEntries() {
@@ -74,7 +74,7 @@ export async function resolveEditableContent(question, dependencies = {}) {
         check();
         return { questionId: question.id, question, sourceLabel: question.title || `${question.pdfFile} ${question.no}번`,
           frame: converted, paragraphs: [], provenance: '5e-frame', warnings: converted.notes,
-          quality: { state: converted.excludedFigures ? 'excluded' : 'unverified', scope: '5e-frame', regions: [], unresolvedCount: 0, excludedCount: converted.excludedFigures || 0 },
+          quality: { state: converted.excludedFigures ? 'excluded' : 'review', scope: '5e-frame', regions: [], unresolvedCount: 0, excludedCount: converted.excludedFigures || 0 },
           status: 'needs_review' };
       } catch (error) {
         check();

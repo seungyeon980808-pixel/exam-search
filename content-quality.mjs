@@ -41,6 +41,13 @@ export function contentQualitySummary(items) {
   const incomplete = results.filter((result) => result.provenance === 'index-draft' || result.quality?.state === 'incomplete').length;
   const excluded = results.filter((result) => result.quality?.excludedCount > 0).length;
   const unverified = results.filter((result) => !result.quality || result.quality.state === 'unverified').length;
+  const framed = results.filter((result) => result.provenance === '5e-frame').length;
+  if (framed && !incomplete && framed === results.length) {
+    return { incomplete, excluded, unverified: 0, framed,
+      message: excluded ? `5E 문항 틀로 변환했습니다. 그림을 뺀 문항 ${excluded}개는 그림 자리만 남겼습니다. 원본 PDF와 대조한 뒤 사용하세요.`
+        : '5E 문항 틀로 변환했습니다. 발문·자료·보기·선지와 수식은 편집할 수 있습니다. 원본 PDF와 대조한 뒤 사용하세요.',
+      label: excluded ? '5E 틀 · 그림 제외 ⓘ' : '5E 문항 틀 · 원본 대조 ⓘ' };
+  }
   const message = incomplete
     ? `복원 확인이 필요한 문항 ${incomplete}개가 있습니다. 문항 목록에서 빠진 자료와 경고를 확인하세요.`
     : excluded ? `그림 제외 옵션으로 자료를 생략한 문항 ${excluded}개가 있습니다. 본문·수식·보기는 편집 가능합니다.`

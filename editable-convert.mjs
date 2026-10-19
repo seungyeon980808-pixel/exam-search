@@ -330,8 +330,12 @@ async function createParagraphCollection(resolvedItems, { pagePerQuestion = fals
 export const questionBookmark = (id) => `exam_question_${encodeURIComponent(id)}`;
 
 /** Resolve saved bookmarks instead of assuming paragraph indexes survive pagination or editing. */
-export async function readQuestionTargets(bytes) {
-  const HwpDocument = await core();
+// engine 'frame': 5E 문항 틀 문서는 이미 받은 0.8.7 엔진으로 읽는다(0.8.6 엔진을 따로 내려받지 않음).
+const readerCore = async (engine) => engine === 'frame'
+  ? (await import('./exampool/frame.mjs?v=frame-20261020-1')).loadFrameEngine() : core();
+
+export async function readQuestionTargets(bytes, { engine } = {}) {
+  const HwpDocument = await readerCore(engine);
   const document = new HwpDocument(bytes);
   try {
     return Object.fromEntries(JSON.parse(document.getBookmarks())
@@ -344,8 +348,8 @@ export async function readQuestionTargets(bytes) {
 }
 
 /** Read native page coordinates without changing the generated document. */
-export async function readEditablePageGeometry(bytes) {
-  const HwpDocument = await core();
+export async function readEditablePageGeometry(bytes, { engine } = {}) {
+  const HwpDocument = await readerCore(engine);
   const document = new HwpDocument(bytes);
   try {
     const page = JSON.parse(document.getPageInfo(0));

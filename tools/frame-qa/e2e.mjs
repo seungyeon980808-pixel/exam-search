@@ -58,11 +58,13 @@ for (const name of ENGINES) {
       const page = await context.newPage(), errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('dialog', (dialog) => dialog.accept());
+      const wasm = []; page.on('request', (request) => { if (request.url().endsWith('.wasm') || request.url().includes('.wasm?')) wasm.push(new URL(request.url()).pathname); });
       await page.goto(server.origin + '/');
       // 1) 5E 문항 틀 · 그림 포함
       const framed = await convert(page, IDS);
       assert.match(framed.studio, /exampool\/studio\//, `${name} ${width}: 5E 틀 문서는 0.8.7 편집기로 열어야 합니다`);
       assert.equal(framed.frames, 1);
+      assert(!wasm.some((path) => path.includes('PUGAA2uC')), `5E 틀만 쓸 때 0.8.6 엔진을 받으면 안 됩니다: ${wasm.join(', ')}`);
       assert.match(framed.label, /5E 문항 틀/);
       await page.screenshot({ path: join(OUT, `${name}-${width}-frame.png`) });
       const file = await downloaded(page);

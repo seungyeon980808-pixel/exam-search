@@ -5,7 +5,7 @@ import { createEditableBatch } from './editable-batch.mjs?v=frame-20261020-1';
 import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=frame-20261020-1';
 import { renderQuestion } from './pdf-viewer.mjs?v=frame-20261020-1';
 import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261011-3';
-import { contentQualitySummary } from './content-quality.mjs?v=readability-20261004-4';
+import { contentQualitySummary } from './content-quality.mjs?v=frame-20261020-1';
 
 import { columnViewport, columnPresentation, studioZoomSlider } from './editor-viewport.mjs?v=resizable-editor-20261003-1';
 
@@ -155,7 +155,7 @@ async function jumpToQuestion(value, id, button) {
     if (!active(value) || navigation !== value.navigation) return;
     if (value.targetsSha !== state.documentSha256) {
       const bytes = await instance.exportHwpx();
-      const targets = await readQuestionTargets(bytes);
+      const targets = await readQuestionTargets(bytes, { engine: editorEngine });
       const after = await instance.getDocumentState();
       if (!active(value) || navigation !== value.navigation) return;
       if (state.documentSha256 !== after.documentSha256) throw new Error('편집 내용이 바뀌었습니다. 문항 카드를 다시 눌러 주세요.');
@@ -355,7 +355,7 @@ async function fitEditorView() {
     const state = await editor.getDocumentState();
     if (!active(value)) return;
     if (value.geometrySha !== state.documentSha256) {
-      value.geometry = await readEditablePageGeometry(await editor.exportHwpx());
+      value.geometry = await readEditablePageGeometry(await editor.exportHwpx(), { engine: editorEngine });
       if (!active(value)) return;
       value.geometrySha = state.documentSha256;
     }
@@ -511,6 +511,8 @@ async function prepareEditor(engine = 'base') {
     editor = null; editorPromise = null;
   }
   editorEngine = engine;
+  // 5E 편집기는 변환 엔진과 같은 wasm(11.8MB)을 쓴다. 변환 엔진이 먼저 받게 기다려 편집기는 캐시에서 읽는다(두 번 받지 않음).
+  if (!editorPromise && engine === 'frame') await warmFrame();
   if (!editorPromise) editorPromise = import(ENGINES[engine].sdk).then(({ createEditor }) => createEditor(host, {
     studioUrl: new URL(ENGINES[engine].studio, import.meta.url).href,
     renderer: 'canvas2d', width: '100%', height: '100%',
@@ -649,8 +651,8 @@ async function loadDocument(value, bytes, filename, engine = 'base') {
       value.dirty = false;
       syncDocumentSettings();
       value.filename = filename;
-      value.targets = await readQuestionTargets(bytes);
-      value.geometry = await readEditablePageGeometry(bytes);
+      value.targets = await readQuestionTargets(bytes, { engine });
+      value.geometry = await readEditablePageGeometry(bytes, { engine });
       value.geometrySha = state.documentSha256;
       if (!active(value)) return;
       value.targetsSha = state.documentSha256;

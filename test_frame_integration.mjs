@@ -24,7 +24,7 @@ test('science questions use the 5E frame document', async () => {
   assert.equal(result.provenance, '5e-frame');
   assert.equal(result.frame.bytes, bytes);
   assert.deepEqual(result.warnings, ['확인: 그림 1개']);
-  assert.equal(result.quality.state, 'unverified');
+  assert.equal(result.quality.state, 'review');
 });
 test('excluded figures are reported but keep the frame', async () => {
   const result = await resolveEditableContent(question, { ...deps(async () => ({ bytes: Uint8Array.of(1), height: 1, notes: [], excludedFigures: 2 })), includeImages: false });
@@ -69,4 +69,13 @@ test('batch conversion overlaps work but keeps start order and results in select
   assert.deepEqual(started, ['A1', 'A2', 'B1', 'B2']);
   assert.deepEqual(state.items.map((item) => item.result.questionId), ['A1', 'B1', 'A2', 'B2']);
   assert.equal(state.completed, 4);
+});
+
+test('the status line names the 5E frame instead of a generic source warning', async () => {
+  const { contentQualitySummary } = await import('./content-quality.mjs');
+  const framed = { result: { provenance: '5e-frame', quality: { state: 'review', excludedCount: 0 } } };
+  assert.match(contentQualitySummary([framed, framed]).message, /^5E 문항 틀로 변환했습니다/u);
+  assert.match(contentQualitySummary([{ result: { provenance: '5e-frame', quality: { state: 'excluded', excludedCount: 2 } } }]).label, /그림 제외/u);
+  // 기본 변환과 섞이면 기존 안내를 그대로 쓴다.
+  assert.doesNotMatch(contentQualitySummary([framed, { result: { provenance: 'pdf', quality: { state: 'unverified' } } }]).message, /^5E/u);
 });

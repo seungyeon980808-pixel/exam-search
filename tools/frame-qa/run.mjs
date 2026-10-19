@@ -125,7 +125,9 @@ try {
         const q = row.question;
         const meta = { ...item, ...(reference[row.id] ? {} : {}) };
         const scored = reference[row.id] ? score(meta, reference[row.id], { ok: row.ok, question: q, diag: row.diag, error: row.error, ms: row.ms }, row.typeset)
-          : { id: row.id, subject: item.subject, pass: row.ok && !row.typeset?.error, reasons: row.ok ? (row.typeset?.error ? ['typeset: ' + row.typeset.error] : []) : ['convert: ' + row.error], restoreReasons: [] };
+          : { id: row.id, subject: item.subject, form: '(조사 기록 없음)', struct: String(item.year), pass: row.ok && !row.typeset?.error,
+            checks: { convert: !!row.ok, typeset: !!row.ok && !row.typeset?.error },
+            reasons: row.ok ? (row.typeset?.error ? ['typeset: ' + row.typeset.error] : []) : ['convert: ' + row.error], restoreReasons: [] };
         scored.timing = row.timing; scored.ms = row.ms; scored.size = row.typeset?.size; scored.assemble = row.assemble; scored.collection = row.collection;
         if (row.ok && row.assemble && row.assemble !== 'ok') { scored.pass = false; (scored.restoreReasons ||= []).push('assemble: ' + row.assemble); (scored.reasons ||= []).push('assemble: ' + row.assemble); }
         if (!scored.restoreReasons?.length && !scored.pass) scored.restoreReasons = scored.reasons;
