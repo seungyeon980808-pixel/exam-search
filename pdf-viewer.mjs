@@ -32,6 +32,9 @@ const options = {
   cMapUrl: new URL('./vendor/pdfjs/cmaps/', import.meta.url).href,
   cMapPacked: true,
   standardFontDataUrl: new URL('./vendor/pdfjs/standard_fonts/', import.meta.url).href,
+  // ExamPool: 기출 그림 상당수가 JBIG2·JPX 비트맵이다. 디코더(wasm)가 없으면 pdf.js가 그림을 통째로 건너뛴다.
+  // 같은 pdf.js 6.3.289의 vendor/pdfjs/wasm/을 쓴다.
+  wasmUrl: new URL('./vendor/pdfjs/wasm/', import.meta.url).href,
 };
 
 function trimDocumentCache() {
@@ -53,9 +56,14 @@ function acquirePdf(name) {
     trimDocumentCache();
   } };
 }
+// ExamPool: PDF 바이트를 넘겨주는 곳(5E 라이브러리·로컬 파일). 없으면 원래대로 공개 게이트웨이에서 받는다.
+// 변환기 모듈이 ?v= 주소로 여러 번 읽혀도 같은 출처를 쓰도록 전역에 둔다.
+export function setPdfSource(source) { globalThis.__examPoolPdfSource = typeof source === 'function' ? source : null; documentCache.clear(); byteCache.clear(); pageReads.clear(); }
 function openPdf(name) {
   if (!documentCache.has(name)) {
-    const bytes = scheduleDownload(driveFilePath(name), () => byteCache.get(name) === bytes && (documentUsers.get(name) || 0) > 0);
+    const pdfSource = globalThis.__examPoolPdfSource;
+    const bytes = pdfSource ? Promise.resolve(pdfSource(name)).then((value) => value instanceof ArrayBuffer ? value : value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength))
+      : scheduleDownload(driveFilePath(name), () => byteCache.get(name) === bytes && (documentUsers.get(name) || 0) > 0);
     byteCache.set(name, bytes);
     const promise = bytes
       .then((data) => pdfjs.getDocument({ data: new Uint8Array(data.slice(0)), ...options }).promise);
@@ -102,7 +110,25 @@ function trimPreviewPaper(canvas, scale, box, paperEnd) {
   return cropped;
 }
 
-export async function readQuestionPdf(item, { signal } = {}) {
+// 한 문항을 바꿀 때 글 읽기·그림 찾기·표 찾기가 같은 쪽을 여러 번 읽는다. 쪽마다 한 번만 해석하고 결과를 함께 쓴다
+// (읽은 결과는 고치지 않고 읽기만 한다). 같은 PDF 바이트일 때만 다시 쓴다.
+const pageReads = new Map();
+let conversionWorker;
+export function readQuestionPdf(item, { signal } = {}) {
+  signal?.throwIfAborted();
+  const key = `${item.pdfFile}#${item.page}`, cached = pageReads.get(key);
+  if (cached && cached.bytes === byteCache.get(item.pdfFile)) {
+    pageReads.delete(key); pageReads.set(key, cached);
+    return waitForPdf(cached.promise, signal);
+  }
+  const record = { bytes: null, promise: null };
+  record.promise = readPdfPage(item).then((value) => value, (error) => { if (pageReads.get(key) === record) pageReads.delete(key); throw error; });
+  record.bytes = byteCache.get(item.pdfFile);
+  pageReads.set(key, record);
+  while (pageReads.size > 6) pageReads.delete(pageReads.keys().next().value);
+  return waitForPdf(record.promise, signal);
+}
+async function readPdfPage(item, { signal } = {}) {
   signal?.throwIfAborted();
   const lease = acquirePdf(item.pdfFile);
   try {
@@ -112,12 +138,8 @@ export async function readQuestionPdf(item, { signal } = {}) {
   signal?.throwIfAborted();
   const bytes = await waitForPdf(bytesPromise, signal);
   signal?.throwIfAborted();
-  const task = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)),
-    fontExtraProperties: true, ...options });
-  const abort = () => { Promise.resolve(task.destroy()).catch(() => {}); };
-  signal?.addEventListener('abort', abort, { once: true });
+  const pdf = await waitForPdf(conversionDocument(item.pdfFile, bytes), signal);
   try {
-    const pdf = await task.promise;
     const page = await pdf.getPage(item.page);
     const [content, operations] = await Promise.all([
       page.getTextContent({ disableNormalization: true }), page.getOperatorList(),
@@ -145,11 +167,26 @@ export async function readQuestionPdf(item, { signal } = {}) {
     return { pageNumber: item.page, content, fonts, glyphs, equationItems: equationTextItems(operations, pdfjs.OPS, fonts),
       operations: { fnArray: operations.fnArray, argsArray: operations.argsArray }, OPS: pdfjs.OPS,
       pageHeight: page.getViewport({ scale: 1 }).height, pageWidth: page.getViewport({ scale: 1 }).width };
-  } finally {
-    signal?.removeEventListener('abort', abort);
-    await task.destroy();
-  }
+  } finally { /* 문서는 conversionDocument가 맡는다 */ }
   } finally { lease.release(); }
+}
+// 변환용 문서(글꼴 자료 포함)는 시험지마다 한 번만 열고 최근 3개를 둔다. PDF 일꾼(worker)도 하나를 같이 쓴다.
+// 바이트가 바뀌면(출처 변경·다시 받기) 새로 연다.
+const conversionDocuments = new Map();
+function conversionDocument(name, bytes) {
+  const cached = conversionDocuments.get(name);
+  if (cached?.bytes === bytes) { conversionDocuments.delete(name); conversionDocuments.set(name, cached); return cached.promise; }
+  if (cached) { conversionDocuments.delete(name); void cached.promise.then((doc) => doc.destroy()).catch(() => {}); }
+  conversionWorker ||= new pdfjs.PDFWorker({ name: 'exam-conversion' });
+  const task = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)), fontExtraProperties: true, ...options, worker: conversionWorker });
+  const record = { bytes, promise: task.promise };
+  record.promise.catch(() => { if (conversionDocuments.get(name) === record) conversionDocuments.delete(name); });
+  conversionDocuments.set(name, record);
+  while (conversionDocuments.size > 3) {
+    const [oldest, value] = conversionDocuments.entries().next().value;
+    conversionDocuments.delete(oldest); void value.promise.then((doc) => doc.destroy()).catch(() => {});
+  }
+  return record.promise;
 }
 
 const rasterQueue = [];
@@ -230,6 +267,11 @@ export async function renderQuestion(item, scale = 3, { signal } = {}) {
   if (!blob) throw new Error('문항 이미지를 생성하지 못했습니다.');
   signal?.throwIfAborted();
   return URL.createObjectURL(blob);
+}
+
+// ExamPool: 그림 찾기(figures.js)가 픽셀을 직접 보도록 자르지 않은 캔버스를 준다(item.box 영역, 흰 바탕).
+export async function renderFigureCanvas(item, scale = 4, { signal } = {}) {
+  return questionCanvas(item, scale, false, signal);
 }
 
 export async function renderFigureImage(item, scale = 2, { signal } = {}) {

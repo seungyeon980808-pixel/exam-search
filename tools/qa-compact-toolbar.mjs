@@ -77,7 +77,8 @@ for(const [engine,type] of [['webkit',webkit],['chromium',chromium]]) {
   const physicsText=Array.from({length:physics.getParagraphCount(0)},(_,n)=>physics.getTextRange(0,n,0,2000)).join('\n');
   assert.match(physicsText,/6\. 그림은 평면/);
   assert.match(physicsText,/g/);
-  assert.equal(JSON.parse(physics.getControls()).filter(c=>c.ctrlId==='eqed').length,7);
+  // 과학탐구는 5E 문항 틀(수식을 원본처럼 낱개로 나눔: 기본 변환 7개 → 13개).
+  assert.equal(JSON.parse(physics.getControls()).filter(c=>c.ctrlId==='eqed').length,13);
   physics.free();
   const sourceWarnings=errors.filter(error=>/google-drive-gateway.*due to access control checks/u.test(error));
   assert.deepEqual(errors.filter(error=>!sourceWarnings.includes(error)),[]);

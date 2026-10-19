@@ -16,3 +16,17 @@ This incorporates only the table, not the separately LGPL-licensed hypua2jamo
 library code. The 5,660 mappings use Unicode conjoining jamo (or a precomposed
 syllable where one exists) in an indexed pipe-separated table, including empty
 slots for unmapped code points.
+
+## rhwp 0.8.7 (exampool/)
+
+`exampool/rhwp/rhwp.js`, `exampool/studio/`, `exampool/editor/` are the rhwp 0.8.7 engine, studio and
+editor SDK (https://github.com/edwardkim/rhwp, MIT; see `exampool/studio/LICENSE`, `exampool/studio/LICENSE-FONTS`).
+They are used only for documents made with the 5E question frame.
+
+## pdf.js image decoders (vendor/pdfjs/wasm/)
+
+JBIG2, OpenJPEG and QCMS decoders shipped with pdf.js 6.3.289; licenses are in the same folder.
+
+## JSZip, SheetJS (exampool/vendor/)
+
+JSZip (MIT or GPLv3) and SheetJS Community Edition (Apache-2.0), used to read and write HWPX/CFB containers.

@@ -94,13 +94,15 @@ for(const [engine,type] of [['chromium',chromium],['webkit',webkit]]){
    await init({module_or_path:await readFile(new URL('../vendor/rhwp-studio/assets/rhwp_bg-PUGAA2uC.wasm',import.meta.url))});
    const doc=new HwpDocument(await readFile(await download.path()));
    try{assert.match(doc.getTextRange(0,0,0,200),/^g/);
-    const text=Array.from({length:doc.getParagraphCount(0)},(_,n)=>doc.getTextRange(0,n,0,2000)).join('\n');assert.match(text,/6\. 그림은 평면/);assert.equal(JSON.parse(doc.getControls()).filter(c=>c.ctrlId==='eqed').length,7);}finally{doc.free();}
+    const text=Array.from({length:doc.getParagraphCount(0)},(_,n)=>doc.getTextRange(0,n,0,2000)).join('\n');assert.match(text,/6\. 그림은 평면/);
+    // 과학탐구는 5E 문항 틀로 바뀐다: 수식을 원본처럼 낱개로 나눠(기본 변환 7개 → 5E 틀 13개) 모두 편집 가능한 수식으로 남는다.
+    assert.equal(JSON.parse(doc.getControls()).filter(c=>c.ctrlId==='eqed').length,13);}finally{doc.free();}
    await edit.waitForFunction(()=>!document.querySelector('#editable-download').disabled);
    await editorInput.press('h');
    // Source/catalog refresh must not touch the loaded editor. Its close guard remains active.
    await edit.waitForFunction(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented;},null,{timeout:5000});
    await edit.screenshot({path:new URL('edited-physics.png',evidence).pathname});
-   observations.push({scenario:'actual HWPX edit/export',text:'typed g retained',nativeEquations:7,unsavedGuard:true,originalConversion:'unchanged'});
+   observations.push({scenario:'actual HWPX edit/export',text:'typed g retained',nativeEquations:13,frame:'5E 문항 틀',unsavedGuard:true,originalConversion:'unchanged'});
    await editContext.close();
   }
  }finally{await browser.close();}

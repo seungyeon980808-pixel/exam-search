@@ -1,4 +1,4 @@
-import { readQuestionPdf, renderFigureImage } from './pdf-viewer.mjs?v=library-release-20261011-3';
+import { readQuestionPdf, renderFigureImage } from './pdf-viewer.mjs?v=frame-20261020-1';
 import { drawingPrimitives, figureRegions, textItemBox, insideFigure } from './pdf-drawings.mjs?v=readability-20261004-4';
 
 const validBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite)

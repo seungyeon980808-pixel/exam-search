@@ -1,4 +1,4 @@
-import { readQuestionPdf } from './pdf-viewer.mjs?v=library-release-20261011-3';
+import { readQuestionPdf } from './pdf-viewer.mjs?v=frame-20261020-1';
 import { questionFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
 import { observedContentRegions } from './content-integrity.mjs?v=readability-20261004-4';
 import { appendLineRuns } from './prose-flow.mjs?v=readability-20261004-4';

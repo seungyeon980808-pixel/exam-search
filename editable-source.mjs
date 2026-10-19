@@ -1,4 +1,4 @@
-import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=subject-review-20261011-1';
+import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=frame-20261020-1';
 import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
 import { passageBlocks, passageKey } from './shared-passage.mjs?v=library-release-20261011-3';
 import { finalizeContentQuality } from './content-quality.mjs?v=readability-20261004-4';
@@ -46,7 +46,7 @@ export async function resolveEditableContent(question, dependencies = {}) {
   check();
   // Shared passages precede the independently validated question paragraphs.
   const result = async (paragraphs, provenance, warnings = [], inlineChoices = false, quality) => {
-    warnings = [...warnings];
+    warnings = [...frameFailures, ...warnings];
     const validatedQuestion = { ...question, inlineChoices };
     validateQuestionParagraphs(paragraphs, validatedQuestion);
     const passage = await passageBlocks(question, { ...dependencies, notes: warnings });
@@ -62,6 +62,27 @@ export async function resolveEditableContent(question, dependencies = {}) {
       sourceLabel: question.title || `${question.pdfFile} ${question.no}번`,
       paragraphs, provenance, warnings: [...new Set(warnings)], quality, status: 'needs_review' };
   };
+  // 5E 문항 틀(과학탐구 기출): 5E ExamPool 「변형」과 같은 틀로 문항 한 개 한글 문서를 만든다.
+  // 실패하면(원본 PDF를 못 읽은 경우 제외) 아래 기존 변환으로 돌아간다.
+  const frameFailures = [];
+  // 브라우저에서만(한글 엔진·그림 그리기가 화면 도구를 쓴다). 노드 단위 검사는 기존 변환을 그대로 본다.
+  if (dependencies.frame ?? typeof document !== 'undefined') {
+    const frame = dependencies.frameModule ? await dependencies.frameModule() : await import('./exampool/frame.mjs?v=frame-20261020-1');
+    if (frame.frameEligible(question)) {
+      try {
+        const converted = await frame.convertFrame(question, { signal: dependencies.signal, includeImages });
+        check();
+        return { questionId: question.id, question, sourceLabel: question.title || `${question.pdfFile} ${question.no}번`,
+          frame: converted, paragraphs: [], provenance: '5e-frame', warnings: converted.notes,
+          quality: { state: converted.excludedFigures ? 'excluded' : 'unverified', scope: '5e-frame', regions: [], unresolvedCount: 0, excludedCount: converted.excludedFigures || 0 },
+          status: 'needs_review' };
+      } catch (error) {
+        check();
+        if (error?.name === 'AbortError' || error?.name === 'DriveError' && !error.status) throw error;
+        frameFailures.push(`5E 문항 틀로 바꾸지 못해 기본 변환을 썼습니다: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
   if (entry?.status === 'needs_review' && entry.source) {
     let prepared = await (dependencies.readPrepared || readPrepared)(entry.source, { signal: dependencies.signal });
     check();

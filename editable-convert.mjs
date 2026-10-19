@@ -287,6 +287,22 @@ export async function createPreparedHwpx(question) {
 
 export async function createCollectionHwpx(resolvedItems, { pagePerQuestion = false } = {}) {
   if (!Array.isArray(resolvedItems) || !resolvedItems.length) throw new Error('선택한 문항이 없습니다.');
+  // 5E 문항 틀로 만든 문항이 있으면 5E 시험지 규칙(B4 2단, 문항을 자르지 않음)으로 문단을 그대로 모은다.
+  // 기본 변환 문항은 문항마다 따로 만든 문서의 문단을 같은 방식으로 옮긴다.
+  if (resolvedItems.some((item) => item?.frame?.bytes)) {
+    const frame = await import('./exampool/frame.mjs?v=frame-20261020-1');
+    const entries = [];
+    for (const [index, item] of resolvedItems.entries()) {
+      const id = item.questionId || item.question?.id || `item-${index}`;
+      if (item.frame?.bytes) entries.push({ id, bytes: item.frame.bytes, height: item.frame.height });
+      else entries.push({ id, bytes: await createParagraphCollection([item], { pagePerQuestion: false, caption: false }), height: 130 });
+    }
+    return frame.assembleFrameCollection(entries, { pagePerQuestion });
+  }
+  return createParagraphCollection(resolvedItems, { pagePerQuestion });
+}
+
+async function createParagraphCollection(resolvedItems, { pagePerQuestion = false, caption: withCaption = true } = {}) {
   const paragraphs = [];
   const anchors = new Map();
   const mathChoiceGroups = [];
@@ -301,9 +317,11 @@ export async function createCollectionHwpx(resolvedItems, { pagePerQuestion = fa
     // Questions of one [n～m] set share a passage: print it once, before the first of them.
     const repeated = !pagePerQuestion && start && item.passageKey && item.passageKey === previousPassage;
     previousPassage = start ? item.passageKey || '' : '';
-    const caption = [{ kind: 'text', value: item.sourceLabel || item.question?.title || item.questionId || `문항 ${index + 1}` }];
-    anchors.set(caption, questionBookmark(item.questionId || item.question?.id || `item-${index}`));
-    paragraphs.push(caption);
+    if (withCaption) {
+      const caption = [{ kind: 'text', value: item.sourceLabel || item.question?.title || item.questionId || `문항 ${index + 1}` }];
+      anchors.set(caption, questionBookmark(item.questionId || item.question?.id || `item-${index}`));
+      paragraphs.push(caption);
+    }
     paragraphs.push(...(repeated ? own : item.paragraphs));
   }
   return createParagraphDocument(paragraphs, anchors, { pagePerQuestion, mathChoiceGroups });

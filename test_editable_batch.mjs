@@ -78,7 +78,7 @@ test('PDF bytes remain owned by the pending extraction after another PDF clears 
   const seen = [], destroyed = [];
   const context = { URL, Uint8Array, equationTextItems, downloadDriveFile: (name) => name === 'A' ? pending : Promise.resolve(Uint8Array.of(2)),
     driveFilePath: (name) => name,
-    pdfjs: { getDocument: ({ data, fontExtraProperties }) => {
+    pdfjs: { PDFWorker: class {}, getDocument: ({ data, fontExtraProperties }) => {
       if (fontExtraProperties) seen.push(data[0]);
       return { promise: Promise.resolve({ getPage: async () => ({
         getTextContent: async () => ({ styles: {} }), getOperatorList: async () => ({ fnArray: [] }),
@@ -87,12 +87,17 @@ test('PDF bytes remain owned by the pending extraction after another PDF clears 
     } } };
   runInNewContext(source.replace(/^import .*;\n/gmu, '')
     .replace(/^pdfjs.GlobalWorkerOptions.*;\n/mu, '')
-    .replaceAll('import.meta.url', "'file:///test/'").replaceAll('export async function', 'async function'), context);
+    .replaceAll('import.meta.url', "'file:///test/'").replaceAll('export async function', 'async function').replaceAll('export function', 'function'), context);
   const first = context.readQuestionPdf({ pdfFile: 'A', page: 1 });
   const second = context.readQuestionPdf({ pdfFile: 'B', page: 1 });
   release(Uint8Array.of(1));
   await Promise.all([first, second]);
-  assert.deepEqual(seen.sort(), [1, 2]); assert.deepEqual(destroyed.sort(), [1, 2]);
+  assert.deepEqual(seen.sort(), [1, 2]);
+  // 변환용 문서는 시험지마다 한 번 열어 다음 읽기에 다시 쓴다(닫지 않음). 같은 쪽을 다시 읽어도 다시 해석하지 않는다.
+  assert.deepEqual(destroyed, []);
+  await context.readQuestionPdf({ pdfFile: 'A', page: 1 });
+  await context.readQuestionPdf({ pdfFile: 'A', page: 2 });
+  assert.deepEqual(seen.sort(), [1, 2]);
 });
 
 for (const stage of ['download', 'shared document opening']) {
@@ -107,7 +112,7 @@ for (const stage of ['download', 'shared document opening']) {
     const pdf = { getPage: async () => page };
     const context = { URL, Uint8Array, equationTextItems,
       downloadDriveFile: () => { downloads += 1; return download; }, driveFilePath: (name) => name,
-      pdfjs: { getDocument: ({ fontExtraProperties }) => {
+      pdfjs: { PDFWorker: class {}, getDocument: ({ fontExtraProperties }) => {
         if (fontExtraProperties) {
           privateParses += 1;
           return { promise: Promise.resolve(pdf), destroy: async () => { privateDestroys += 1; } };
@@ -116,7 +121,7 @@ for (const stage of ['download', 'shared document opening']) {
       } } };
     runInNewContext(source.replace(/^import .*;\n/gmu, '')
       .replace(/^pdfjs.GlobalWorkerOptions.*;\n/mu, '')
-      .replaceAll('import.meta.url', "'file:///test/'").replaceAll('export async function', 'async function'), context);
+      .replaceAll('import.meta.url', "'file:///test/'").replaceAll('export async function', 'async function').replaceAll('export function', 'function'), context);
     const controller = new AbortController();
     const cancelled = context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 }, { signal: controller.signal });
     const active = context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 });
@@ -135,13 +140,13 @@ for (const stage of ['download', 'shared document opening']) {
     releaseDocument(pdf);
     assert.equal((await active).pageHeight, 100);
     assert.equal(privateParses, 1);
-    assert.equal(privateDestroys, 1);
+    assert.equal(privateDestroys, 0);
     assert.equal(sharedDestroys, 0);
     // The successful shared cache remains available after the cancelled wait.
     await context.readQuestionPdf({ pdfFile: 'shared.pdf', page: 1 });
     assert.equal(downloads, 1);
-    assert.equal(privateParses, 2);
-    assert.equal(privateDestroys, 2);
+    assert.equal(privateParses, 1);
+    assert.equal(privateDestroys, 0);
   });
 }
 

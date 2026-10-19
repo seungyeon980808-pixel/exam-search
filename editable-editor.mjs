@@ -1,9 +1,9 @@
 import { driveFilePath } from './data.mjs?v=library-release-20261011-3';
 import { driveLink } from './drive-source.mjs';
-import { resolveEditableContent } from './editable-source.mjs?v=library-release-20261011-3';
-import { createEditableBatch } from './editable-batch.mjs?v=library-release-20261011-3';
-import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=subject-review-20261011-1';
-import { renderQuestion } from './pdf-viewer.mjs?v=library-release-20261011-3';
+import { resolveEditableContent } from './editable-source.mjs?v=frame-20261020-1';
+import { createEditableBatch } from './editable-batch.mjs?v=frame-20261020-1';
+import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=frame-20261020-1';
+import { renderQuestion } from './pdf-viewer.mjs?v=frame-20261020-1';
 import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261011-3';
 import { contentQualitySummary } from './content-quality.mjs?v=readability-20261004-4';
 
@@ -29,6 +29,8 @@ const loadingDetail = document.querySelector('#editable-loading-detail');
 const loadingTitle = document.querySelector('#editable-loading-title');
 const loadingSpinner = document.querySelector('#editable-loading-spinner');
 const imageMode = document.querySelector('#editable-image-mode');
+// 옛 화면(HTML)이 남아 있는 동안에도 깨지지 않게 칸이 없으면 5E 틀을 기본으로 둔다.
+const frameMode = document.querySelector('#editable-frame-mode') || Object.assign(document.createElement('select'), { innerHTML: '<option value="5e">5E</option><option value="basic">기본</option>' });
 const start = document.querySelector('#editable-start');
 const reconvert = document.querySelector('#editable-reconvert');
 const columnView = document.querySelector('#editable-column-view');
@@ -53,6 +55,15 @@ let resizeFrame;
 let fitting = false;
 let editorPromise;
 let editor;
+let editorEngine = 'base';
+// 5E 문항 틀 문서는 5E와 같은 한글 엔진(rhwp 0.8.7)으로 열어야 수식 줄·그림 배치가 그대로 보이고 그대로 저장된다.
+const ENGINES = {
+  base: { sdk: './vendor/rhwp-editor/index.js', studio: './vendor/rhwp-studio/index.html?v=typography-20261003-1' },
+  frame: { sdk: './exampool/editor/index.js', studio: './exampool/studio/index.html?v=frame-20261020-1' },
+};
+const FRAME_SUBJECTS = /^(p1|p2|c1|c2|b1|b2|e1|e2)_/u;
+let frameWarm;
+function warmFrame() { frameWarm ||= import('./exampool/frame.mjs?v=frame-20261020-1').then((frame) => frame.warmFrame()).catch(() => { frameWarm = null; }); return frameWarm; }
 let session;
 let intent = 0;
 let loadQueue = Promise.resolve();
@@ -61,8 +72,8 @@ let referenceUrls = [];
 
 function syncDocumentSettings() {
   const pending = session?.loaded && (session.includeImages !== (imageMode.value === 'include')
-    || session.pagePerQuestion !== (layoutMode.value === 'question'));
-  document.querySelector('#editable-document-label').textContent = `그림 ${imageMode.value === 'include' ? '포함' : '제외'}${pending ? ' · 적용 대기' : ''}`;
+    || session.pagePerQuestion !== (layoutMode.value === 'question') || session.frame !== (frameMode.value === '5e'));
+  document.querySelector('#editable-document-label').textContent = `${frameMode.value === '5e' ? '5E 문항 틀 · ' : ''}그림 ${imageMode.value === 'include' ? '포함' : '제외'}${pending ? ' · 적용 대기' : ''}`;
   settingsNote.textContent = pending ? '변경한 설정은 다시 변환을 눌러야 적용됩니다. 편집한 내용이 있다면 먼저 내려받으세요.' : '설정은 변환할 때 적용됩니다.';
   settingsNote.classList.toggle('is-pending', !!pending);
 }
@@ -122,7 +133,7 @@ reviewIssues.addEventListener('click', () => {
 function setBusy(value, busy) {
   if (!active(value)) return;
   loading.hidden = !busy;
-  imageMode.disabled = busy;
+  imageMode.disabled = frameMode.disabled = busy;
   layoutMode.disabled = busy;
   reconvert.disabled = busy;
   for (const control of [zoomInput, zoomOut, zoomIn, zoomFit]) control.disabled = busy || !value.loaded;
@@ -492,9 +503,16 @@ dialog.addEventListener('keydown', (event) => {
   event.stopPropagation();
 });
 
-async function prepareEditor() {
-  if (!editorPromise) editorPromise = import('./vendor/rhwp-editor/index.js').then(({ createEditor }) => createEditor(host, {
-    studioUrl: new URL('./vendor/rhwp-studio/index.html?v=typography-20261003-1', import.meta.url).href,
+async function prepareEditor(engine = 'base') {
+  if (editorPromise && editorEngine !== engine) {
+    const previous = await editorPromise.catch(() => null);
+    previous?.destroy();
+    host.replaceChildren();
+    editor = null; editorPromise = null;
+  }
+  editorEngine = engine;
+  if (!editorPromise) editorPromise = import(ENGINES[engine].sdk).then(({ createEditor }) => createEditor(host, {
+    studioUrl: new URL(ENGINES[engine].studio, import.meta.url).href,
     renderer: 'canvas2d', width: '100%', height: '100%',
   })).catch((error) => { editorPromise = null; throw error; });
   editor = await editorPromise;
@@ -560,7 +578,10 @@ async function begin(title, collection, context = {}) {
   session?.choose?.(false);
   window.clearInterval(dirtyTimer);
   clearReference();
-  const value = { ...context, collection, includeImages: imageMode.value === 'include', phase: 'options', items: [], loaded: false, dirty: false, savedSha: '', batch: null, controller: new AbortController() };
+  // 과학탐구 기출이 있으면 5E 문항 틀을 미리 읽어 두고(엔진 내려받기를 고르는 동안 겹침) 그림은 포함을 기본으로 한다.
+  const frameCandidates = (context.question ? [context.question.id] : context.ids || []).some((id) => FRAME_SUBJECTS.test(id));
+  if (frameCandidates && frameMode.value === '5e') { void warmFrame(); if (!session) imageMode.value = 'include'; }
+  const value = { ...context, collection, frameCandidates, includeImages: imageMode.value === 'include', phase: 'options', items: [], loaded: false, dirty: false, savedSha: '', batch: null, controller: new AbortController() };
   session = value;
   download.disabled = true;
   document.querySelector('#editable-format-toggle').disabled = true;
@@ -577,7 +598,7 @@ async function begin(title, collection, context = {}) {
   referenceToggle.disabled = true;
   columnView.disabled = pageView.disabled = true;
   layoutMode.disabled = false;
-  imageMode.disabled = reconvert.disabled = false;
+  imageMode.disabled = reconvert.disabled = frameMode.disabled = false;
   syncDocumentSettings();
   for (const control of [zoomInput, zoomOut, zoomIn, zoomFit]) control.disabled = true;
   host.hidden = true;
@@ -592,7 +613,9 @@ async function begin(title, collection, context = {}) {
   loading.hidden = false;
   loadingSpinner.hidden = true;
   loadingTitle.textContent = '그림을 포함할까요?';
-  loadingDetail.textContent = '상단 문서 설정에서 그림 포함 여부와 문항 배치를 고르세요. 본문·수식·보기는 편집 가능하게 변환하고, 그림 포함은 그림 영역만 추가합니다.';
+  loadingDetail.textContent = frameCandidates && frameMode.value === '5e'
+    ? '과학탐구 문항은 5E 문항 틀(발문·자료·보기·선지 칸, 그림 가운데, 나란한 그림은 표)로 바꿉니다. 문서 설정에서 그림 포함 여부와 문항 배치를 고를 수 있습니다.'
+    : '상단 문서 설정에서 그림 포함 여부와 문항 배치를 고르세요. 본문·수식·보기는 편집 가능하게 변환하고, 그림 포함은 그림 영역만 추가합니다.';
   start.hidden = false;
   reconvert.hidden = true;
   const chosen = await new Promise((resolve) => { value.choose = resolve; });
@@ -601,16 +624,19 @@ async function begin(title, collection, context = {}) {
   value.phase = 'converting';
   value.includeImages = imageMode.value === 'include';
   value.pagePerQuestion = layoutMode.value === 'question';
+  value.frame = frameMode.value === '5e';
   setBusy(value, true);
   setStatus(value.includeImages ? '본문과 그림 영역을 변환하는 중입니다.' : '그림을 제외하고 본문·수식을 변환하는 중입니다.');
+  // 5E 문항 틀로 열 문서라면 변환하는 동안 0.8.7 편집기를 미리 띄운다(변환이 끝나면 바로 열림).
+  if (value.frame && value.frameCandidates) void prepareEditor('frame').catch(() => {});
   await paintProgress();
   return active(value) ? value : null;
 }
-async function loadDocument(value, bytes, filename) {
+async function loadDocument(value, bytes, filename, engine = 'base') {
   const operation = loadQueue.catch(() => {}).then(async () => {
     if (!active(value)) return;
     setStatus('생성한 한글 문서를 여는 중입니다.');
-    const instance = await prepareEditor();
+    const instance = await prepareEditor(engine);
     if (!active(value)) return;
     try {
       await instance.loadFile(bytes, filename, { skipUnsavedGuard: true, suppressDialogs: true });
@@ -680,7 +706,7 @@ export async function openEditable(question) {
   pdfLink.href = pdfHref(question);
   pdfLink.hidden = !pdfHref(question);
   try {
-    const result = await resolveEditableContent(question, { signal: value.controller.signal, includeImages: value.includeImages,
+    const result = await resolveEditableContent(question, { signal: value.controller.signal, includeImages: value.includeImages, frame: value.frame,
       onPhase(message) { if (active(value)) setStatus(message); } });
     if (!active(value)) return;
     value.items = [{ id: question.id, question, result, status: result.provenance === 'index-draft' ? 'draft' : 'ready' }];
@@ -689,7 +715,7 @@ export async function openEditable(question) {
     if (!active(value)) return;
     const bytes = await createCollectionHwpx([result], { pagePerQuestion: value.pagePerQuestion });
     if (!active(value)) return;
-    await loadDocument(value, bytes, `${question.id}-${value.includeImages ? '그림포함' : '그림제외'}.hwpx`);
+    await loadDocument(value, bytes, `${question.id}-${result.frame ? '5E틀-' : ''}${value.includeImages ? '그림포함' : '그림제외'}.hwpx`, result.frame ? 'frame' : 'base');
   } catch (error) { fail(value, error); }
 }
 function localDate() {
@@ -706,11 +732,12 @@ async function openResults(value) {
     await paintProgress();
     if (!active(value)) return;
     const bytes = await createCollectionHwpx(included.map((item) => item.result), { pagePerQuestion: value.pagePerQuestion });
+    const framed = included.some((item) => item.result?.frame);
     if (!active(value)) return;
     reference.hidden = false;
     content.classList.add('has-reference');
     void showCollectionReference(value, included.filter((item) => item.question));
-    await loadDocument(value, bytes, `선택문항-${included.length}개-${localDate()}-${value.includeImages ? '그림포함' : '그림제외'}.hwpx`);
+    await loadDocument(value, bytes, `선택문항-${included.length}개-${localDate()}-${framed ? '5E틀-' : ''}${value.includeImages ? '그림포함' : '그림제외'}.hwpx`, framed ? 'frame' : 'base');
     if (active(value)) { value.batch.cancel(); value.batch = null; }
   } catch (error) { fail(value, error); }
 }
@@ -743,7 +770,7 @@ export async function openEditableCollection(ids) {
   if (!value) return;
   value.ids = snapshot;
   try {
-    value.batch = createEditableBatch(snapshot, { includeImages: value.includeImages,
+    value.batch = createEditableBatch(snapshot, { includeImages: value.includeImages, frame: value.frame, concurrency: value.frame ? 2 : 1,
       onPhase(message, question) { if (active(value)) setStatus(`${question.no}번 · ${message}`); }, onProgress(state) {
       if (!active(value)) return;
       value.items = state.items;
@@ -768,6 +795,11 @@ async function requestClose() {
 document.querySelector('#editable-close').addEventListener('click', requestClose);
 dialog.addEventListener('cancel', (event) => { event.preventDefault(); requestClose(); });
 start.addEventListener('click', () => { if (session?.phase === 'options') session.choose?.(true); });
+frameMode.addEventListener('change', () => {
+  syncDocumentSettings();
+  if (frameMode.value === '5e' && session?.frameCandidates) void warmFrame();
+  if (session?.phase === 'loaded') setStatus('문항 틀을 변경했습니다. 다시 변환을 누르면 적용됩니다.');
+});
 imageMode.addEventListener('change', () => {
   syncDocumentSettings();
   if (session?.phase === 'loaded') setStatus('그림 옵션을 변경했습니다. 다시 변환을 누르면 적용됩니다.');
