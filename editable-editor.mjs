@@ -614,7 +614,7 @@ async function begin(title, collection, context = {}) {
   status.setAttribute('aria-live', 'polite');
   loading.hidden = false;
   loadingSpinner.hidden = true;
-  loadingTitle.textContent = '그림을 포함할까요?';
+  loadingTitle.textContent = frameCandidates && frameMode.value === '5e' ? '5E 문항 틀로 변환합니다' : '그림을 포함할까요?';
   loadingDetail.textContent = frameCandidates && frameMode.value === '5e'
     ? '과학탐구 문항은 5E 문항 틀(발문·자료·보기·선지 칸, 그림 가운데, 나란한 그림은 표)로 바꿉니다. 문서 설정에서 그림 포함 여부와 문항 배치를 고를 수 있습니다.'
     : '상단 문서 설정에서 그림 포함 여부와 문항 배치를 고르세요. 본문·수식·보기는 편집 가능하게 변환하고, 그림 포함은 그림 영역만 추가합니다.';
