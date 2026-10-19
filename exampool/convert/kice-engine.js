@@ -104,6 +104,13 @@ const EXP=/과정|결과|가설|자료|준비|방법|탐구|실험/;
 export async function toQuestion(structure,item,{number='1'}={}){
   const diag={notes:[...(structure.notes||[])],decisions:{}};
   const blocks=structure.blocks||[],by=role=>blocks.filter(b=>b.role===role);
+  // 기출 탐색기(조사 기록 없는 옛 기출): 선지가 머리줄(㉠ ㉡ ㉢ · (가) (나) · A B …) 아래 ①~⑤ 줄로 쌓인 대응표면 대응표 틀로.
+  // 조사 기록이 있는 문항(2024~2026)은 기록을 그대로 쓴다.
+  if(!item.form&&!by('bogi').length){
+    const P0=pairTable(structure),short=v=>String(v||'').replace(/\$[^$]*\$/g,'X').trim().length<=12;
+    if(P0&&P0.header.length>=2&&P0.header.length<=6&&P0.header.every(h=>String(h||'').trim()&&short(h))&&P0.rows.length===5
+      &&P0.rows.every(r=>r.filter(v=>String(v||'').trim()).length>=2&&r.every(short)))item={...item,form:'pair'};
+  }
   const A=analyze(structure,item),ph=structure.pageHeight;
   const figs=new Map();for(const n of A.items)if(n.k==='figure'&&!figs.has(n.run)&&(n.run.data||n.run.image?.bytes))figs.set(n.run,{data:n.run.data||await toDataUrl(n.run.image),box:n.box,caption:n.run.caption||null,role:n.run.figRole||'figure'});
   let form=item.form||null,struct=STRUCT_OF(item);

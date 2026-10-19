@@ -288,7 +288,8 @@ export function settleFloatingPictures(document){
   const GAP=4,pics=[];
   for(let page=0;page<document.pageCount();page++)for(const c of JSON.parse(document.getPageControlLayout(page)).controls||[]){
     if(!['image','table'].includes(c.type)||c.cellPath?.length)continue;
-    const props=JSON.parse(c.type==='image'?document.getPictureProperties(c.secIdx,c.paraIdx,c.controlIdx):document.getTableProperties(c.secIdx,c.paraIdx,c.controlIdx));if(props.treatAsChar)continue;
+    // 쪽 배치가 표로 알려 주는 개체 중 엔진이 표로 읽지 못하는 것(〈보기〉 상자 속 표 등)은 건너뛴다(기출 탐색기: b1_2013_06_08).
+    let props;try{props=JSON.parse(c.type==='image'?document.getPictureProperties(c.secIdx,c.paraIdx,c.controlIdx):document.getTableProperties(c.secIdx,c.paraIdx,c.controlIdx));}catch{continue;}if(props.treatAsChar)continue;
     if(pics.some(p=>p.type===c.type&&p.para===c.paraIdx&&p.ci===c.controlIdx))continue;
     pics.push({page,type:c.type,sec:c.secIdx,para:c.paraIdx,ci:c.controlIdx,props});
   }

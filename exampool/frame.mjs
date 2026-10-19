@@ -94,29 +94,38 @@ export async function typesetFrame(value, profile = PROFILE) {
   const Document = await loadFrameEngine(), JSZip = globalThis.JSZip, CFB = globalThis.XLSX.CFB;
   measurer ||= createNativeTextMeasurer(Document);
   const d = Document.createEmpty();
-  let bytes, height;
+  let bytes, height, step = '문서 준비';
+  // 한글 엔진은 오류를 글자로 던진다. 어느 단계에서 났는지 붙여 Error로 바꾼다(기본 변환으로 넘어갈 때 이유가 남게).
+  const at = (name) => { step = name; };
   try {
     d.createBlankDocument();
     const config = questionPageProfile(profile);
     d.setPageDef(0, JSON.stringify(config.page)); d.setColumnDef(0, 1, 0, true, 0);
+    at('틀 만들기');
     const plan = await buildQuestionHtml(value, prepareFigure, config.width, { native: true, measureText: measurer, skeleton: true, ghostFigure });
+    at('붙여 넣기');
     if (!parse(d.pasteHtml(0, 0, 0, LEAD + plan.html)).ok) throw new Error('문항 조판을 만들지 못했습니다.');
+    at('수식');
     bytes = await materializeEquations(Document, JSZip, await normalizeQuestionImport(d.exportHwpx(), JSZip), plan.equations);
     const checked = new Document(bytes);
     try {
+      at('보기 들여쓰기');
       const styled = new Document(await applyReferenceBogiIndent(checked, JSZip, CFB));
       try {
-        styled.reflowLinesegs(); centerCellPictures(styled);
-        applyQuestionIndent(styled, value.number, { body: true, askLead: plan.askLead, askIndent: plan.askIndent });
+        at('칸 그림 가운데'); styled.reflowLinesegs(); centerCellPictures(styled);
+        at('내어쓰기'); applyQuestionIndent(styled, value.number, { body: true, askLead: plan.askLead, askIndent: plan.askIndent });
         if (plan.floats.length || plan.floatTable) {
-          applyFloatingPictures(styled, plan.floats); applyFloatingTable(styled, plan.floatTable, value.number);
-          styled.reflowLinesegs(); settleFloatingPictures(styled);
+          at('글 옆 그림'); applyFloatingPictures(styled, plan.floats); at('글 옆 표'); applyFloatingTable(styled, plan.floatTable, value.number);
+          at('글 옆 배치'); styled.reflowLinesegs(); settleFloatingPictures(styled);
         }
-        fitQuestionPage(styled, profile); verifyNativeQuestion(styled, plan);
+        at('용지 맞춤'); fitQuestionPage(styled, profile); at('글 확인'); verifyNativeQuestion(styled, plan);
         height = questionPageMetrics(styled, profile).usedHeightMm;
         bytes = await applyCellEquationLines(exportLayoutHwpx(styled, CFB), JSZip);
       } finally { styled.free(); }
     } finally { checked.free(); }
+  } catch (error) {
+    if (error instanceof Error) { error.message = `${step}: ${error.message}`; throw error; }
+    throw new Error(`${step}: ${String(error?.message || error)}`);
   } finally { d.free(); }
   return { bytes, height, profile, warnings: [] };
 }

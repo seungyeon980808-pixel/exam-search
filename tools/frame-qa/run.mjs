@@ -16,6 +16,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => a.start
 const PDF_ROOT = process.env.EXAM_PDF_ROOT || '/Users/parkseungyeon/Library/CloudStorage/GoogleDrive-park49174332@gmail.com/내 드라이브/1. 개인작업/5E_공유폴더테스트_0916';
 const corpusAll = JSON.parse(readFileSync(join(HERE, 'corpus.json'), 'utf8'));
 const reference = JSON.parse(readFileSync(join(HERE, 'reference.json'), 'utf8'));
+const corpusById = new Map(corpusAll.map((item) => [item.id, item]));
 const library = new Map(JSON.parse(readFileSync(join(ROOT, 'data/questions.json'), 'utf8')).items.map((item) => [item.id, item]));
 let items = corpusAll;
 if (args.all) {
@@ -123,7 +124,7 @@ try {
       for (const row of rows) {
         const item = batch.find((x) => x.id === row.id);
         const q = row.question;
-        const meta = { ...item, ...(reference[row.id] ? {} : {}) };
+        const meta = corpusById.get(row.id) || item;
         const scored = reference[row.id] ? score(meta, reference[row.id], { ok: row.ok, question: q, diag: row.diag, error: row.error, ms: row.ms }, row.typeset)
           : { id: row.id, subject: item.subject, form: '(조사 기록 없음)', struct: String(item.year), pass: row.ok && !row.typeset?.error,
             checks: { convert: !!row.ok, typeset: !!row.ok && !row.typeset?.error },
