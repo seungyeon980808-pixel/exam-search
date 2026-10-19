@@ -695,7 +695,10 @@ async function loadDocument(value, bytes, filename, engine = 'base') {
 function fail(value, error) {
   if (!active(value)) return;
   setBusy(value, false);
-  setStatus(error instanceof Error ? error.message : '편집 문서를 열지 못했습니다.', true);
+  // 편집기·엔진은 Error가 아닌 값(문자열·객체)을 던지기도 한다. 이유를 감추지 않고 보여 준다.
+  const reason = error instanceof Error ? error.message : typeof error === 'string' ? error : error?.message;
+  if (!(error instanceof Error)) console.error('편집 문서 열기 실패', error);
+  setStatus(reason ? `편집 문서를 열지 못했습니다: ${reason}` : '편집 문서를 열지 못했습니다.', true);
   download.disabled = true;
 }
 export async function openEditable(question) {

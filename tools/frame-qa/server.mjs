@@ -1,6 +1,7 @@
 // 검사용 정적 서버: 저장소를 그대로 내보내고, 공개 드라이브 게이트웨이 대신 로컬 공유 폴더의 원본 PDF를 준다.
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { extname, join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,12 +25,19 @@ export async function startServer() {
     if (url.pathname.startsWith('/__pdf/')) {
       const name = decodeURIComponent(url.pathname.slice(7)), rel = publicPathOf.get(name), file = rel && pdfFor(rel);
       if (!file) { res.writeHead(404); res.end('no pdf ' + name); return; }
-      res.writeHead(200, { 'content-type': 'application/pdf' }); createReadStream(file).pipe(res); return;
+      // 구글 드라이브 스트리밍 폴더는 처음 읽을 때 시간 초과가 날 수 있다: 몇 번 다시 읽는다.
+      void (async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          try { const body = await readFile(file); res.writeHead(200, { 'content-type': 'application/pdf' }); res.end(body); return; }
+          catch (error) { if (attempt === 3) { res.writeHead(503); res.end(String(error.message)); } else await new Promise((ok) => setTimeout(ok, 2000)); }
+        }
+      })();
+      return;
     }
     if (url.pathname === '/__blank') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<!doctype html><meta charset=utf-8><title>qa</title>'); return; }
     const file = resolve(ROOT, '.' + decodeURIComponent(url.pathname) + (url.pathname.endsWith('/') ? 'index.html' : ''));
     if (!file.startsWith(ROOT) || !existsSync(file) || statSync(file).isDirectory()) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' }); createReadStream(file).pipe(res);
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' }); createReadStream(file).on('error', () => res.destroy()).pipe(res);
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   return { origin: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((ok) => server.close(ok)) };

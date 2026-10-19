@@ -189,20 +189,17 @@ export async function assembleFrameCollection(entries, { pagePerQuestion = false
     // 그런 문항이 있을 때만 시험지 문서에서 줄 배치를 다시 계산한다(수식 줄은 exportLayoutHwpx가 엔진 저장본에서 되살린다).
     // 옮겨 넣은 문서에서 바로 다시 계산하면 엔진이 옛 위치를 그대로 쓴다. 한 번 저장한 문서를 다시 열어 계산한다.
     const bytes = exportLayoutHwpx(target, globalThis.XLSX.CFB);
-    if (!hasFloatingControls(target)) return bytes;
+    if (!await hasFloatingControls(bytes)) return bytes;
     const reopened = new Document(bytes);
     try { reopened.reflowLinesegs(); return exportLayoutHwpx(reopened, globalThis.XLSX.CFB); } finally { reopened.free(); }
   } finally { target.free(); }
 }
 
-function hasFloatingControls(document) {
-  for (let page = 0; page < document.pageCount(); page += 1) {
-    for (const control of parse(document.getPageControlLayout(page)).controls || []) {
-      if (control.cellPath?.length || !['image', 'table'].includes(control.type)) continue;
-      const props = parse(control.type === 'image' ? document.getPictureProperties(control.secIdx, control.paraIdx, control.controlIdx)
-        : document.getTableProperties(control.secIdx, control.paraIdx, control.controlIdx));
-      if (props.treatAsChar === false) return true;
-    }
+// 글자처럼 취급하지 않는(떠 있는) 그림·표가 있는지 저장본에서 본다(native-hwpx.js와 같은 기준).
+async function hasFloatingControls(bytes) {
+  const zip = await globalThis.JSZip.loadAsync(bytes);
+  for (const name of Object.keys(zip.files).filter((path) => /^Contents\/section\d+\.xml$/.test(path))) {
+    if (/<hp:pos\b[^>]*treatAsChar="0"/.test(await zip.file(name).async('string'))) return true;
   }
   return false;
 }

@@ -72,11 +72,39 @@ async function runBatch(browser, batch) {
         } finally { doc.free(); }
         let bytes = '';
         if (keep) { let raw = ''; for (let i = 0; i < typeset.bytes.length; i += 32768) raw += String.fromCharCode(...typeset.bytes.subarray(i, i + 32768)); bytes = btoa(raw); }
-        return { ok: true, question, diag, typeset: { text, eq, eqScripts, usedMm: Math.round(typeset.height * 10) / 10, status: warn, error: false, size: typeset.bytes.length }, timing, bytes };
+        // 모으기(기출 탐색기 한글 변환이 실제로 여는 문서): 문항 한 개 문서 → 시험지 문서에서 글이 그대로인지.
+        let assemble = 'ok';
+        const flat = (value) => String(value).replace(/\s+/g, '');
+        try {
+          t = performance.now();
+          const one = await f.assembleFrameCollection([{ id: q.id, bytes: typeset.bytes, height: typeset.height }]);
+          timing.assemble = Math.round(performance.now() - t);
+          const od = new Document(one);
+          try { const raw = od.getTextFileText(), got = raw.startsWith('"') ? JSON.parse(raw) : raw; if (flat(got) !== flat(text)) assemble = '글 달라짐'; if (!od.getBookmarks().includes('exam_question_')) assemble = '이동 표시 없음'; } finally { od.free(); }
+          (window.__docs ||= []).push({ id: q.id, bytes: typeset.bytes, height: typeset.height, text: flat(text) });
+        } catch (error) { assemble = String(error?.message || error); }
+        return { ok: true, question, diag, typeset: { text, eq, eqScripts, usedMm: Math.round(typeset.height * 10) / 10, status: warn, error: false, size: typeset.bytes.length }, timing, bytes, assemble };
       } catch (error) { return { ok: false, error: String(error?.message || error), timing }; }
     }, { q, keep: !!args['keep-bytes'] }), new Promise((ok) => setTimeout(() => ok({ ok: false, error: '시간 초과(120초)' }), 120000))]);
     result.ms = Date.now() - t0; result.id = item.id; out.push(result);
   }
+  // 이 묶음(최대 20문항)을 한 시험지로 모아 문항 글이 모두 차례대로 들어가는지 본다.
+  const collection = await page.evaluate(async () => {
+    const docs = window.__docs || []; if (!docs.length) return 'none';
+    try {
+      const f = window.__frame, Document = await f.loadFrameEngine();
+      const bytes = await f.assembleFrameCollection(docs.map(({ id, bytes, height }) => ({ id, bytes, height })));
+      const d = new Document(bytes);
+      try {
+        const raw = d.getTextFileText(), all = (raw.startsWith('"') ? JSON.parse(raw) : raw).replace(/\s+/g, '');
+        let at = 0; for (const doc of docs) { const k = all.indexOf(doc.text, at); if (k < 0) return `${doc.id} 글 빠짐`; at = k + doc.text.length; }
+        const marks = JSON.parse(d.getBookmarks()).length; if (marks !== docs.length) return `이동 표시 ${marks}/${docs.length}`;
+        return `ok ${docs.length}문항 ${d.pageCount()}쪽`;
+      } finally { d.free(); }
+    } catch (error) { return String(error?.message || error); }
+  }).catch((error) => String(error.message));
+  for (const row of out) row.collection = collection;
+  if (!collection.startsWith('ok') && collection !== 'none') log(`  모으기 실패: ${collection}`);
   if (errors.length) log(`  pageerror ${errors.length}: ${errors[0]}`);
   await context.close();
   return out;
@@ -98,7 +126,8 @@ try {
         const meta = { ...item, ...(reference[row.id] ? {} : {}) };
         const scored = reference[row.id] ? score(meta, reference[row.id], { ok: row.ok, question: q, diag: row.diag, error: row.error, ms: row.ms }, row.typeset)
           : { id: row.id, subject: item.subject, pass: row.ok && !row.typeset?.error, reasons: row.ok ? (row.typeset?.error ? ['typeset: ' + row.typeset.error] : []) : ['convert: ' + row.error], restoreReasons: [] };
-        scored.timing = row.timing; scored.ms = row.ms; scored.size = row.typeset?.size;
+        scored.timing = row.timing; scored.ms = row.ms; scored.size = row.typeset?.size; scored.assemble = row.assemble; scored.collection = row.collection;
+        if (row.ok && row.assemble && row.assemble !== 'ok') { scored.pass = false; (scored.restoreReasons ||= []).push('assemble: ' + row.assemble); (scored.reasons ||= []).push('assemble: ' + row.assemble); }
         if (!scored.restoreReasons?.length && !scored.pass) scored.restoreReasons = scored.reasons;
         if (row.bytes) writeFileSync(join(OUT, 'shots', `${row.id}.hwpx`), Buffer.from(row.bytes, 'base64'));
         if (q) writeFileSync(join(OUT, 'shots', `${row.id}.json`), JSON.stringify({ question: q, typesetText: row.typeset?.text }));

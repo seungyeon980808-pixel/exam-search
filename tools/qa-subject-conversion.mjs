@@ -74,8 +74,13 @@ for (const [engine, type] of [['chromium', chromium], ['webkit', webkit]]) {
       try {
         const text = Array.from({ length: doc.getParagraphCount(0) }, (_, n) => doc.getTextRange(0, n, 0, 20000)).join('\n');
         const scripts = Array.from({ length: doc.pageCount() }, (_, page) => JSON.parse(doc.getPageControlLayout(page)).controls)
-          .flat().filter(control => control.type === 'equation').map(control => JSON.parse(doc.getEquationProperties(
-            control.secIdx, control.paraIdx, control.controlIdx, control.cellIdx ?? -1, control.cellParaIdx ?? -1)).script).join(' ');
+          .flat().filter(control => control.type === 'equation').map(control => {
+            // 5E 문항 틀은 수식을 표 칸 속 표(〈보기〉 상자·2×N 자료 표)에도 둔다. 0.8.6 엔진은 겹친 칸의 수식을 이 함수로 읽지 못하므로
+            // 그 수식은 문서 본문 글 대신 저장본 XML(hp:script)로 확인한다.
+            try { return JSON.parse(doc.getEquationProperties(control.secIdx, control.paraIdx, control.controlIdx, control.cellIdx ?? -1, control.cellParaIdx ?? -1)).script; }
+            catch { return ''; }
+          }).join(' ') + ' ' + execFileSync('unzip', ['-p', output, 'Contents/section0.xml'], { maxBuffer: 1 << 28 }).toString('utf8')
+            .match(/<hp:script>[\s\S]*?<\/hp:script>/gu)?.join(' ');
         assert((text + scripts).replace(/\s/gu, '').includes(anchor.replace(/\s/gu, '')), `Native editable content missing: ${id} / ${anchor}`);
         assert(doc.pageCount() > 0);
         const pictures = Array.from({ length: doc.pageCount() }, (_, n) => JSON.parse(doc.getPageControlLayout(n)).controls)
