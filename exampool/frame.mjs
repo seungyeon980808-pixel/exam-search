@@ -5,7 +5,7 @@
 // 한글 엔진은 5E 본체와 같은 rhwp 0.8.7 빌드(rhwp/)를 쓴다. 기출 탐색기의 기존 변환기(0.8.6)와 따로 읽는다.
 import { buildQuestionHtml, verifyNativeQuestion } from './sheet/handoff.js?v=frame-20261025-1';
 import { pageProfile, materializeEquations, normalizeQuestionImport, applyQuestionIndent, applyReferenceBogiIndent, applyCellEquationLines,
-  applyFloatingPictures, applyCellFloatingPictures, settleFloatingPictures, applyFloatingTable, centerCellPictures, fixedLabelSpaces, growCellsToContent } from './sheet/typeset-model.js?v=frame-20261025-1';
+  applyFloatingPictures, applyCellFloatingPictures, settleFloatingPictures, applyFloatingTable, centerCellPictures, fixedLabelSpaces, growCellsToContent, applyInlineBoxes, alignBesideLeft } from './sheet/typeset-model.js?v=frame-20261025-1';
 import { KICE_STANDARD, standardForPaper } from './sheet/typeset-standard.js?v=frame-20261025-1';
 import { fitQuestionLines } from './sheet/line-fit.js?v=frame-20261025-1';
 import { questionPageProfile, questionPageMetrics, fitQuestionPage } from './sheet/question-page.js?v=frame-20261025-1';
@@ -125,7 +125,7 @@ export async function typesetFrame(value, profile = PROFILE) {
         // 어울림은 내어쓰기 뒤에 건다. 문단 모양을 나중에 바꾸면 한글 엔진이 그림 옆 줄 폭을 잘못 잡는다.
         if (plan.floats.length || plan.floatTable) {
           at('글 옆 그림'); applyFloatingPictures(styled, plan.floats); at('글 옆 표'); applyFloatingTable(styled, plan.floatTable, value.number);
-          at('글 옆 배치'); styled.reflowLinesegs(); settleFloatingPictures(styled);
+          at('글 옆 배치'); styled.reflowLinesegs(); settleFloatingPictures(styled); at('글 옆 줄'); alignBesideLeft(styled);
         }
         // 윗줄부터 자간 맞춤(틀의 fit): 내어쓰기·어울림 뒤, 쪽 높이 맞춤 전. 그림 옆 글(어울림)이 있는 문항은 건너뛴다.
         const fit = standard.fit;
@@ -138,8 +138,11 @@ export async function typesetFrame(value, profile = PROFILE) {
         at('다시 열기');
         const settled = new Document(exportLayoutHwpx(styled, CFB));
         try {
+          // 글 확인(계획한 글과 같은지)은 표시 글자를 지우기 전에 한다. 네모 칸 글자 테두리는 줄 높이를 바꾸므로 칸 높이·용지 맞춤보다 먼저.
+          at('글 확인'); verifyNativeQuestion(settled, plan);
+          at('네모 칸'); applyInlineBoxes(settled);
           at('칸 높이'); growCellsToContent(settled);
-          at('용지 맞춤'); fitQuestionPage(settled, profile); at('글 확인'); verifyNativeQuestion(settled, plan);
+          at('용지 맞춤'); fitQuestionPage(settled, profile);
           height = questionPageMetrics(settled, profile).usedHeightMm;
           bytes = await applyCellEquationLines(exportLayoutHwpx(settled, CFB), JSZip);
         } finally { settled.free(); }

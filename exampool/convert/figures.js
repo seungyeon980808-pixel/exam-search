@@ -355,7 +355,8 @@ export async function detectFigures(item,{signal,scale=4,choices=false}={}){
       if(left.length){const x0=Math.min(...left.map(c=>c.box[0]))-1;cand.box=[x0,cand.box[1],cand.box[2],cand.box[3]];if(cand.ink)cand.ink=[Math.min(cand.ink[0],x0),cand.ink[1],cand.ink[2],cand.ink[3]];cand.leftCaptions=left;}}
     const {canvas,g,m,box,texts}=await prepare(item,cand,ctx,scale,signal);
     // strip: 상자 윗변과 아랫변처럼 띠 폭의 40% 넘게 이어진 가로 잉크 줄이 위아래로 있어야 흐름도다(수식 줄은 글자·밑줄뿐).
-    if(cand.strip){const t=trim(m,rect(0,0,m.W,m.H));if(!t)continue;const pr=projection(m,t,'y'),long=[...pr.keys()].filter(i=>pr[i]>=(t.x1-t.x0)*.4);if(!long.length||long.at(-1)-long[0]<body*scale*.5)continue;}
+    // 비트맵 띠(본문 줄 사이에 낀 납작한 그림 — 염기 서열 「3'-㉡㉠…-5'」 등)는 흐름도 검사 없이 그림으로 둔다. 예전에는 위아래 상자 선이 없다고 버려 줄이 통째로 빠졌다(10-25 b2_2025_09_11).
+    if(cand.strip&&cand.kind!=='raster'){const t=trim(m,rect(0,0,m.W,m.H));if(!t)continue;const pr=projection(m,t,'y'),long=[...pr.keys()].filter(i=>pr[i]>=(t.x1-t.x0)*.4);if(!long.length||long.at(-1)-long[0]<body*scale*.5)continue;}
     const order=[];
     for(const p of panels(m,scale,body,texts,!cand.table)){
       const padPx=Math.round(2*scale),r=rect(Math.max(p.cell.x0,p.r.x0-padPx),Math.max(p.cell.y0,p.r.y0-padPx),Math.min(p.cell.x1,p.r.x1+padPx),Math.min(p.cell.y1,p.r.y1+padPx));

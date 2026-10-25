@@ -36,7 +36,8 @@ export function choiceGrid(choices,width,fontSize=11,layout,measure=choiceWidth,
   // 마지막 칸은 남은 폭을 쓰므로(원본도 ⑤ 「ㄱ, ㄴ, ㄷ」가 길어도 같은 간격) 마지막 열을 뺀 선지만 간격 안에 들면 된다.
   const stepped=n=>{let t=tab(n);if(!(t>0)||n>choices.length)return null;const inner=Math.max(0,...sizes.filter((_,i)=>i%n!==n-1)),last=Math.max(0,...sizes.filter((_,i)=>i%n===n-1));// 마지막 선지가 남은 폭에 조금 모자라면 간격을 똑같이 줄여 한 줄에 맞춘다(원본 간격의 90%까지) — 원본 240문항 중 224문항이 같은 간격 다섯 칸(10-25 실측).
       // 마지막 선지가 조금 넘치면 간격은 원본 그대로 두고 그 선지 글자만 자간을 좁힌다(최대 8%, 원본도 「⑤ ㄱ, ㄴ, ㄷ」를 같은 간격에 넣음, 10-25).
-      const need=last-2,lastText=choices.map((c,i)=>i%n===n-1?labels[i]+' '+c.text:'').reduce((a,b)=>b.length>a.length?b:a,'');
+      // 칸 안 좌우 여백(141단위×2 ≈ 3.8px)까지 넣는다 — 예전 last−2는 여백을 빼먹어 「⑤ A, B, C」가 1px 모자라 줄이 넘어갔다(10-25 c2_2026_06_01).
+      const need=last+1,lastText=choices.map((c,i)=>i%n===n-1?labels[i]+' '+c.text:'').reduce((a,b)=>b.length>a.length?b:a,'');
       if(t*(n-1)+need>width&&inner+room<=t&&measure!==choiceWidth){const over=t*(n-1)+need-width,c=Math.ceil((over+2)/Math.max(1,measure(lastText,fontSize))*100);
         if(c<=8)return {cols:n,widths:[...Array(n-1).fill(t),width-t*(n-1)],singleLine:n===choices.length,tabs:true,tightLast:c};}
       let step=t;if(step*(n-1)+need>width)step=(width-need)/(n-1);if(step<t*.9||inner+room>step)return null;t=step;return {cols:n,widths:[...Array(n-1).fill(t),width-t*(n-1)],singleLine:n===choices.length,tabs:true};};
@@ -44,6 +45,8 @@ export function choiceGrid(choices,width,fontSize=11,layout,measure=choiceWidth,
   if(fixed&&!(fixed===choices.length&&fits)){
     const short=fixed<5&&tab(5)>0&&Math.max(0,...sizes.filter((_,i)=>i%fixed!==fixed-1))+room<=tab(5)&&tab(5)*(fixed-1)+max<=width;
     if(short)return {cols:fixed,widths:[...Array(fixed-1).fill(tab(5)),width-tab(5)*(fixed-1)],tabs:true};
+    // 정해 둔 열 수로는 가장 긴 선지가 칸에 안 들어가면(칸 여백 포함) 열을 줄인다 — 번호와 식이 두 줄로 갈라지는 것보다 낫다(10-25 c2_2026_06_12).
+    if(max+12>width/fixed&&measure!==choiceWidth){const n=[2,1].find(n=>n<fixed&&max+12<=width/n)||1;return {cols:n,widths:Array(n).fill(width/n)};}
     return stepped(fixed)||{cols:fixed,widths:Array(fixed).fill(width/fixed),singleLine:fixed===choices.length};
   }
   // 「한 줄 5칸」으로 정해 둔 선지(변환된 기출)도 평가원 간격을 먼저 쓴다(10-25 — 정해 두면 건너뛰어 글 길이 비례로 나뉘었다).
@@ -52,7 +55,8 @@ export function choiceGrid(choices,width,fontSize=11,layout,measure=choiceWidth,
     const gap=(width-sizes.reduce((a,b)=>a+b,0))/sizes.length;
     return {cols:sizes.length,widths:sizes.map(w=>w+gap),singleLine:true};
   }
-  const cols=[3,2,1].find(n=>n<=choices.length&&max<=width/n)||1;
+  // 칸 안 여백(좌우 2px + 엔진 칸 여백 약 3.8px)과 줄 나눔 여유까지 넣어 고른다(10-25 — 「③ −3a+b+3c−20」이 칸 폭과 거의 같아 번호와 식이 갈라졌다).
+  const cols=[3,2,1].find(n=>n<=choices.length&&max+12<=width/n)||1;
   return (cols>1&&stepped(cols))||{cols,widths:Array(cols).fill(width/cols)};
 }
 // Break at word boundaries before native import. Cell auto-layout alone can
@@ -86,7 +90,8 @@ export function wrapQuestionText(value,width,fontSize=11){
 }
 // 실제 한글 글꼴로 잰 폭으로 어절 단위 줄바꿈. 첫 줄과 다음 줄의 폭을 따로 받는다(번호 뒤 내어쓰기).
 // 수식이 든 줄은 10px 더 남긴다 — 엔진이 그 줄을 다시 나누면 줄 첫머리로 넘어간 수식이 사라진다(rhwp, 10-24 물리Ⅰ 11번 「S₂를」).
-const eqRoom=s=>/EXAMPOOL_EQ_\d+_END|\$[^$\n]+\$/.test(s)?10:0;
+// 수식 여유 폭: 수식 개체 바깥 여백(좌우 0.75px)만큼 + 2px(10-25 — 예전 10px는 수식을 엔진으로 재기 전 값이라 「① 3a+b+3c+20」의 번호와 식이 두 줄로 갈라졌다).
+const eqRoom=s=>{const n=(String(s).match(/EXAMPOOL_EQ_\d+_END|\$[^$\n]+\$/g)||[]).length;return n?2+1.5*n:0;};
 export function wrapMeasured(value,first,rest,measure){
   const lines=[];
   for(const original of String(value??'').split(/\r?\n/)){
@@ -680,7 +685,7 @@ export async function buildQuestionHtml(value,prepareFigure=async f=>f,width=540
       html+=`<table style="border-collapse:collapse;width:${width}px">`;
       for(let row=0;row<rows;row++){
         // 번호(①) 폭은 둘째 줄부터만 줄인다. 첫 줄은 번호를 포함한 글 전체를 칸 폭에 잰다.
-        const cells=grid.widths.map((w,col)=>{const i=row*grid.cols+col,c=q.choices[i],first=grid.singleLine?w-1:w-8,available=grid.singleLine?w-1:w-8-choiceWidth(labels[i]+' ',fontSize),value=c?labels[i]+' '+c.text:'',tight=grid.tightLast&&col===grid.cols-1&&measureRich(value,fontSize)>first,wrap=tight?v=>String.fromCharCode(CONDENSE+grid.tightLast)+v:v=>measureText?wrapMeasured(v,first,available,x=>measureRich(x,fontSize)):wrapQuestionText(v,available,fontSize),wrapped=wrap(value);return {w,value,wrap,owner:c?{kind:'choice',id:c.id,prefix:labels[i].length+1}:null,height:Math.ceil(wrapped.split('\n').length*fontSize*4/3*1.5+2+extraHeight(wrapped,fontSize)),available};});
+        const cells=grid.widths.map((w,col)=>{const i=row*grid.cols+col,c=q.choices[i],first=grid.singleLine?w-1:w-8,available=grid.singleLine?w-1:w-8-choiceWidth(labels[i]+' ',fontSize),value=c?labels[i]+' '+c.text:'',/* 한 줄 선지가 칸에 조금(8% 안) 넘치면 줄을 나누지 않고 자간만 좁힌다(10-25 「⑤ ㄱ, ㄴ, ㄷ」·「⑤ A, B, C」). */over=c&&grid.singleLine&&measureText?measureRich(value,fontSize)-(w-5):0,squeeze=grid.tightLast&&col===grid.cols-1?grid.tightLast:Math.ceil((over+1)/Math.max(1,measureRich(value,fontSize))*100),tight=over>0&&squeeze<=8,wrap=tight?v=>String.fromCharCode(CONDENSE+squeeze)+v:v=>measureText?wrapMeasured(v,first,available,x=>measureRich(x,fontSize)):wrapQuestionText(v,available,fontSize),wrapped=wrap(value);return {w,value,wrap,owner:c?{kind:'choice',id:c.id,prefix:labels[i].length+1}:null,height:Math.ceil(wrapped.split('\n').length*fontSize*4/3*1.5+2+extraHeight(wrapped,fontSize)),available};});
         // 한 줄에 분수 같은 높은 수식이 있으면 칸 가운데에 맞춰 ①~⑤의 글자 줄이 나란하게 한다.
         const height=Math.max(...cells.map(c=>c.height)),valign=cells.some(c=>extraHeight(c.value,fontSize)>0)?'middle':'top';
         html+='<tr>'+cells.map(c=>`<td style="border:none;width:${c.w}px;height:${height}px;padding:${grid.singleLine?'0':'0 2px'};vertical-align:${valign}"><p style="margin:0;text-align:left;line-height:150%">${text(c.value,c.available,fontSize,c.wrap,c.owner)}</p></td>`).join('')+'</tr>';

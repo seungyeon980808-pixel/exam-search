@@ -69,7 +69,7 @@ export function uprightScript(eq){
 // 원본(평가원 지면)은 「A～D」 「시·공간적」(10-25 e2_2024_09_03, b1_2026_09_20).
 const TEXT_FIX={'\u223c':'～','\u2024':'·'};
 export const clean=s=>{
-  const parts=String(s||'').replace(/\s+/g,' ').split('$').map((p,i)=>i%2?uprightScript(p):p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
+  const parts=String(s||'').replace(/[^\S\u3000]+/g,' ').split('$').map((p,i)=>i%2?uprightScript(p):p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
   if(parts.length%2===0)return parts.join('$').trim();
   const out=[parts[0]];
   for(let i=1;i<parts.length;i+=2){
@@ -164,7 +164,10 @@ export function paragraphs(lines,{B}={}){
     let start=!cur||l.opening||(prev&&l.role!==prev.role)||markStart||HEAD.test(t)||CAPTION.test(t)||display||cur.display||cur.head||cur.caption;
     // 들여 쓴 줄(본문 왼쪽 + 한 글자): 새 문단. 매달린 들여쓰기는 잇는다.
     if(!start&&!hanging&&d>=INDENT[0]&&d<=INDENT[1]&&!(prev?.geo&&Math.abs(l.left-prev.left)<2))start=true;
-    if(start){cur={lines:[l],text:t,firstLeft:l.left,display,head:HEAD.test(t),caption:CAPTION.test(t),mark:MARK.test(t)};out.push(cur);}
+    // 들여 쓴 식 줄(→·⇄·=가 든 반응식·속도식, 10-25): 원본 들여쓰기만큼 빈 폭 표시 글자(U+E1B2, 조판기가 전각 빈칸으로 바꿈)를 앞에 둔다 — 왼쪽에 붙어 찍혔다.
+    // 오른쪽에 혼자 찍힌 「[3점]」 줄은 식 줄이 아니다.
+    const pad=display&&/→|⇄|⇌|=|ΔH|\\Delta/.test(t)&&!/^\s*\[\s*3\s*점\s*\]\s*$/.test(t)&&Number.isFinite(l.h)&&l.h>0?'\uE1B2'.repeat(Math.min(24,Math.max(0,Math.round(d/(l.h*.5))-1))):'';
+    if(start){cur={lines:[l],text:pad+t,firstLeft:l.left,display,head:HEAD.test(t),caption:CAPTION.test(t),mark:MARK.test(t)};out.push(cur);}
     else{cur.lines.push(l);cur.text+=(/[\-‐]$/.test(cur.text)?'':' ')+t;}
     prev=l;
   }

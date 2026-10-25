@@ -2,7 +2,8 @@ import {normalizeEquationScript,TEXT_WIDTH} from './typeset-model.js?v=frame-202
 // Measure with the same native font engine that paints and exports the paper.
 export function createNativeTextMeasurer(Document){
   const cache=new Map(),escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const measure=(text,fontSize=11)=>{
+  // 빈 폭 표시 글자(U+E1B2, 조판기가 전각 빈칸으로 바꿈)는 전각 빈칸 폭으로 잰다(10-25 — 사용자 영역 글자 폭으로 재 줄이 일찍 넘어갔다).
+  const measure=(raw,fontSize=11)=>{const text=String(raw??'').replace(/\uE1B2/g,'\u3000');
     const key=JSON.stringify([text,fontSize]);if(cache.has(key))return cache.get(key)*measure.factor;
     const d=Document.createEmpty();
     try{

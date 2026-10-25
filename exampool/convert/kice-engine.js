@@ -98,7 +98,7 @@ export function tableFromDetected(d,role='자료표'){
 function ratioPair(a,b){let best=[3,2],err=Infinity;for(let x=1;x<=11;x++)for(let y=1;x+y<=12;y++){const e=Math.abs(x/(x+y)-a/(a+b));if(e<err-1e-9){err=e;best=[x,y];}}return best;}
 const yOverlap=(a,b)=>Math.min(a[3],b[3])-Math.max(a[1],b[1]);
 const paraBox=p=>{const g=p.lines.filter(l=>l.geo&&Number.isFinite(l.base));if(!g.length)return null;return [Math.min(...g.map(l=>l.left)),Math.min(...g.map(l=>l.base-l.h)),Math.max(...g.map(l=>l.right)),Math.max(...g.map(l=>l.base))];};
-const EXP=/과정|결과|가설|자료|준비|방법|탐구|실험/;
+const EXP=/과정|결과|가설|자료|준비|방법|탐구|실험|결론/;
 
 // 구조 → ExamPool 문항. item: 색인 항목(+조사 기록 form/struct/layout/choiceArrange). 결과와 함께 판단 기록(diag)을 돌려준다.
 export async function toQuestion(structure,item,{number='1'}={}){
@@ -240,7 +240,8 @@ export async function toQuestion(structure,item,{number='1'}={}){
         if(post.length)textBlock(post,parent,'설명');
         continue;
       }
-      if(n.k==='figure'||n.k==='table'&&seq[i+1]?.k==='table'&&n.box&&seq[i+1].box&&yOverlap(n.box,seq[i+1].box)>4){
+      // 표 바로 옆(같은 줄)에 표나 그림이 있으면 함께 나란히 묶는다(10-25 e2_2024_09_11 표와 지도가 위아래로 쌓였음).
+      if(n.k==='figure'||n.k==='table'&&['table','figure'].includes(seq[i+1]?.k)&&n.box&&seq[i+1].box&&yOverlap(n.box,seq[i+1].box)>4){
         // 그림(또는 나란한 표) 묶음. 표가 섞이면 같은 줄에 나란한 것만 함께 묶는다.
         const run=[];while(i<seq.length&&(seq[i].k==='figure'||seq[i].k==='table')&&(!run.length||run[0].k==='figure'&&seq[i].k==='figure'||seq[i].box&&run.at(-1).box&&yOverlap(seq[i].box,run.at(-1).box)>4))run.push(seq[i++]);
         // 그림 바로 아래 (가)·(나) 이름 줄
@@ -276,7 +277,9 @@ export async function toQuestion(structure,item,{number='1'}={}){
       if(stepish){
         // 과정 글 옆 그림 하나: 상자 안 '글 옆 자료' 가로 묶음(과정 칸 + 그림).
         const mats0=s.items.filter(n=>n.k!=='para'),pb=paras.map(paraBox).filter(Boolean);
-        const sideFig=mats0.length===1&&mats0[0].k==='figure'&&mats0[0].box&&pb.length&&pb.some(b=>yOverlap(b,mats0[0].box)>4)&&pb.filter(b=>yOverlap(b,mats0[0].box)>4).every(b=>mats0[0].box[0]>=b[2]-3)?mats0[0]:null;
+        // 그림이 하나면(표는 따로 있어도 됨 — 「탐구 과정 및 결과」에 결과 표가 같이 든다, 10-25 c1_2025_09_04) 과정 글 오른쪽에 붙은 그림을 옆 그림으로.
+        const figs0=mats0.filter(n=>n.k==='figure'),f0=figs0.length===1?figs0[0]:null;
+        const sideFig=f0&&f0.box&&pb.length&&pb.some(b=>yOverlap(b,f0.box)>4)&&pb.filter(b=>yOverlap(b,f0.box)>4).every(b=>f0.box[0]>=b[2]-3)?f0:null;
         let host=g;if(sideFig){host=add('group',g,'글 옆 자료');host.layout='나란히';host.boxed=false;}
         const st=add('steps',host,s.name||'실험 과정');st.lines=[];
         if(sideFig){const tb=[Math.min(...pb.map(b=>b[0])),0,Math.max(...pb.filter(b=>yOverlap(b,sideFig.box)>4).map(b=>b[2])),0],nb=sideFig.box;

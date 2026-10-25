@@ -360,6 +360,54 @@ export function applyCellFloatingPictures(document,floats){
   if(want.some(f=>!f.done))throw Error('상자 안 어울림 그림을 찾지 못했습니다.');
   document.reflowLinesegs?.();
 }
+// 글줄 속 네모 칸(10-25): 변환기가 표시 글자(U+200B … U+200C)로 감싼 범위에 글자 테두리를 걸고 표시 글자를 지운다.
+// HTML 붙여넣기는 글자 테두리를 옮기지 못해 들여온 뒤 엔진 문서에서 건다. 본문 문단과 표 칸 문단 모두.
+export function applyInlineBoxes(document,section=0){
+  const J=JSON.stringify,border={type:1,width:1,color:'#000000'},props=J({borderLeft:border,borderRight:border,borderTop:border,borderBottom:border});
+  let count=0;
+  for(const r of nativeRuns(document,section)){
+    // 상자 밖 빈 폭 표시 글자(들여 쓴 식 줄 앞·식 사이 넓은 틈)는 테두리 없이 전각 빈칸으로.
+    if(r.text.includes('\uE1B2')){
+      const inBox=new Set();for(let i=0;i<r.text.length;i++)if(r.text[i]==='\u200B'){const j=r.text.indexOf('\u200C',i+1);if(j<0)break;for(let k=i;k<=j;k++)inBox.add(k);i=j;}
+      for(let i=r.text.length-1;i>=0;i--){if(r.text[i]!=='\uE1B2'||inBox.has(i))continue;
+        if(r.path){const path=J(r.path);document.deleteTextInCellByPath(section,r.parent,path,i,1);document.insertTextInCellByPath(section,r.parent,path,i,'\u3000');}
+        else{document.deleteText(section,r.para,i,1);document.insertText(section,r.para,i,'\u3000');}
+        r.text=r.text.slice(0,i)+'\u3000'+r.text.slice(i+1);count++;}
+    }
+    if(!r.text.includes('\u200B'))continue;
+    const pairs=[];for(let i=0;i<r.text.length;i++){if(r.text[i]==='\u200B'){const j=r.text.indexOf('\u200C',i+1);if(j<0)break;pairs.push([i,j]);i=j;}}
+    for(const [a,b] of pairs.reverse()){
+      // 빈 폭 표시 글자(U+E1B2)는 전각 빈칸으로 바꾼다(변환기가 원본 상자 폭만큼 적어 둠).
+      const pads=[];for(let i=b-1;i>a;i--)if(r.text[i]==='\uE1B2')pads.push(i);
+      if(r.path){const path=J(r.path);document.deleteTextInCellByPath(section,r.parent,path,b,1);
+        for(const i of pads){document.deleteTextInCellByPath(section,r.parent,path,i,1);document.insertTextInCellByPath(section,r.parent,path,i,'\u3000');}
+        document.deleteTextInCellByPath(section,r.parent,path,a,1);
+        if(b-1>a)document.applyCharFormatInCellByPath(section,r.parent,path,a,b-1,props);}
+      else{document.deleteText(section,r.para,b,1);for(const i of pads){document.deleteText(section,r.para,i,1);document.insertText(section,r.para,i,'\u3000');}
+        document.deleteText(section,r.para,a,1);if(b-1>a)document.applyCharFormat(section,r.para,a,b-1,props);}
+      count++;
+    }
+  }
+  if(count)document.reflowLinesegs();
+  return count;
+}
+// 글 옆 그림·표(떠 있는 개체) 옆 좁은 줄은 왼쪽 정렬로(10-25). 양쪽 정렬이면 수식(단위)·긴 낱말이 든 좁은 줄의 띄어쓰기가 크게 벌어졌다
+// (p2_2024_06_03 「질량은   0.1 kg이고,   열의」). 자간 맞춤은 수식·개체가 든 문단을 건너뛰어 이 줄을 못 고친다. 개체 옆에 줄이 있는 맨 바깥 문단만.
+export function alignBesideLeft(document,section=0){
+  const J=JSON.parse;let count=0;
+  for(let page=0;page<document.pageCount();page++){
+    const floats=(J(document.getPageControlLayout(page)).controls||[]).filter(c=>['image','table'].includes(c.type)&&!c.cellPath?.length&&c.secIdx===section).filter(c=>{
+      try{return !J(c.type==='image'?document.getPictureProperties(c.secIdx,c.paraIdx,c.controlIdx):document.getTableProperties(c.secIdx,c.paraIdx,c.controlIdx)).treatAsChar;}catch{return false;}});
+    if(!floats.length)continue;
+    const paras=new Set();
+    for(const r of J(document.getPageTextLayout(page)).runs){if(r.cellPath?.length||r.secIdx!==section||!r.text.trim())continue;
+      if(floats.some(f=>r.y<f.y+f.h&&r.y+r.h>f.y&&(r.x+r.w<=f.x+1||r.x>=f.x+f.w-1)))paras.add(r.paraIdx);}
+    for(const para of paras){const props=J(document.getParaPropertiesAt(section,para));if(String(props.alignment).toLowerCase()!=='justify')continue;
+      document.applyParaFormat(section,para,JSON.stringify({alignment:'left'}));count++;}
+  }
+  if(count)document.reflowLinesegs();
+  return count;
+}
 // 칸 높이를 글에 맞춰 늘린다(10-25). 들여온 뒤 문단 모양(줄 간격 145% 등)을 바꾸면 칸 높이(cellSz)는 들여올 때 값 그대로라
 // 마지막 줄이 칸 아래 테두리에 잘렸다(b1_2026_06_09 상자 「… 결론을 내렸다.」). 맨 바깥 표 칸만 보고, 줄지는 않는다.
 export function growCellsToContent(document,section=0){
@@ -375,12 +423,12 @@ export function growCellsToContent(document,section=0){
       for(const b of boxes.filter(b=>b.pageIndex===page)){
         // 칸 안 조각의 paraIdx는 칸 문단 번호 — 바깥 문단은 parentParaIdx다.
         const mine=x=>(x.parentParaIdx??x.paraIdx)===t.paraIdx&&(()=>{const [ctrl,cell]=ci(x.cellPath[0]);return ctrl===t.controlIdx&&cell===b.cellIdx;})();
-        // 칸 상자 안에서 시작하는 조각만(같은 문단의 다른 표·상자 조각이 섞여 들어와 칸을 수백 px 늘렸다).
+        // 칸 상자 안에서 시작하는 조각만(같은 문단의 다른 표·상자 조각이 섞여 들어와 칸을 수백 px 늘렸다). 150px 넘게는 늘리지 않는다.
         const inside=x=>x.x>=b.x-1&&x.x<b.x+b.w&&x.y>=b.y-1&&x.y<b.y+b.h;
         const bottom=Math.max(...runs.filter(r=>mine(r)&&inside(r)).map(r=>r.y+r.h),...inner.filter(c=>mine(c)&&inside(c)).map(c=>c.y+c.h),-Infinity);
         if(!Number.isFinite(bottom))continue;
         let props;try{props=J(document.getCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx));}catch{continue;}const need=bottom+props.paddingBottom/75-(b.y+b.h);
-        if(need<=0.5||need>60)continue;
+        if(need<=0.5||need>150)continue;
         const r=J(document.setCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx,JSON.stringify({height:props.height+Math.ceil(need*75)})));
         if(r?.ok!==false)grown++;
       }

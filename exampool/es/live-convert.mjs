@@ -154,6 +154,48 @@ export function attachTextCharges(items) {
   });
 }
 
+// 5E 기출 복원(10-25): 글줄 속 네모 칸(빈칸 상자 □, 「㉠」을 두른 상자). 가는 선 네 개로 그려진 작은 네모가 글줄 높이에 있고
+// 다른 선(표 칸)과 이어지지 않으면 글자 테두리로 살린다 — 안의 글은 표시 글자(U+200B … U+200C)로 감싸고, 빈 네모는 그 폭만큼 전각 빈칸을 넣는다.
+// 조판기(typeset-model applyInlineBoxes)가 표시 글자를 지우고 그 범위에 글자 테두리를 건다. 예전에는 상자가 사라졌다(c1_2025_09_04, c2_2024_06_01).
+export const BOX_OPEN = '\u200B', BOX_CLOSE = '\u200C', BOX_PAD = '\uE1B2';
+// 상자 안 빈 폭은 BOX_PAD 글자 수로 적어 둔다(빈칸·전각 빈칸은 글 정리·HTML에서 한 칸으로 줄어든다). 조판기가 전각 빈칸으로 바꾼다.
+export function inlineBoxes(items, primitives, pageHeight) {
+  const lines = primitives.filter((p) => p.type === 'line' && !p.dash);
+  const hs = lines.filter((p) => p.orient === 'h').map((p) => ({ y: p.box[1], a: Math.min(p.box[0], p.box[2]), b: Math.max(p.box[0], p.box[2]) }));
+  const vs = lines.filter((p) => p.orient === 'v').map((p) => ({ x: p.box[0], a: Math.min(p.box[1], p.box[3]), b: Math.max(p.box[1], p.box[3]) }));
+  const near = (u, v, d = 1.2) => Math.abs(u - v) <= d, boxes = [];
+  for (const top of hs) for (const bottom of hs) {
+    const h = bottom.y - top.y, w = top.b - top.a;
+    if (h < 8 || h > 24 || w < 6 || w > 160 || !near(top.a, bottom.a) || !near(top.b, bottom.b)) continue;
+    const side = (x) => vs.some((v) => near(v.x, x) && v.a <= top.y + 1.2 && v.b >= bottom.y - 1.2);
+    if (!side(top.a) || !side(top.b)) continue;
+    // 표 칸이 아니다: 같은 높이 가로선이 상자 밖으로 이어지거나 세로선이 위아래로 이어지면 표의 일부다.
+    if (hs.some((l) => (near(l.y, top.y) || near(l.y, bottom.y)) && (l.a < top.a - 2 || l.b > top.b + 2) && l.b > top.a && l.a < top.b)) continue;
+    if (vs.some((l) => (near(l.x, top.a) || near(l.x, top.b)) && (l.a < top.y - 2 || l.b > bottom.y + 2) && l.b > top.y && l.a < bottom.y)) continue;
+    if (!boxes.some((b) => near(b.x0, top.a) && near(b.y0, top.y))) boxes.push({ x0: top.a, x1: top.b, y0: top.y, y1: bottom.y });
+  }
+  if (!boxes.length) return items;
+  const out = [...items], base = (item) => pageHeight - item.y;
+  for (const box of boxes) {
+    const h = box.y1 - box.y0, onLine = (item) => base(item) >= box.y0 + h * 0.3 && base(item) <= box.y1 + 1;
+    const inside = out.filter((item) => onLine(item) && item.x + item.width / 2 > box.x0 && item.x + item.width / 2 < box.x1 && String(item.value).trim()).sort((a, b) => a.x - b.x);
+    const neighbour = out.filter((item) => onLine(item) && !item.math && (Math.abs(item.x - box.x1) < 30 || Math.abs(item.x + item.width - box.x0) < 30)).sort((a, b) => b.height - a.height)[0];
+    if (inside.length) {
+      if (inside.some((item) => item.x < box.x0 - 1 || item.x + item.width > box.x1 + 1)) continue;
+      const first = out.indexOf(inside[0]), last = out.indexOf(inside.at(-1));
+      // 글이 든 상자는 글에 딱 맞게(빈 폭을 넣으면 글자 모양이 다른 조각마다 테두리가 따로 그려져 안쪽에 세로줄이 생긴다).
+      const pad = '';
+      out[first] = { ...out[first], value: BOX_OPEN + pad + out[first].value };
+      out[last] = { ...out[last], value: out[last].value + pad + BOX_CLOSE };
+    } else if (neighbour) {
+      const n = Math.max(2, Math.round((box.x1 - box.x0) / (neighbour.height * 0.5)) - 1);
+      out.push({ x: box.x0 + 1, y: neighbour.y, width: box.x1 - box.x0 - 2, height: neighbour.height, font: neighbour.font, raw: '',
+        value: BOX_OPEN + BOX_PAD.repeat(n) + BOX_CLOSE, math: false, box: true });
+    }
+  }
+  return out;
+}
+
 function clipItems(question, pdf, glyphs) {
   const advances = new Map(pdf.glyphs?.map((glyph) =>
     [`${glyph.fontId}:${glyph.codepoint}`, glyph.advance]) || []);
@@ -227,7 +269,7 @@ function clipItems(question, pdf, glyphs) {
       .sort((a, b) => gap(a) - gap(b) || b.height - a.height
         || Math.abs(a.transform[5] - item.transform[5]) - Math.abs(b.transform[5] - item.transform[5]))[0] || null;
   };
-  return attachTextScripts(attachTextCharges(clipped
+  return attachTextScripts(attachTextCharges(inlineBoxes(clipped
     .flatMap((item) => {
       const scriptOf = scriptBase(item);
       const offset = scriptOf ? (item.transform[5] - scriptOf.transform[5]) / scriptOf.height : null;
@@ -265,7 +307,7 @@ function clipItems(question, pdf, glyphs) {
         x += width;
         return part;
       });
-    })), false);
+    }), primitives, pdf.pageHeight)), false);
 }
 
 function findLines(items) {
@@ -395,6 +437,7 @@ export function lineRuns(line) {
   const items = leadingScripts(attachTextScripts(recoverEquationItems(line.items, line.y))
     .sort((left, right) => (Math.abs(left.x - right.x) < 0.6 ? 0 : left.x - right.x)
       || stackRank(left) - stackRank(right) || right.y - left.y));
+  const equationLine = items.some((item) => item.math && /→|⇄|⇌|\\rightarrow|\\rightleftharpoons|ΔH|\\Delta H/u.test(item.value)) && items.filter((item) => !item.math && /[가-힣]/u.test(item.value)).length <= 2;
   const runs = [];
   let previous = null;
   // 5E 기출 복원: 수식 글꼴의 작은 글자가 바로 앞 수식 글자보다 내려가/올라가 있으면 아래/위첨자(λ_A, v_B).
@@ -431,7 +474,14 @@ export function lineRuns(line) {
       && !attachedScript.test(value) && !/\s$/u.test(previous.value) && !/^\s/u.test(value);
     // 5E 기출 복원(10-25): 수식 글자 사이가 벌어져 있으면 수식 안 띄어쓰기(4pt 넘으면 ~, 2.2pt부터 `) — 「X 1 mol」이 「X1mol」로 붙었다(c1_2026_09_11).
     if (!spaced && previous?.math && item.math && runs.at(-1)?.kind === 'equation' && gap >= 2.2 && gap <= 12) runs.at(-1).script += gap > 4 ? '~' : '`';
-    if (spaced) {
+    // 5E 기출 복원(10-25): 식 사이 넓은 틈(「C(g)      v=k[A]」, 글자 높이 1.5배 넘게)은 그 폭만큼 빈 폭 표시 글자로(조판기가 전각 빈칸으로 바꿈).
+    // 선지 번호(①~⑤) 앞뒤는 선지 나누기에 쓰이므로 건드리지 않는다.
+    // 식 줄(→·⇄·=가 든 줄)에서 글자 크기가 같은 두 조각 사이만(첨자·표 머리줄·상자 안 글은 제외).
+    const wide = spaced && equationLine && (previous.math || item.math) && !item.box && !previous.box
+      && Math.abs(previous.height - item.height) < 1 && gap > Math.min(previous.height, item.height) * 1.5
+      && !/^[①-⑤\u200B]/u.test(value.trim()) && !/^[①-⑤]/u.test(String(previous.value).trim()) && !/[\u200B\u200C]/u.test(String(previous.value) + value);
+    if (wide) runs.push({ kind: 'text', value: ' ' + BOX_PAD.repeat(Math.min(16, Math.max(1, Math.round(gap / (Math.min(previous.height, item.height) * 0.5)) - 2))) + ' ' });
+    else if (spaced) {
       if (runs.at(-1)?.kind === 'text') runs.at(-1).value += ' ';
       else runs.push({ kind: 'text', value: ' ' });
     }
