@@ -20,7 +20,7 @@ const browser = await chromium.launch();
 const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
 await page.goto(server.origin + '/__blank');
 const rendered = await page.evaluate(async (ids) => {
-  (await import('/pdf-viewer.mjs?v=frame-20261020-1')).setPdfSource((name) => fetch('/__pdf/' + encodeURIComponent(name)).then((r) => r.arrayBuffer()));
+  (await import('/pdf-viewer.mjs?v=frame-20261025-1')).setPdfSource((name) => fetch('/__pdf/' + encodeURIComponent(name)).then((r) => r.arrayBuffer()));
   const f = await import('/exampool/frame.mjs'); const Document = await f.loadFrameEngine();
   const items = new Map((await (await fetch('/data/questions.json')).json()).items.map((q) => [q.id, q]));
   const out = [];

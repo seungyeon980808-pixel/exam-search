@@ -1,6 +1,6 @@
-import {pageProfile} from './typeset-model.js?v=1014-compact-panel';
-import {exportLayoutHwpx} from './native-hwpx.js?v=1014-compact-panel';
-import {assertNativeLayout} from './native-layout-check.js?v=1014-compact-panel';
+import {pageProfile} from './typeset-model.js?v=frame-20261025-1';
+import {exportLayoutHwpx} from './native-hwpx.js?v=frame-20261025-1';
+import {assertNativeLayout} from './native-layout-check.js?v=frame-20261025-1';
 
 export const QUESTION_PAGE_MODE='question-column';
 const HU=7200/25.4, PAD=Math.round(3*HU), MAX_HEIGHT=Math.round(1200*HU);
@@ -8,8 +8,9 @@ const parse=v=>typeof v==='string'?JSON.parse(v):v;
 
 // The exam profile determines the body width. The editable document itself
 // has one column and a content-sized physical page, independently of A4/B4/A3.
-export function questionPageProfile(profile={paper:'A4',columns:2},heightMm=1200){
-  const exam=pageProfile(profile),p=exam.page;
+// standard: 조판 기준(여백·단 간격) — 학교 기준이면 그 단 폭으로 문항을 조판한다(10-22 S4). 없으면 수능 틀.
+export function questionPageProfile(profile={paper:'A4',columns:2},heightMm=1200,standard){
+  const exam=pageProfile(profile,standard),p=exam.page;
   const body=Math.floor((p.width-p.marginLeft-p.marginRight-exam.spacing*(profile.columns-1))/profile.columns);
   return {page:{...p,width:body+2*PAD,height:Math.round(heightMm*HU),marginLeft:PAD,marginRight:PAD,marginTop:PAD,marginBottom:PAD},
     bodyWidth:body,targetHeight:p.height-p.marginTop-p.marginBottom,width:exam.width,spacing:0};

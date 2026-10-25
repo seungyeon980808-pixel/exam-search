@@ -86,7 +86,7 @@ try {
   await page.goto(base);
   for (const question of questions) {
     const result = await page.evaluate(async (question) => {
-      const { readQuestionPdf } = await import('./pdf-viewer.mjs?v=frame-20261020-1');
+      const { readQuestionPdf } = await import('./pdf-viewer.mjs?v=frame-20261025-1');
       const { verifiedGlyphMap, inQuestion } = await import('./live-fonts.mjs');
       const { buildLiveStructure } = await import('./live-convert.mjs');
       let pdf, map;

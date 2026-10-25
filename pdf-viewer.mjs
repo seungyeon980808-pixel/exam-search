@@ -42,7 +42,8 @@ function trimDocumentCache() {
     if (documentCache.size <= 4) break;
     if (documentUsers.get(name)) continue;
     documentCache.delete(name); byteCache.delete(name);
-    void promise.then(doc => doc.destroy()).catch(() => {});
+    // pdf.js 6.3.289의 문서 객체에는 destroy()가 없어(오류는 삼켜짐) 문서와 Web Worker가 쌓였다(5E M30). 불러오기 작업을 끝낸다.
+    void promise.then(doc => doc.loadingTask.destroy()).catch(() => {});
   }
 }
 function acquirePdf(name) {
@@ -176,7 +177,7 @@ const conversionDocuments = new Map();
 function conversionDocument(name, bytes) {
   const cached = conversionDocuments.get(name);
   if (cached?.bytes === bytes) { conversionDocuments.delete(name); conversionDocuments.set(name, cached); return cached.promise; }
-  if (cached) { conversionDocuments.delete(name); void cached.promise.then((doc) => doc.destroy()).catch(() => {}); }
+  if (cached) { conversionDocuments.delete(name); void cached.promise.then((doc) => doc.loadingTask.destroy()).catch(() => {}); }
   conversionWorker ||= new pdfjs.PDFWorker({ name: 'exam-conversion' });
   const task = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)), fontExtraProperties: true, ...options, worker: conversionWorker });
   const record = { bytes, promise: task.promise };
@@ -184,7 +185,7 @@ function conversionDocument(name, bytes) {
   conversionDocuments.set(name, record);
   while (conversionDocuments.size > 3) {
     const [oldest, value] = conversionDocuments.entries().next().value;
-    conversionDocuments.delete(oldest); void value.promise.then((doc) => doc.destroy()).catch(() => {});
+    conversionDocuments.delete(oldest); void value.promise.then((doc) => doc.loadingTask.destroy()).catch(() => {});
   }
   return record.promise;
 }

@@ -1,5 +1,5 @@
 import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
-import { validateParagraphs } from './editable-convert.mjs?v=frame-20261020-1';
+import { validateParagraphs } from './editable-convert.mjs?v=frame-20261025-1';
 import { restoreProseBlocks } from './prose-flow.mjs?v=readability-20261004-4';
 const letters = (text) => text.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
 const markers = '①②③④⑤';
@@ -52,7 +52,7 @@ export async function passageBlocks(question, deps = {}) {
   const indexed = split > 0 ? letters(question.text.slice(0, split)) : '';
   if (!indexed) return finish(reject('대조할 색인 지문이 없습니다.'));
   try {
-    const read = deps.readQuestionPdf || (await import('./pdf-viewer.mjs?v=frame-20261020-1')).readQuestionPdf;
+    const read = deps.readQuestionPdf || (await import('./pdf-viewer.mjs?v=frame-20261025-1')).readQuestionPdf;
     const glyphMap = deps.glyphMap || (await import('./live-fonts.mjs')).verifiedGlyphMap;
     const build = deps.build || (await import('./live-convert.mjs?v=library-release-20261011-3')).buildLiveStructure;
     const cache = passageCache.get(read) ?? new Map();

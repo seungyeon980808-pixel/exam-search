@@ -84,7 +84,7 @@ try {
      const old=(file?previous?.files:previous?.questions)?.[file?job.file.pdfFile:q.id];
      if(previous?.sourceRevision===manifest.sourceRevision&&previous?.recipe===recipe&&old?.sourceHash===sourceHash&&await existing(old.path))return old;
      const image=await page.evaluate(async({q,name,file})=>{
-      const viewer=await import('../pdf-viewer.mjs?v=frame-20261020-1');
+      const viewer=await import('../pdf-viewer.mjs?v=frame-20261025-1');
       const url=await(file?viewer.renderFileThumbnail(name):viewer.renderQuestion(q,1.6));
       try {const blob=await(await fetch(url)).blob();const bmp=await createImageBitmap(blob);
        const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});

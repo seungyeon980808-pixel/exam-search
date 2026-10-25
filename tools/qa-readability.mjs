@@ -284,10 +284,10 @@ async function collectQuestion(page, id, modes, captureSource) {
     const { getJson } = await import('./data.mjs?v=library-release-20261011-3');
     await getJson('/api/status');
     const q = await getJson(`/api/question?id=${encodeURIComponent(id)}`);
-    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=frame-20261020-1');
+    const { readQuestionPdf, renderQuestion } = await import('./pdf-viewer.mjs?v=frame-20261025-1');
     const { inQuestion } = await import('./live-fonts.mjs');
     const { resolveEditableContent } = await import('./editable-source.mjs?v=preview-crop-20261004-1');
-    const { createCollectionHwpx, equationScript, groupFractions } = await import('./editable-convert.mjs?v=frame-20261020-1');
+    const { createCollectionHwpx, equationScript, groupFractions } = await import('./editable-convert.mjs?v=frame-20261025-1');
     const { equationLineCollisions } = await import('./equation-spacing.mjs');
     const { default: init, HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     await init('./vendor/rhwp-studio/assets/rhwp_bg-PUGAA2uC.wasm');
@@ -346,7 +346,7 @@ async function collectQuestion(page, id, modes, captureSource) {
 
 async function collectCollections(page, ids) {
   return page.evaluate(async (ids) => {
-    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=frame-20261020-1');
+    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=frame-20261025-1');
     const { equationLineCollisions } = await import('./equation-spacing.mjs');
     const { HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     const b64 = (bytes) => { let raw = ''; for (let i = 0; i < bytes.length; i += 32768) raw += String.fromCharCode(...bytes.subarray(i, i + 32768)); return btoa(raw); };
@@ -371,7 +371,7 @@ async function collectCollections(page, ids) {
 async function collectOverflow(page) {
   return page.evaluate(async () => {
     const { longQuestionFixture, longQuestionSentinels, equationOverflowFixture } = await import('./test-fixtures/readability-overflow.mjs');
-    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=frame-20261020-1');
+    const { createCollectionHwpx } = await import('./editable-convert.mjs?v=frame-20261025-1');
     const { HwpDocument } = await import('./vendor/rhwp-studio/assets/rhwp-core.js');
     const result = { scope: 'synthetic-native-layout-only', longQuestion: [], equationOverflow: {} };
     for (const pagePerQuestion of [false, true]) {

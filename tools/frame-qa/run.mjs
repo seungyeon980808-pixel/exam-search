@@ -1,6 +1,7 @@
 // 5E 문항 틀 채점(AI 없음): 5E ExamPool 하네스(tools/kice-convert, 1,440문항 복원 95.7%)와 같은 채점표로
 // 기출 탐색기의 화면 없는 조판기(exampool/frame.mjs)를 잰다. 원본 PDF는 로컬 공유 폴더에서 읽기만 한다.
 //   node tools/frame-qa/run.mjs [--ids a,b] [--subject p1] [--sample N] [--limit N] [--workers 4] [--out _work/frame-qa/<이름>] [--keep-bytes]
+//   [--root <작업 사본 폴더>]
 //   EXAM_PDF_ROOT=<공유 폴더> (기본: 구글 드라이브 5E_공유폴더테스트_0916)
 import { startServer } from './server.mjs';
 import { createReadStream, existsSync, readFileSync, mkdirSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
@@ -37,7 +38,8 @@ const OUT = resolve(ROOT, args.out || `_work/frame-qa/${new Date().toISOString()
 mkdirSync(join(OUT, 'shots'), { recursive: true });
 const log = (...parts) => { const line = parts.join(' '); console.log(line); appendFileSync(join(OUT, 'run.log'), line + '\n'); };
 
-const server = await startServer();
+// --root <폴더>: 그 폴더(작업 사본을 떠 둔 것)를 내보낸다 — 채점 중에 코드를 고쳐도 결과가 섞이지 않게.
+const server = await startServer(0, args.root ? resolve(args.root) : undefined);
 const origin = server.origin;
 
 async function runBatch(browser, batch) {
@@ -47,7 +49,7 @@ async function runBatch(browser, batch) {
   await page.goto(origin + '/__blank');
   await page.evaluate(async () => {
     window.__frame = await import('/exampool/frame.mjs');
-    const viewer = await import('/pdf-viewer.mjs?v=frame-20261020-1');
+    const viewer = await import('/pdf-viewer.mjs?v=frame-20261025-1');
     viewer.setPdfSource((name) => fetch('/__pdf/' + encodeURIComponent(name)).then((r) => { if (!r.ok) throw Error('PDF 없음 ' + name); return r.arrayBuffer(); }));
     await window.__frame.loadFrameEngine();
   });
@@ -75,7 +77,8 @@ async function runBatch(browser, batch) {
         if (keep) { let raw = ''; for (let i = 0; i < typeset.bytes.length; i += 32768) raw += String.fromCharCode(...typeset.bytes.subarray(i, i + 32768)); bytes = btoa(raw); }
         // 모으기(기출 탐색기 한글 변환이 실제로 여는 문서): 문항 한 개 문서 → 시험지 문서에서 글이 그대로인지.
         let assemble = 'ok';
-        const flat = (value) => String(value).replace(/\s+/g, '');
+        // 폭 없는 글자(U+2060: 시험지 첫 빈 문단·줄 첫머리 수식 앞)는 보이지 않으므로 빼고 견준다.
+        const flat = (value) => String(value).replace(/&#8288;/g, '').replace(/[\s\u2060]+/g, '');
         try {
           t = performance.now();
           const one = await f.assembleFrameCollection([{ id: q.id, bytes: typeset.bytes, height: typeset.height }]);
@@ -97,7 +100,7 @@ async function runBatch(browser, batch) {
       const bytes = await f.assembleFrameCollection(docs.map(({ id, bytes, height }) => ({ id, bytes, height })));
       const d = new Document(bytes);
       try {
-        const raw = d.getTextFileText(), all = (raw.startsWith('"') ? JSON.parse(raw) : raw).replace(/\s+/g, '');
+        const raw = d.getTextFileText(), all = (raw.startsWith('"') ? JSON.parse(raw) : raw).replace(/&#8288;/g, '').replace(/[\s\u2060]+/g, '');
         let at = 0; for (const doc of docs) { const k = all.indexOf(doc.text, at); if (k < 0) return `${doc.id} 글 빠짐`; at = k + doc.text.length; }
         const marks = JSON.parse(d.getBookmarks()).length; if (marks !== docs.length) return `이동 표시 ${marks}/${docs.length}`;
         return `ok ${docs.length}문항 ${d.pageCount()}쪽`;

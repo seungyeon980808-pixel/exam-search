@@ -1,5 +1,5 @@
-import {newQuestion,block,makeTable,WRAP} from './model.js';
-import {RECORDS as RAW} from './shape-stats.js';
+import {newQuestion,block,makeTable,WRAP} from './model.js?v=frame-20261025-1';
+import {RECORDS as RAW} from './shape-stats.js?v=frame-20261025-1';
 
 // 새 문항 틀: ① 유형 → ② 자료 구조, 클릭 2번. 배치는 고르지 않고 기출에서 가장 많이 쓰인 배치로 정한다.
 // 그림·그래프·표는 모두 '자료'다. 무엇을 넣을지는 틀을 만든 뒤 엑셀(구성 편집)에서 칸마다 고른다.

@@ -4,8 +4,8 @@
 // 3) 후보를 인쇄용 배율(scale 4 ≈ 288dpi)로 그려 픽셀을 본다. 흰 세로 고랑과 (가)·(나) 캡션 띠로 나란한 그림을 나누고,
 //    캡션 글자는 자른 그림에서 뺀다(ExamPool이 캡션을 따로 찍음).
 // 좌표는 모두 PDF pt, 위가 0(문항 색인 box와 같은 좌표계).
-import {readQuestionPdf,renderFigureCanvas} from '../../pdf-viewer.mjs?v=frame-20261020-1';
-import {drawingPrimitives,figureRegions,analyse,tableGrids,textItemBox} from '../es/pdf-drawings.mjs?v=readability-20261004-4';
+import {readQuestionPdf,renderFigureCanvas} from '../../pdf-viewer.mjs?v=frame-20261025-1';
+import {drawingPrimitives,figureRegions,analyse,tableGrids,textItemBox} from '../es/pdf-drawings.mjs?v=frame-20261025-1';
 
 const CAPTION=/^\s*[(（]\s*([가-하])\s*[)）]\s*$/u;
 const CHOICE=/[①②③④⑤]/u;
@@ -349,6 +349,10 @@ export async function detectFigures(item,{signal,scale=4,choices=false}={}){
   const figs=[];
   for(const cand of cands){
     aborted(signal);
+    // 그림 바로 왼쪽에 붙은 (가)·(나) 이름표(평가원: 위아래로 쌓인 그래프 옆)는 그림에 넣는다 — 밖에 두면 지문 줄로 들어가
+    // 「그림 (가)는 … 종 / (가) / ㉠의 …」처럼 본문이 끊기고 그림은 이름표 없이 잘렸다(10-25 생명Ⅰ 12번). 그림 안 글 줄은 엔진이 지문에서 뺀다.
+    if(!cand.table){const left=chains.filter(c=>CAPTION.test(c.str)&&c.box[2]<=cand.box[0]+4&&c.box[2]>=cand.box[0]-40&&mid(c.box)[1]>=cand.box[1]&&mid(c.box)[1]<=cand.box[3]);
+      if(left.length){const x0=Math.min(...left.map(c=>c.box[0]))-1;cand.box=[x0,cand.box[1],cand.box[2],cand.box[3]];if(cand.ink)cand.ink=[Math.min(cand.ink[0],x0),cand.ink[1],cand.ink[2],cand.ink[3]];cand.leftCaptions=left;}}
     const {canvas,g,m,box,texts}=await prepare(item,cand,ctx,scale,signal);
     // strip: 상자 윗변과 아랫변처럼 띠 폭의 40% 넘게 이어진 가로 잉크 줄이 위아래로 있어야 흐름도다(수식 줄은 글자·밑줄뿐).
     if(cand.strip){const t=trim(m,rect(0,0,m.W,m.H));if(!t)continue;const pr=projection(m,t,'y'),long=[...pr.keys()].filter(i=>pr[i]>=(t.x1-t.x0)*.4);if(!long.length||long.at(-1)-long[0]<body*scale*.5)continue;}
@@ -420,8 +424,8 @@ export async function debugOverlay(item){
 // ---------------------------------------------------------------------------------------------
 // 표: 괘선 표를 편집 가능한 ExamPool 표(행·열·병합·칸 글)로 읽기
 
-import {convertQuestionNow} from '../es/live-convert.mjs';
-import {runsText,clean,splitEquationParens} from './rules.js';
+import {convertQuestionNow} from '../es/live-convert.mjs?v=frame-20261025-1';
+import {runsText,clean,splitEquationParens} from './rules.js?v=frame-20261025-1';
 
 // 짝이 안 맞는 괄호는 수식 밖으로("($L)$" → "($L$)"), 엔진 본문과 같은 규칙.
 // 표 기호 하나(○ × △ ● ?)만 든 수식은 글자로 둔다("$○$" → "○").
@@ -461,7 +465,8 @@ export async function detectTables(item,{signal}={}){
     // 칸 글 넘침이 잦은 모양은 그림으로 보낸다(tables-check × run4 조판 결과로 정함: 폭 150pt 미만이면서 칸을 90% 넘게
     // 채우는 글이 있는 표 28개 중 23개, 한 칸 3줄 이상 3개 중 3개가 넘침).
     for(const t of out){if(t.source!=='grid'||!t.colWidths)continue;t.fit=tableFit(t);
-      if((t.widthPt<150&&t.fit.fill>=.9)||t.fit.lines>=3){t.confidence=Math.min(t.confidence,.4);t.reason=t.fit.lines>=3?'한 칸에 글 3줄 이상(조판 넘침 위험)':'좁은 표에 칸을 꽉 채운 글(조판 넘침 위험)';}}
+      // 10-25: 「좁은 표에 칸을 꽉 채운 글」 규칙은 뺐다 — 예전 A4 좁은 단에서 넘치던 결과로 정한 것. 지금은 B4 원본 폭·원본 글자 비율로 넣어 넘치지 않는다(16번 (나) 표가 그림이 됐음).
+      if(t.fit.lines>=3){t.confidence=Math.min(t.confidence,.4);t.reason='한 칸에 글 3줄 이상(조판 넘침 위험)';}}
     for(const c of ctx.out.filter(o=>o.table)){
       if(out.some(t=>t.box&&iou(t.box,c.box)>.4))continue;
       out.push({box:c.box,page:item.page,rows:0,cols:0,cells:[],merges:[],headerRows:0,caption:null,confidence:.1,source:'figure',

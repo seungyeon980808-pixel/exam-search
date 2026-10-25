@@ -290,7 +290,7 @@ export async function createCollectionHwpx(resolvedItems, { pagePerQuestion = fa
   // 5E 문항 틀로 만든 문항이 있으면 5E 시험지 규칙(B4 2단, 문항을 자르지 않음)으로 문단을 그대로 모은다.
   // 기본 변환 문항은 문항마다 따로 만든 문서의 문단을 같은 방식으로 옮긴다.
   if (resolvedItems.some((item) => item?.frame?.bytes)) {
-    const frame = await import('./exampool/frame.mjs?v=frame-20261020-1');
+    const frame = await import('./exampool/frame.mjs?v=frame-20261025-1');
     const entries = [];
     for (const [index, item] of resolvedItems.entries()) {
       const id = item.questionId || item.question?.id || `item-${index}`;
@@ -332,7 +332,7 @@ export const questionBookmark = (id) => `exam_question_${encodeURIComponent(id)}
 /** Resolve saved bookmarks instead of assuming paragraph indexes survive pagination or editing. */
 // engine 'frame': 5E 문항 틀 문서는 이미 받은 0.8.7 엔진으로 읽는다(0.8.6 엔진을 따로 내려받지 않음).
 const readerCore = async (engine) => engine === 'frame'
-  ? (await import('./exampool/frame.mjs?v=frame-20261020-1')).loadFrameEngine() : core();
+  ? (await import('./exampool/frame.mjs?v=frame-20261025-1')).loadFrameEngine() : core();
 
 export async function readQuestionTargets(bytes, { engine } = {}) {
   const HwpDocument = await readerCore(engine);

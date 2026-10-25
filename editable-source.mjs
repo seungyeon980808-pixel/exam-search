@@ -1,7 +1,7 @@
-import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=frame-20261020-1';
+import { paragraphsForPrepared, safeTextParagraphs, validateQuestionParagraphs } from './editable-convert.mjs?v=frame-20261025-1';
 import { restoreFigures, withoutFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
 import { passageBlocks, passageKey } from './shared-passage.mjs?v=library-release-20261011-3';
-import { finalizeContentQuality } from './content-quality.mjs?v=frame-20261020-1';
+import { finalizeContentQuality } from './content-quality.mjs?v=frame-20261025-1';
 
 let indexPromise;
 export async function editableEntries() {
@@ -67,7 +67,7 @@ export async function resolveEditableContent(question, dependencies = {}) {
   const frameFailures = [];
   // 브라우저에서만(한글 엔진·그림 그리기가 화면 도구를 쓴다). 노드 단위 검사는 기존 변환을 그대로 본다.
   if (dependencies.frame ?? typeof document !== 'undefined') {
-    const frame = dependencies.frameModule ? await dependencies.frameModule() : await import('./exampool/frame.mjs?v=frame-20261020-1');
+    const frame = dependencies.frameModule ? await dependencies.frameModule() : await import('./exampool/frame.mjs?v=frame-20261025-1');
     if (frame.frameEligible(question)) {
       try {
         const converted = await frame.convertFrame(question, { signal: dependencies.signal, includeImages });

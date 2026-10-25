@@ -1,18 +1,22 @@
-import {exportLayoutHwpx,restackPictureLines} from './native-hwpx.js?v=1014-compact-panel';
+import {exportLayoutHwpx,restackPictureLines} from './native-hwpx.js?v=frame-20261025-1';
 export const PAPER_MM={A4:[210,297],B4:[257,364],A3:[297,420]};
-export const LAYOUT_VERSION=11;
+export const LAYOUT_VERSION=13;
 // 평가원 본문 글자: 장평 95%·자간 -5%(같은 글자 크기에서 한 줄에 약 10% 더 들어간다). 새로 조판하는 문항에만 건다.
-export const TEXT_RATIO=95,TEXT_SPACING=-5,TEXT_WIDTH=(TEXT_RATIO+TEXT_SPACING)/100;
+import {nativeRuns} from './live-patch.js?v=frame-20261025-1';
+import {KICE_STANDARD,layoutValues,standardForPaper} from './typeset-standard.js?v=frame-20261025-1';
+// 본문 글자 장평·자간 기본값은 조판 기준(「수능 틀」)에서 읽는다.
+export const TEXT_RATIO=KICE_STANDARD.text.ratio,TEXT_SPACING=KICE_STANDARD.text.spacing,TEXT_WIDTH=(TEXT_RATIO+TEXT_SPACING)/100;
 const HU=7200/25.4;
-export function pageProfile(profile={paper:'A4',columns:2}){
+export function pageProfile(profile={paper:'A4',columns:2},standard=KICE_STANDARD){
   if(!PAPER_MM[profile.paper]||![1,2].includes(profile.columns))throw Error('용지와 단 수를 확인하세요.');
-  const [w,h]=PAPER_MM[profile.paper],margin=15,spacing=8;
-  return {page:{width:Math.round(w*HU),height:Math.round(h*HU),marginLeft:Math.round(margin*HU),marginRight:Math.round(margin*HU),marginTop:Math.round(margin*HU),marginBottom:Math.round(margin*HU),marginHeader:0,marginFooter:0,marginGutter:0,landscape:false},spacing:Math.round(spacing*HU),width:Math.floor(((w-2*margin-(profile.columns-1)*spacing)/profile.columns)*HU/75)-8};
+  // B4·A3 2단은 단 폭을 평가원 원본(111.98mm)으로 맞춘 여백을 쓴다(standardForPaper, 10-24 용지 원칙) — 문항 조판·시험지 묶기·검사가 같은 값을 쓴다.
+  const [w,h]=PAPER_MM[profile.paper],L=layoutValues(profile.columns===2?standardForPaper(standard,profile.paper):standard),margin=L.margin,spacing=L.columnGap;
+  return {page:{width:Math.round(w*HU),height:Math.round(h*HU),marginLeft:Math.round(margin.left*HU),marginRight:Math.round(margin.right*HU),marginTop:Math.round(margin.top*HU),marginBottom:Math.round(margin.bottom*HU),marginHeader:0,marginFooter:0,marginGutter:0,landscape:false},spacing:Math.round(spacing*HU),width:Math.floor(((w-margin.left-margin.right-(profile.columns-1)*spacing)/profile.columns)*HU/75)-8};
 }
 // 한글 문서에 실제로 나오는 값: 번호·유형·선지 표현·발문·구성·선지·선지표·선지 배열·[3점].
 // 단원·성취기준·정답·배점·출처·해설·문항 상태는 조판에 영향이 없으므로 바꿔도 한글 창을 다시 그리지 않는다.
 // 배점은 3점일 때만 [3점]으로 찍힌다. 그때만 지문에 넣어 다른 문항의 저장한 조판 지문은 그대로 둔다.
-export const renderedContent=q=>({number:q.number,type:q.type,style:q.style,ask:q.ask,blocks:q.blocks,choices:q.choices,choiceTable:q.choiceTable,choiceLayout:q.choiceLayout,...(q.points===3?{pointsMark:3}:{})});
+export const renderedContent=q=>({standardId:q.standardId,askGap:q.askGap,choicesGap:q.choicesGap,number:q.number,type:q.type,style:q.style,ask:q.ask,blocks:q.blocks,choices:q.choices,choiceTable:q.choiceTable,choiceLayout:q.choiceLayout,...(q.points===3?{pointsMark:3}:{})});
 const sha256=async text=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(v=>v.toString(16).padStart(2,'0')).join('');
 export const questionFingerprint=q=>sha256(JSON.stringify(renderedContent(q)));
 // 이전 판은 조판과 상관없는 칸까지 지문에 넣었다. 그때 저장한 조판도 내용이 같으면 그대로 인정한다.
@@ -25,16 +29,52 @@ export const mathParts=value=>String(value).split(/(\$\$[\s\S]+?\$\$|\$[^$\n]+?\
   return {math,text:math?text.startsWith('$$')?text.slice(2,-2):text.startsWith('$')?text.slice(1,-1):text.startsWith('\\(')?text.slice(2,-2):text.slice(5,-2):text};
 });
 
-export async function normalizeQuestionImport(bytes,JSZip){
+// 표 바깥 여백(왼·오)을 0으로 바꾸고, 엔진이 표를 넣을 때 그 여백만큼 줄여 둔 폭을 표 폭과 각 줄 마지막 칸 폭에 되돌린다.
+// 되돌리지 않으면 표가 계획보다 약 8px 좁고 4px 안쪽에 놓여 〈보기〉·상자가 단 끝에 닿지 않고 마지막 선지가 넘쳤다(10-25 실측 30600 → 30000).
+export function widenTablesByMargins(xml){
+  xml=xml.replace(/<hp:tbl\b[\s\S]*?(?=<hp:tr>)/g,head=>{const m=head.match(/<hp:outMargin\b[^>]*>/)?.[0]||'',add=Number(m.match(/\bleft="(\d+)"/)?.[1]||0)+Number(m.match(/\bright="(\d+)"/)?.[1]||0);
+    let h=head.replace(/<hp:outMargin\b[^>]*>/,mm=>mm.replace(/\b(left|right)="\d+"/g,'$1="0"'));
+    if(add>0)h=h.replace(/<hp:sz\b([^>]*?)\bwidth="(\d+)"/,(t,pre,w)=>`<hp:sz${pre}width="${Number(w)+add}"`).replace(/^<hp:tbl\b/,`<hp:tbl data-widen="${add}"`);
+    return h;});
+  if(!xml.includes('data-widen='))return xml;
+  const stack=[];let cell=null;
+  xml=xml.replace(/<hp:tbl\b[^>]*>|<\/hp:tbl>|<hp:cellAddr\b[^>]*>|<hp:cellSpan\b[^>]*>|<hp:cellSz\b[^>]*>/g,tag=>{
+    if(tag.startsWith('<hp:tbl')){stack.push({add:Number(tag.match(/data-widen="(\d+)"/)?.[1]||0),cols:Number(tag.match(/\bcolCnt="(\d+)"/)?.[1]||0)});cell=null;return tag;}
+    if(tag==='</hp:tbl>'){stack.pop();cell=null;return tag;}
+    const t=stack.at(-1);if(!t)return tag;
+    if(tag.startsWith('<hp:cellAddr')){cell={c:Number(tag.match(/\bcolAddr="(\d+)"/)?.[1]||0),span:1};return tag;}
+    if(tag.startsWith('<hp:cellSpan')){if(cell)cell.span=Number(tag.match(/\bcolSpan="(\d+)"/)?.[1]||1);return tag;}
+    if(cell&&t.add>0&&cell.c+cell.span===t.cols){const out=tag.replace(/\bwidth="(\d+)"/,(x,w)=>`width="${Number(w)+t.add}"`);cell=null;return out;}
+    cell=null;return tag;});
+  return xml.replace(/ data-widen="\d+"/g,'');
+}
+export async function normalizeQuestionImport(bytes,JSZip,{standard=KICE_STANDARD}={}){
+  const L=layoutValues(standard);
   const zip=await JSZip.loadAsync(new Uint8Array(bytes));
   // The HTML importer adds a 20px indent to table anchor paragraphs, and
   // parses CSS cell padding but leaves hasMargin off. Correct only this newly
   // generated question document, before the user starts editing its layout.
   let header=await zip.file('Contents/header.xml').async('string');
   header=header.replace(/<hc:(left|right|intent) value="\d+"/g,'<hc:$1 value="0"');
-  // 한글 줄 나눔은 평가원처럼 어절 단위(KEEP_WORD). 들여온 문단 모양 일부가 글자 단위(BREAK_WORD)로 들어온다.
-  header=header.replace(/breakNonLatinWord="BREAK_WORD"/g,'breakNonLatinWord="KEEP_WORD"');
-  header=header.replace(/<hh:ratio\b[^>]*\/>/g,tag=>tag.replace(/="\d+"/g,`="${TEXT_RATIO}"`)).replace(/<hh:spacing\b[^>]*\/>/g,tag=>tag.replace(/="-?\d+"/g,`="${TEXT_SPACING}"`));
+  // 한글 줄 나눔은 평가원처럼 어절 단위. HWPX에서는 BREAK_WORD가 「어절」(rhwp koreanBreakUnit 0), KEEP_WORD가 「글자」다
+  // (10-22 실험: KEEP_WORD로 바꾸던 예전 코드가 거꾸로 글자 단위로 만들어 「설계|한다」처럼 어절 가운데에서 끊겼다).
+  header=header.replace(/breakNonLatinWord="KEEP_WORD"/g,'breakNonLatinWord="BREAK_WORD"');
+  header=header.replace(/<hh:ratio\b[^>]*\/>/g,tag=>tag.replace(/="\d+"/g,`="${L.ratio}"`)).replace(/<hh:spacing\b[^>]*\/>/g,tag=>tag.replace(/="-?\d+"/g,`="${L.spacing}"`));
+  // 좁힌 줄(10-25): 조판이 글자색 #0A0BNN(NN = 더 좁힐 자간 %)으로 표시한 글자 모양은 자간을 그만큼 더 좁히고 검은색으로 되돌린다.
+  // 평가원 원본은 칸·〈보기〉 줄의 낱말이 조금 넘치면 그 줄 자간을 좁혀 한 줄에 넣는다. 한글 엔진의 HTML 읽기는 letter-spacing을 받지 않는다.
+  header=header.replace(/<hh:charPr\b[^>]*textColor="#0A0B([0-9A-F]{2})"[^>]*>[\s\S]*?<\/hh:charPr>/gi,(m,nn)=>m.replace(/textColor="#0A0B[0-9A-F]{2}"/i,'textColor="#000000"').replace(/<hh:spacing\b[^>]*\/>/,tag=>tag.replace(/="-?\d+"/g,`="${L.spacing-parseInt(nn,16)}"`)));
+  // 학교 기준(10-22 S4): 본문 글꼴·글자 크기·줄 간격을 기준 값으로. 크기는 모든 글자 모양을 같은 비율로(11pt 기준), 글꼴은 본문 함초롬바탕만,
+  // 줄 간격은 본문 160%만(표 칸 130%·〈보기〉 150%는 그대로). 수능 틀이면 손대지 않는다(바이트 동일).
+  if(standard&&standard.id!==KICE_STANDARD.id){
+    const T=standard.text||{},scale=(T.size||11)/11;
+    // 글자 크기는 조판(handoff)이 틀 값(text.size)으로 이미 넣는다(10-25) — 여기서 다시 키우지 않는다.
+    void scale;
+    if(T.font&&T.font!=='함초롬바탕')header=header.replace(/face="함초롬바탕"/g,`face="${T.font.replace(/[&<>"]/g,'')}"`);
+    if(T.lineSpacing&&T.lineSpacing!==160)header=header.replace(/(<hh:lineSpacing type="PERCENT" value=")160"/g,`$1${Math.round(T.lineSpacing)}"`);
+    // 조판 설정(10-23): 한글 줄 나눔 「글자」, 본문 정렬 「왼쪽」을 고르면 바꾼다(기본은 어절·양쪽).
+    if(T.break==='char')header=header.replace(/breakNonLatinWord="BREAK_WORD"/g,'breakNonLatinWord="KEEP_WORD"');
+    if(T.align==='left')header=header.replace(/(<hh:align\b[^>]*horizontal=")JUSTIFY"/g,'$1LEFT"');
+  }
   let xml=await zip.file('Contents/section0.xml').async('string');
   // Center the table's anchor paragraph, including nested tables. Cell text
   // alignment alone does not position an inline table. Clone the styles so
@@ -66,14 +106,16 @@ export async function normalizeQuestionImport(bytes,JSZip){
     const center=new Set([...styles.entries()].filter(([,v])=>/horizontal="CENTER"/.test(v)).map(([k])=>k));
     for(const p of marks.sort((a,b)=>b.index-a.index)){
       const old=p.tag.match(/paraPrIDRef="(\d+)"/)?.[1];if(!center.has(old))continue;
-      if(!spacing.has(old)){const id=String(nextId++);spacing.set(old,id);header=header.replace('</hh:paraProperties>',styles.get(old).replace(/\bid="\d+"/,`id="${id}"`).replace(/(<hh:lineSpacing type="PERCENT" value=")\d+/g,'$1130')+'</hh:paraProperties>');}
+      if(!spacing.has(old)){const id=String(nextId++);spacing.set(old,id);header=header.replace('</hh:paraProperties>',styles.get(old).replace(/\bid="\d+"/,`id="${id}"`).replace(/(<hh:lineSpacing type="PERCENT" value=")\d+/g,'$1'+L.tableLineSpacing)+'</hh:paraProperties>');}
       xml=xml.slice(0,p.index)+p.tag.replace(/paraPrIDRef="\d+"/,`paraPrIDRef="${spacing.get(old)}"`)+xml.slice(p.index+p.tag.length);
     }
   }
   header=header.replace(/(<hh:paraProperties\b[^>]*itemCnt=")\d+"/,`$1${styles.size+clones.size+spacing.size}"`);
   zip.file('Contents/header.xml',header);
   xml=xml.replace(/<hp:tc\b[^>]*>/g,tag=>tag.replace(/hasMargin="0"/,'hasMargin="1"'));
-  xml=xml.replace(/<hp:tbl\b[\s\S]*?(?=<hp:tr>)/g,tag=>tag.replace(/<hp:outMargin\b[^>]*>/,margin=>margin.replace(/\b(left|right)="\d+"/g,'$1="0"')));
+  xml=widenTablesByMargins(xml);
+  // 한 줄 선지 칸(①~⑤로 시작, 줄바꿈 없음)은 좌우 안 여백 0 — 평가원은 탭으로 띄워 ①이 〈보기〉 왼쪽 끝과 맞는다(엔진은 여백 0을 기본값 141로 바꿔 2px 들어갔다).
+  xml=xml.replace(/<hp:tc\b[^>]*>(?:(?!<\/hp:tc>)[\s\S])*?<\/hp:tc>/g,tc=>/^[^]*?<hp:t>[①-⑤]/.test(tc)&&!/<hp:lineBreak\/>/.test(tc)&&!/<hp:tbl\b/.test(tc)?tc.replace(/<hp:cellMargin\b([^>]*)>/,(m,a)=>`<hp:cellMargin${a.replace(/\b(left|right)="\d+"/g,'$1="0"')}>`):tc);
   // 가운데 그림 문단의 빠진 줄 배치를 채운다(없으면 다시 열 때 그림이 사라진다).
   xml=restackPictureLines(xml);
   zip.file('Contents/section0.xml',xml);
@@ -98,16 +140,18 @@ export function centerCellPictures(document){
   if(n)document.reflowLinesegs?.();
   return n;
 }
-export function applyQuestionIndent(document,number,{body=false,askLead='',askIndent=0}={}){
+export function applyQuestionIndent(document,number,{body=false,askLead='',askIndent=0,hangPx=0}={}){
   if(!number)return;
   const prefix=`${number}. `;
   for(let page=0;page<document.pageCount();page++){
-    const run=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>r.charStart===0&&r.text.startsWith(prefix)||!r.cellPath?.length&&r.text.startsWith(prefix));
+    // 번호를 굵게 따로 찍으면(10-24) 「7.」이 혼자 한 조각이 된다 — 그 조각도 번호로 본다.
+    const isNo=r=>r.text.startsWith(prefix)||r.text===`${number}.`;
+    const run=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>r.charStart===0&&isNo(r)||!r.cellPath?.length&&isNo(r));
     if(!run)continue;
     // 글 옆 자료처럼 번호가 표 칸 안에 있으면 칸 문단은 내어쓰기를 건드리지 않는다.
     if(run.cellPath?.length)return;
     // 어울림 그림이 문단 맨 앞에 있으면 번호 글은 그 뒤에서 시작한다.
-    const at=run.charStart||0,start=JSON.parse(document.getCursorRect(run.secIdx,run.paraIdx,at)),end=JSON.parse(document.getCursorRect(run.secIdx,run.paraIdx,at+prefix.length)),hang=Math.round((end.x-start.x)*150);
+    const at=run.charStart||0,start=JSON.parse(document.getCursorRect(run.secIdx,run.paraIdx,at)),end=JSON.parse(document.getCursorRect(run.secIdx,run.paraIdx,at+prefix.length)),hang=hangPx>0?Math.round(hangPx*150):Math.round((end.x-start.x)*150);
     document.applyParaFormat(run.secIdx,run.paraIdx,JSON.stringify({indent:-hang}));
     // 평가원 지면: 번호 다음 문단(자료 표·발문·<보기>·선지)은 모두 번호 너비만큼 들어가 시작한다. 발문 첫 줄은 한 글자 더.
     if(body){
@@ -134,12 +178,19 @@ export async function applyReferenceBogiIndent(document,JSZip,CFB=globalThis.XLS
   const tableKey=r=>JSON.stringify([r.secIdx,r.parentParaIdx,r.cellPath.slice(0,-1),r.cellPath.at(-1).controlIndex]);
   const boxes=new Set(runs.filter(r=>r.cellPath?.length&&r.text==='<보 기>').map(tableKey)),indents=new Map();
   const paraKey=(sec,parent,path)=>JSON.stringify([sec,parent,path]);
+  // 한 문단 앞부분이 여러 조각으로 올 수 있다(「(」만 따로 · 「다) …」 — 10-24 11번). 같은 문단 조각을 이어 앞머리를 찾는다.
+  const heads=new Map();for(const r of runs){if(!r.cellPath?.length)continue;const k=JSON.stringify([r.secIdx,r.parentParaIdx,r.cellPath]);heads.set(k,[...(heads.get(k)||[]),r]);}
+  const headText=run=>(heads.get(JSON.stringify([run.secIdx,run.parentParaIdx,run.cellPath]))||[run]).filter(r=>r.charStart<12).sort((a,b)=>a.charStart-b.charStart).reduce((t,r)=>r.charStart===t.length?t+r.text:t,'');
   for(const run of runs){
     if(!run.cellPath?.length||run.charStart!==0)continue;
     const bogi=run.cellPath.at(-1).cellIndex===5&&boxes.has(tableKey(run));
-    const prefix=run.text.match(bogi?/^[ㄱ-ㅎ]\. /:/^(?:[①-⑤]|\([가-힣]\)) /)?.[0];if(!prefix)continue;
+    // 상자 안 항목 줄(○ · (가) · ①)도 — 〈보기〉 밖 「ㄱ.」은 그대로 — handoff가 항목마다 문단을 나눠 넣는다(10-24).
+    // 빈 줄은 「ㄱ.」 뒤 칸이 줄바꿈 없는 공백(nbsp)으로 온다 — 그 경우도 찾아야 새 문항부터 내어쓰기가 걸린다.
+    const prefix=headText(run).match(bogi?/^[ㄱ-ㅎ]\.[ \u00a0]/:/^(?:[①-⑤○◦•▪◆□■]|\([가-힣]\))[ \u00a0]/)?.[0];if(!prefix)continue;
     const path=JSON.stringify(run.cellPath),start=JSON.parse(document.getCursorRectByPath(run.secIdx,run.parentParaIdx,path,0)),end=JSON.parse(document.getCursorRectByPath(run.secIdx,run.parentParaIdx,path,prefix.length));
     indents.set(paraKey(run.secIdx,run.parentParaIdx,run.cellPath),-Math.round((end.x-start.x)*75));
+    // 번호 뒤 보통 띄어쓰기는 고정 띄어쓰기로(10-24 지적 9) — 폭은 같고, 번호와 글이 떨어지지 않으며 조판 부호(빨간 V)가 보인다.
+    if(prefix.endsWith(' ')){const at=prefix.length-1;document.deleteTextInCellByPath(run.secIdx,run.parentParaIdx,path,at,1);document.insertTextInCellByPath(run.secIdx,run.parentParaIdx,path,at,'\u00a0');}
   }
   const bytes=CFB?exportLayoutHwpx(document,CFB):document.exportHwpx();
   const zip=await JSZip.loadAsync(new Uint8Array(bytes));
@@ -280,6 +331,31 @@ export function applyFloatingPictures(document,floats){
   }
   if(want.some(f=>!f.done))throw Error('어울림 그림을 문단에서 찾지 못했습니다.');
 }
+// 상자 칸 안 어울림 그림(10-25): 칸 첫 문단 맨 앞에 든 그림을 글 앞 그림으로 바꿔 문단 오른쪽 위(머리 한 줄 아래)에 둔다.
+// 칸 안 글은 조판(handoff)이 그림 높이만큼 좁게 나눠 두었으므로 엔진 어울림(Square)을 쓰지 않는다 — 칸 안 글을 엔진이 다시 나누지 않는다.
+export function applyCellFloatingPictures(document,floats){
+  if(!floats?.length)return;
+  const want=floats.map(f=>({align:f.align==='Left'?'Left':'Right',anchorPara:Number(f.anchorPara)||0,line:Number(f.line)||0,bytes:Uint8Array.from(atob(String(f.data).split(',')[1]||''),c=>c.charCodeAt(0)),done:false}));
+  const seen=new Set();
+  for(let page=0;page<document.pageCount();page++)for(const c of JSON.parse(document.getPageControlLayout(page)).controls||[]){
+    if(c.type!=='image'||!c.cellPath?.length)continue;
+    const path=JSON.stringify(c.cellPath),key=`${c.secIdx}:${c.paraIdx}:${path}:${c.controlIdx}`;if(seen.has(key))continue;seen.add(key);
+    const data=document.getControlImageData(c.secIdx,c.paraIdx,path,c.controlIdx),f=want.find(f=>!f.done&&f.bytes.length===data.length&&f.bytes.every((b,i)=>b===data[i]));
+    if(!f)continue;f.done=true;
+    // 기준 줄: 같은 칸의 anchorPara번째 문단 첫 줄 위(쪽 좌표 px). 쪽 위 여백까지 포함한 종이 기준으로 넣는다.
+    // 기준 줄: 같은 칸의 anchorPara번째 문단 첫 줄 위와 그림 문단 위의 차이(px). 줄 정보의 paraIdx는 칸 안 문단 번호라 칸 경로로만 고른다.
+    const cp=x=>x.cellPath.at(-1),ci=x=>[x.controlIndex??x.controlIdx,x.cellIndex??x.cellIdx].join(':'),pi=x=>x.cellParaIndex??x.cellParaIdx;
+    const runs=JSON.parse(document.getPageTextLayout(page)).runs.filter(r=>r.secIdx===c.secIdx&&r.cellPath?.length===c.cellPath.length&&ci(cp(r))===ci(cp(c)));
+    const own=runs.filter(r=>pi(cp(r))===pi(cp(c))),top=own.length?Math.min(...own.map(r=>r.y)):null;
+    // anchorPara 문단부터의 줄(같은 높이 = 한 줄) 가운데 line번째 줄 위에 맞춘다(원본에서 그림 위에 있던 글 줄 수).
+    const ys=top===null?[]:[...new Set(runs.filter(r=>pi(cp(r))>=f.anchorPara&&r.y>=top).map(r=>Math.round(r.y)))].sort((a,b)=>a-b).filter((v,i,a)=>!i||v-a[i-1]>4);
+    const y=ys.length?Math.max(0,ys[Math.min(f.line,ys.length-1)]-top):null;
+    const result=JSON.parse(document.setCellPicturePropertiesByPath(c.secIdx,c.paraIdx,path,c.controlIdx,JSON.stringify({treatAsChar:false,textWrap:'InFrontOfText',horzRelTo:'Para',horzAlign:f.align,horzOffset:0,vertRelTo:'Para',vertAlign:'Top',vertOffset:Math.round((y??0)*75),outerMarginLeft:0,outerMarginRight:0,outerMarginTop:0,outerMarginBottom:0})));
+    if(result?.ok===false)throw Error('상자 안 어울림 그림을 배치하지 못했습니다.');
+  }
+  if(want.some(f=>!f.done))throw Error('상자 안 어울림 그림을 찾지 못했습니다.');
+  document.reflowLinesegs?.();
+}
 // 어울림 그림을 놓은 뒤의 줄 배치 점검. 한글 엔진은 그림 높이 안에 든 두 줄짜리 문단을 그림 반대쪽으로 밀어 잘못 흐르게 한다.
 // 그림이 붙은 문단이 그림과 겹치거나 그림보다 짧으면(다음 문단도 그림 옆에 와야 함) 엔진의 어울림 대신
 // 그림은 글 앞(단 기준 정렬)에 두고, 그림 옆에서 시작하는 문단마다 오른쪽(왼쪽) 여백을 그림 폭만큼 둔다(평가원처럼 발문도 그림 옆).
@@ -333,11 +409,23 @@ export function applyFloatingTable(document,spec,number){
   if(!spec)return;
   const prefix=`${number}. `;
   for(let page=0;page<document.pageCount();page++){
-    const run=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>!r.cellPath?.length&&r.text.startsWith(prefix));if(!run)continue;
+    const run=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>!r.cellPath?.length&&(r.text.startsWith(prefix)||r.text===`${number}.`));if(!run)continue;
     const t=(JSON.parse(document.getPageControlLayout(page)).controls||[]).find(c=>c.type==='table'&&!c.cellPath?.length&&c.paraIdx===run.paraIdx-1);
     if(!t)throw Error('글 옆 표를 찾지 못했습니다.');
     const r=JSON.parse(document.setTableProperties(t.secIdx,t.paraIdx,t.controlIdx,JSON.stringify({treatAsChar:false,textWrap:'InFrontOfText',horzRelTo:'Column',horzAlign:spec.align,vertRelTo:'Para',vertAlign:'Top',vertOffset:0,horzOffset:0})));
     if(r?.ok===false)throw Error('글 옆 표를 배치하지 못했습니다.');return;
   }
   throw Error('글 옆 표의 지문을 찾지 못했습니다.');
+}
+
+// 빈 「ㄱ.」「①」 뒤 한 칸을 고정 띄어쓰기(U+00A0)로(10-22 O5). 조판 기준 parts.labelSpace가 'fixed'일 때만(10-23: 교사가 고름, 수능 틀은 보통 띄어쓰기).
+// HTML 붙여넣기는 &nbsp;를 보통 띄어쓰기로 바꿔서, 들여온 뒤 엔진 문서에서 바꾼다. 글이 이미 들어간 칸은 손대지 않는다 — 비어 있는 자리만(교사가 칠 자리).
+export function fixedLabelSpaces(document,section=0){
+  const J=JSON.stringify;let count=0;
+  for(const r of nativeRuns(document,section)){
+    if(!r.path||!/^(?:[ㄱ-ㅎ]\.|[①-⑳]) $/.test(r.text))continue;
+    const at=r.text.length-1,path=J(r.path);
+    document.deleteTextInCellByPath(section,r.parent,path,at,1);document.insertTextInCellByPath(section,r.parent,path,at,'\u00a0');count++;
+  }
+  return count;
 }

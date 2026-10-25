@@ -1,5 +1,5 @@
 // 체감 속도: 빈 캐시 + 느린 인터넷(기본 20Mbps·40ms)에서 문항 선택 → 한글 변환 → 편집기에 열릴 때까지.
-//   node tools/frame-qa/measure.mjs --url http://127.0.0.1:8945/ --editor frame-20261020-1 [--ids a,b] [--mbps 20] [--images include]
+//   node tools/frame-qa/measure.mjs --url http://127.0.0.1:8945/ --editor frame-20261025-1 [--ids a,b] [--mbps 20] [--images include]
 import { chromium } from 'playwright';
 import { routeGateway } from './server.mjs';
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => a.startsWith('--') ? [a.slice(2), all[i + 1]] : null).filter(Boolean));

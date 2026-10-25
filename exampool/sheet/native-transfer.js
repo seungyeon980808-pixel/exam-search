@@ -1,7 +1,7 @@
-import {typesetMatches,fromBase64,pageProfile,LAYOUT_VERSION} from './typeset-model.js?v=1014-compact-panel';
-import {exportLayoutHwpx} from './native-hwpx.js?v=1014-compact-panel';
-import {assertNativeLayout} from './native-layout-check.js?v=1014-compact-panel';
-import {QUESTION_PAGE_MODE,validateQuestionPage} from './question-page.js?v=1014-compact-panel';
+import {typesetMatches,fromBase64,pageProfile,LAYOUT_VERSION} from './typeset-model.js?v=frame-20261025-1';
+import {exportLayoutHwpx} from './native-hwpx.js?v=frame-20261025-1';
+import {assertNativeLayout} from './native-layout-check.js?v=frame-20261025-1';
+import {QUESTION_PAGE_MODE,validateQuestionPage} from './question-page.js?v=frame-20261025-1';
 const parse=v=>typeof v==='string'?JSON.parse(v):v;
 const norm=v=>String(v).replace(/\s+/g,' ').trim();
 export async function nativeImageSignature(document){

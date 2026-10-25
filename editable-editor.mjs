@@ -1,11 +1,11 @@
 import { driveFilePath } from './data.mjs?v=library-release-20261011-3';
 import { driveLink } from './drive-source.mjs';
-import { resolveEditableContent } from './editable-source.mjs?v=frame-20261020-1';
-import { createEditableBatch } from './editable-batch.mjs?v=frame-20261020-1';
-import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=frame-20261020-1';
-import { renderQuestion } from './pdf-viewer.mjs?v=frame-20261020-1';
+import { resolveEditableContent } from './editable-source.mjs?v=frame-20261025-1';
+import { createEditableBatch } from './editable-batch.mjs?v=frame-20261025-1';
+import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=frame-20261025-1';
+import { renderQuestion } from './pdf-viewer.mjs?v=frame-20261025-1';
 import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261011-3';
-import { contentQualitySummary } from './content-quality.mjs?v=frame-20261020-1';
+import { contentQualitySummary } from './content-quality.mjs?v=frame-20261025-1';
 
 import { columnViewport, columnPresentation, studioZoomSlider } from './editor-viewport.mjs?v=resizable-editor-20261003-1';
 
@@ -59,11 +59,11 @@ let editorEngine = 'base';
 // 5E 문항 틀 문서는 5E와 같은 한글 엔진(rhwp 0.8.7)으로 열어야 수식 줄·그림 배치가 그대로 보이고 그대로 저장된다.
 const ENGINES = {
   base: { sdk: './vendor/rhwp-editor/index.js', studio: './vendor/rhwp-studio/index.html?v=typography-20261003-1' },
-  frame: { sdk: './exampool/editor/index.js', studio: './exampool/studio/index.html?v=frame-20261020-1' },
+  frame: { sdk: './exampool/editor/index.js', studio: './exampool/studio/index.html?v=frame-20261025-1' },
 };
 const FRAME_SUBJECTS = /^(p1|p2|c1|c2|b1|b2|e1|e2)_/u;
 let frameWarm;
-function warmFrame() { frameWarm ||= import('./exampool/frame.mjs?v=frame-20261020-1').then((frame) => frame.warmFrame()).catch(() => { frameWarm = null; }); return frameWarm; }
+function warmFrame() { frameWarm ||= import('./exampool/frame.mjs?v=frame-20261025-1').then((frame) => frame.warmFrame()).catch(() => { frameWarm = null; }); return frameWarm; }
 let session;
 let intent = 0;
 let loadQueue = Promise.resolve();
