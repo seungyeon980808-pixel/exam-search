@@ -54,7 +54,7 @@ export async function passageBlocks(question, deps = {}) {
   try {
     const read = deps.readQuestionPdf || (await import('./pdf-viewer.mjs?v=frame-20261025-1')).readQuestionPdf;
     const glyphMap = deps.glyphMap || (await import('./live-fonts.mjs')).verifiedGlyphMap;
-    const build = deps.build || (await import('./live-convert.mjs?v=library-release-20261011-3')).buildLiveStructure;
+    const build = deps.build || (await import('./live-convert.mjs?v=frame-20261025-1')).buildLiveStructure;
     const cache = passageCache.get(read) ?? new Map();
     passageCache.set(read, cache);
     const key = JSON.stringify([passageKey(question), indexed, includeImages]);

@@ -9,7 +9,7 @@ import { attachedScript, legacyTable, legacyText } from './legacy-glyphs.mjs';
 import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs?v=readability-20261004-4';
 import { recoverQuestionRegion } from './question-region.mjs';
 // --- data-table hook
-import { extractTables, tableFlow, restoreTableBlocks } from './live-tables.mjs?v=readability-20261004-4';
+import { extractTables, tableFlow, restoreTableBlocks } from './live-tables.mjs?v=frame-20261025-1';
 
 function textFor(item, glyphs) {
   const decoded = [...item.str].map((char) => {

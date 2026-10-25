@@ -97,7 +97,7 @@ export async function resolveEditableContent(question, dependencies = {}) {
   }
   let prepared;
   try {
-    const convert = dependencies.convert || (await import('./live-convert.mjs?v=library-release-20261011-3')).convertQuestionNow;
+    const convert = dependencies.convert || (await import('./live-convert.mjs?v=frame-20261025-1')).convertQuestionNow;
     check();
     prepared = await convert(question, { includeImages, signal: dependencies.signal });
     check();
