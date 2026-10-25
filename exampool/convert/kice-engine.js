@@ -173,11 +173,14 @@ export async function toQuestion(structure,item,{number='1'}={}){
     if(made.length>=2&&made.every(b=>b.kind==='figure')&&ph){
       while(i<seq.length&&seq[i].k==='para'){
         const p=seq[i],pb=paraBox(p);if(!pb||pb[1]>bottom+30)break;
+        // 항목 줄(◦·○로 시작)이나 그림 단 경계(그림 사이 가운데)에 걸친 낱말이 있는 줄은 본문이다 — 단마다 나누면 「◦(나) 10 mL에 (가)」처럼 문장이 그림 칸으로 흩어졌다(10-25 c1_2026_11_16·c1_2026_06_20).
+        if(/^[◦○•ㆍ]/u.test(p.text.trim()))break;
         const cells=p.lines.map(l=>(structure.lineCells||[]).find(c=>Math.abs(ph-c.y-l.base)<1.6));if(cells.some(c=>!c?.words?.length))break;
         const mid=b=>(b[0]+b[2])/2,colOf=x=>{let k=0,d=Infinity;xs.forEach((b,j)=>{const e=Math.abs(mid(b)-x);if(e<d){d=e;k=j;}});return k;};
         const per=made.map(()=>[]);let spread=false;
-        for(const c of cells){const ks=new Set();for(const w of c.words){const t=clean(runsText(w.runs));if(!t)continue;const k=colOf((w.x0+w.x1)/2);ks.add(k);per[k].push(t);}if(ks.size>1)spread=true;}
-        if(!spread)break;
+        let outside=false;
+        for(const c of cells){const ks=new Set();for(const w of c.words){const t=clean(runsText(w.runs));if(!t)continue;const k=colOf((w.x0+w.x1)/2);const lo=k?(xs[k-1][2]+xs[k][0])/2:-Infinity,hi=k<xs.length-1?(xs[k][2]+xs[k+1][0])/2:Infinity;if(w.x0<lo-2||w.x1>hi+2)outside=true;ks.add(k);per[k].push(t);}if(ks.size>1)spread=true;}
+        if(!spread||outside)break;
         per.forEach((ws,k)=>{const t=clean(splitEquationParens(ws.join(' ')));if(t)made[k].text=clean((made[k].text?made[k].text+' ':'')+t);});
         i++;
       }
@@ -206,6 +209,9 @@ export async function toQuestion(structure,item,{number='1'}={}){
         // 바로 뒤 자료 묶음(그림·표 여러 개)이 이 글 옆에 있으면 가로 묶음. 자료와 높이가 겹치는 문단만 옆 글로,
         // 그 위 문단은 앞 글, 아래 문단은 자료 뒤 글로 나눈다.
         const mats=[];for(let k=i;k<seq.length&&(seq[k].k==='figure'||seq[k].k==='table');k++)mats.push(seq[k]);
+        // 글 높이 안에서 시작하는 자료만 옆 자료 후보로 — 그림 아래 표(글보다 아래)까지 한 상자로 묶으면 옆 판정이 실패해 그림이 글 아래로 갔다(10-25 c1_2024_09_06).
+        {const tb=all.map(paraBox).filter(Boolean),bottom=tb.length?Math.max(...tb.map(b=>b[3])):null;
+          if(bottom!==null&&mats.length>1&&mats[0].box&&mats[0].box[1]<bottom-2){const keep=mats.filter(m=>m.box&&m.box[1]<bottom-2);if(keep.length&&keep.length<mats.length&&mats.slice(0,keep.length).every((m,k)=>m===keep[k]))mats.length=keep.length;}}
         const mb=mats.length&&mats.every(m=>m.box)?mats.map(m=>m.box).reduce((a,b)=>[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[2],b[2]),Math.max(a[3],b[3])]):null;
         // 그림 여러 개(또는 어울림을 못 쓰는 자리) 옆으로 흐르다 그림 아래에서 넓어지는 문단은 그림 아래 줄에서 둘로 나눈다.
         if(mb&&(mats.length>1||parent||!model.WRAP))for(let k=0;k<all.length;k++){const p=all[k],L=p.lines.filter(l=>l.geo&&Number.isFinite(l.base));

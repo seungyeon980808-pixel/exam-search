@@ -391,6 +391,37 @@ export function applyInlineBoxes(document,section=0){
   if(count)document.reflowLinesegs();
   return count;
 }
+// 선지가 글 옆 그림 옆에 들어가면 그림 옆에 둔다(10-25). 평가원 지면은 키 큰 글 옆 그림 옆에 선지까지 놓는데(p2_2024_06_07 회로),
+// 선지 표(테두리 없는 칸)는 마지막 칸이 단 끝까지 늘어나 그림과 겹쳐 settleFloatingPictures가 그림 아래로 밀었다(높이 1.7배).
+// 마지막 칸을 글 폭만큼 줄여 표 오른쪽 끝이 그림 왼쪽 안에 들어가면 줄인다. settleFloatingPictures 전에 부른다. 오른쪽 그림만.
+export function shrinkChoicesBeside(document,section=0){
+  const J=JSON.parse,GAP=8;let count=0;
+  for(let page=0;page<document.pageCount();page++){
+    const controls=(J(document.getPageControlLayout(page)).controls||[]).filter(c=>!c.cellPath?.length&&c.secIdx===section);
+    const floats=controls.filter(c=>c.type==='image').filter(c=>{try{const p=J(document.getPictureProperties(c.secIdx,c.paraIdx,c.controlIdx));return !p.treatAsChar&&p.horzAlign!=='Left';}catch{return false;}});
+    if(!floats.length)continue;
+    const runs=J(document.getPageTextLayout(page)).runs,inner=J(document.getPageControlLayout(page)).controls||[];
+    for(const t of controls.filter(c=>c.type==='table')){
+      const f=floats.find(f=>t.paraIdx>f.paraIdx&&t.y<f.y+f.h&&t.x+t.w>f.x-GAP);if(!f)continue;
+      let props,boxes;try{props=J(document.getTableProperties(t.secIdx,t.paraIdx,t.controlIdx));boxes=J(document.getTableCellBboxes(t.secIdx,t.paraIdx,t.controlIdx));}catch{continue;}
+      if(!props.treatAsChar)continue;
+      const cell0=J(document.getCellProperties(t.secIdx,t.paraIdx,t.controlIdx,0));if(cell0.borderLeft?.type!==0||cell0.borderTop?.type!==0)continue;
+      // 선지 표만: 맨 마지막 맨 바깥 표이고 칸 글이 ①로 시작하는 것(〈보기〉 상자도 테두리 없는 바깥 칸이라 줄어들었다, e1_2025_06_08).
+      if(t!==controls.filter(c=>c.type==='table').at(-1)||!runs.some(r=>r.cellPath?.length&&(r.parentParaIdx??r.paraIdx)===t.paraIdx&&/^①/.test(String(r.text).trim())))continue;
+      const cols=Math.max(...boxes.map(b=>b.col+(b.colSpan||1)));const last=boxes.filter(b=>b.col===cols-1&&(b.colSpan||1)===1);if(!last.length)continue;
+      const inCell=(x,b)=>x.x>=b.x-1&&x.x<b.x+b.w&&x.y>=b.y-1&&x.y<b.y+b.h;
+      const need=Math.max(...last.map(b=>{const r=[...runs.filter(x=>x.cellPath?.length&&String(x.text||'').trim()&&inCell(x,b)),...inner.filter(x=>x.type==='equation'&&inCell(x,b))]/* 칸 안 수식도 칸 경로 없이 보고된다 */.map(x=>x.x+x.w);return r.length?Math.max(...r)-b.x+6:0;}));
+      const lastX=Math.min(...last.map(b=>b.x)),lastW=Math.max(...last.map(b=>b.w)),newRight=lastX+need;
+      if(!(need>0)||newRight>f.x-GAP||need>=lastW-2)continue;
+      const delta=-Math.floor((lastW-need)*75);
+      const r=J(document.resizeTableCells(t.secIdx,t.paraIdx,t.controlIdx,JSON.stringify(last.map(b=>({cellIdx:b.cellIdx,widthDelta:delta})))));
+      // 줄인 표가 문단 가운데로 옮겨가 그림에 가리지 않게 왼쪽 정렬로.
+      if(r?.ok!==false){document.applyParaFormat(t.secIdx,t.paraIdx,JSON.stringify({alignment:'left'}));count++;}
+    }
+  }
+  if(count)document.reflowLinesegs();
+  return count;
+}
 // 글 옆 그림·표(떠 있는 개체) 옆 좁은 줄은 왼쪽 정렬로(10-25). 양쪽 정렬이면 수식(단위)·긴 낱말이 든 좁은 줄의 띄어쓰기가 크게 벌어졌다
 // (p2_2024_06_03 「질량은   0.1 kg이고,   열의」). 자간 맞춤은 수식·개체가 든 문단을 건너뛰어 이 줄을 못 고친다. 개체 옆에 줄이 있는 맨 바깥 문단만.
 export function alignBesideLeft(document,section=0){
@@ -427,9 +458,13 @@ export function growCellsToContent(document,section=0){
         const inside=x=>x.x>=b.x-1&&x.x<b.x+b.w&&x.y>=b.y-1&&x.y<b.y+b.h;
         const bottom=Math.max(...runs.filter(r=>mine(r)&&inside(r)).map(r=>r.y+r.h),...inner.filter(c=>mine(c)&&inside(c)).map(c=>c.y+c.h),-Infinity);
         if(!Number.isFinite(bottom))continue;
-        let props;try{props=J(document.getCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx));}catch{continue;}const need=bottom+props.paddingBottom/75-(b.y+b.h);
-        if(need<=0.5||need>150)continue;
-        const r=J(document.setCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx,JSON.stringify({height:props.height+Math.ceil(need*75)})));
+        let props;try{props=J(document.getCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx));}catch{continue;}// 칸 상자(getTableCellBboxes)가 실제 그린 표보다 아래로 잡힐 때가 있다(c2_2024_06_10: 칸 542px, 표 525px) — 마지막 줄 칸은 표 아래 끝과도 견준다.
+        const lastRow=b.y+b.h>=Math.max(...boxes.map(x=>x.y+x.h))-1,cellBottom=lastRow?Math.min(b.y+b.h,t.y+t.h):b.y+b.h;const need=bottom+props.paddingBottom/75-cellBottom;
+        // 저장한 칸 높이(props.height)도 본다 — 엔진은 그릴 때 칸을 글만큼 늘려 보여 주지만 저장값은 그대로라, 다시 열면 칸이 줄어 마지막 줄(분수)이 테두리에 잘렸다(c2_2024_06_10 〈보기〉 ㄷ). 높은 글 칸(30px 이상)만 — 〈보기〉 제목 칸은 일부러 작게 둔다.
+        const stored=b.h>=30?Math.ceil((bottom-b.y)*75+props.paddingBottom)-props.height:0;
+        const grow=Math.max(need>0.5?Math.ceil(need*75):0,stored>37?stored:0);
+        if(!grow||grow>150*75)continue;
+        const r=J(document.setCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx,JSON.stringify({height:Math.max(props.height+grow,Math.ceil(b.h*75)+(need>0.5?Math.ceil(need*75):0))})/* 그린 높이보다 작게 두면 칸이 그 높이로 묶여 잘렸다(b2_2024_09_14) */));
         if(r?.ok!==false)grown++;
       }
     }
@@ -457,7 +492,7 @@ export function settleFloatingPictures(document){
   const controlParas=p=>new Set((JSON.parse(document.getPageControlLayout(p.page)).controls||[]).filter(c=>!c.cellPath?.length&&c.secIdx===p.sec&&(c.type==='table'||c.type==='image')).map(c=>c.paraIdx));
   const bottomOf=ls=>ls.length?Math.max(...ls.map(l=>l.y+l.h)):-Infinity;
   const space=(p,para,needed)=>{const props=JSON.parse(document.getParaPropertiesAt(p.sec,para));document.applyParaFormat(p.sec,para,JSON.stringify({spacingAfter:Math.round(((props.spacingAfter||0)/2+needed)*150)}));document.reflowLinesegs();};
-  const count=document.getParagraphCount?.(pics[0].sec);
+  let count=document.getParagraphCount?.(pics[0].sec);
   // 한 문단은 한 번만 좁힌다 — 자료 표와 그 아래 범례 표를 함께 띄우면(10-25) 두 개체가 같은 문단을 두 번 좁혔다.
   const narrowed=new Set();
   for(const p of pics){
@@ -479,13 +514,34 @@ export function settleFloatingPictures(document){
       const before=JSON.parse(document.getParaPropertiesAt(p.sec,para));
       narrow(para);document.reflowLinesegs();b=box(p);
       // 단, 문단이 개체 윗변과 같은 높이에서 시작하면(번호 문단 위에 띄운 글 옆 표) 그림 밑으로 보낼 수 없다 — 좁힌 채 둔다(10-25 b1_2026_11_09 긴 발문이 표 밑에 깔림).
+      // 개체 윗변 높이에서 시작한 긴 문단은 개체 아래 첫 줄에서 둘로 나눈다 — 위는 좁힌 채 개체 옆, 아래는 단 폭(원본 어울림처럼).
+      // 통째로 좁히면 짧은 표 옆에서 긴 발문 전체가 좁은 줄로 늘어졌다(10-25 b2_2026_11_10).
+      if(Math.min(...ls.map(l=>l.y))<=b.y+2&&bottomOf(lines(p,para))>b.y+b.h+90){
+        const runsP=JSON.parse(document.getPageTextLayout(p.page)).runs.filter(r=>!r.cellPath?.length&&r.secIdx===p.sec&&r.paraIdx===para&&r.text.trim());
+        const below=runsP.filter(r=>r.y>=b.y+b.h).sort((x,y)=>x.y-y.y||x.x-y.x)[0];
+        if(below&&Number.isInteger(below.charStart)&&below.charStart>0){
+          const res=JSON.parse(document.splitParagraph(p.sec,para,below.charStart,null)||'{}');
+          if(res?.ok!==false){
+            const hang=Math.max(0,-(before.indent||0));
+            document.applyParaFormat(p.sec,para+1,JSON.stringify({marginRight:Math.round((before.marginRight||0)*150),marginLeft:Math.round(((before.marginLeft||0)+hang)*150),indent:0,spacingBefore:0}));
+            document.applyParaFormat(p.sec,para,JSON.stringify({spacingAfter:0}));
+            if(Number.isInteger(count))count++;for(const q of pics)if(q!==p&&q.sec===p.sec&&q.para>para)q.para++;
+            document.reflowLinesegs();b=box(p);last=para;break;
+          }
+        }
+      }
       if(Math.min(...ls.map(l=>l.y))>b.y+2&&bottomOf(lines(p,para))>b.y+b.h+90){document.applyParaFormat(p.sec,para,JSON.stringify(right?{marginRight:Math.round((before.marginRight||0)*150)}:{marginLeft:Math.round((before.marginLeft||0)*150)}));document.reflowLinesegs();b=box(p);break;}
       last=para;
     }
     // 글 없는 문단에 붙은 표: 그 문단 높이만큼 내려 다음 문단 첫 줄과 위를 맞춘다.
     if(!own.length&&last!==p.para){const top=Math.min(...lines(p,p.para+1).map(l=>l.y));if(Number.isFinite(top)&&top>b.y+.5){setProps(p,{vertOffset:Math.round((top-b.y)*75)});document.reflowLinesegs();b=box(p);}}
     const bottom=bottomOf(lines(p,last));
-    if(b.y+b.h+GAP>bottom)space(p,last,b.y+b.h+GAP-bottom);
+    // 바로 뒤 표(선지 표 등)가 그림 옆에 들어가면(shrinkChoicesBeside로 줄인 것) 그림 아래로 밀지 않는다.
+    const nextTable=(JSON.parse(document.getPageControlLayout(p.page)).controls||[]).find(c=>c.type==='table'&&!c.cellPath?.length&&c.secIdx===p.sec&&c.paraIdx===last+1);
+    // 표 개체 폭은 칸을 줄여도 옛 값으로 남는다 — 칸 상자로 오른쪽 끝을 잰다.
+    let tableRight=nextTable?nextTable.x+nextTable.w:0;if(nextTable)try{tableRight=Math.max(...JSON.parse(document.getTableCellBboxes(nextTable.secIdx,nextTable.paraIdx,nextTable.controlIdx)).map(c=>c.x+c.w));}catch{}
+    const fitsBeside=nextTable&&(right?tableRight<=b.x-GAP:nextTable.x>=b.x+b.w+GAP);
+    if(!fitsBeside&&b.y+b.h+GAP>bottom)space(p,last,b.y+b.h+GAP-bottom);
   }
   return true;
 }
@@ -507,7 +563,8 @@ export function applyFloatingTable(document,spec,number){
       if(r?.ok===false)throw Error('글 옆 표를 배치하지 못했습니다.');offset+=t.h;
     }
     // 표가 둘 이상이면 띄운 표 문단들이 빈 줄로 남아 번호 줄이 내려간다 — 다시 재서 표 윗변을 번호 줄 윗변에 맞춘다.
-    if(group.length>1){
+    // 표 하나여도: 띄운 표만 든 문단이 본문 한 줄 높이로 남으면 발문이 표 아래에서 시작한 것으로 잡혀 옆 줄을 좁히지 않았다(b1_2024_09_16 표가 발문을 덮음).
+    {
       // 띄운 표만 든 문단은 줄 높이를 1pt로(빈 줄로 남지 않게, 시험지 첫 빈 문단과 같은 방법).
       for(const t of group){document.applyParaFormat(t.secIdx,t.paraIdx,JSON.stringify({lineSpacingType:'Percent',lineSpacing:100,spacingBefore:0,spacingAfter:0}));
         const n=document.getParagraphLength(t.secIdx,t.paraIdx);if(n)document.applyCharFormat(t.secIdx,t.paraIdx,0,n,JSON.stringify({fontSize:100}));}

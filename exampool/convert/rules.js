@@ -157,16 +157,20 @@ export function paragraphs(lines,{B}={}){
   for(const l of lines){
     const t=l.text,d=Number.isFinite(base)&&l.geo?l.left-base:0;
     // (가)·(나)로 시작하는 줄은 앞 줄이 문장 끝이거나 들여쓰기가 바뀔 때만 새 문단(줄바꿈으로 줄 머리에 온 (나)는 잇는다).
-    const markStart=MARK.test(t)&&(/^[◦○•ㆍ※*\[〔]/.test(t)||!prev||!prev.geo||!l.geo||/([.:?!)\]〕]|다)$/.test(prev.text)||(cur?.mark&&Math.abs(l.left-cur.firstLeft)<=2));
+    // (가)·(나)로 시작하는 식 줄(→·⇄·=)은 늘 새 문단(10-25 c1_2026_09_13 「◦화학 반응식」 뒤에 반응식 두 줄이 이어 붙음).
+    const markStart=MARK.test(t)&&(/^[◦○•ㆍ※*\[〔]/.test(t)||/→|⇄|⇌/.test(t)||!prev||!prev.geo||!l.geo||/([.:?!)\]〕]|다)$/.test(prev.text)||(cur?.mark&&Math.abs(l.left-cur.firstLeft)<=2));
     // 매달린 들여쓰기: ◦·(가)로 시작한 문단의 다음 줄은 더 들여 써도 잇는다.
     const hanging=cur&&cur.mark&&!cur.display&&l.geo&&l.left>cur.firstLeft+3&&(cur.lines.length===1||Math.abs(l.left-prev.left)<2.5)&&!markStart&&!HEAD.test(t);
     const display=d>INDENT[1]&&!hanging&&!(prev&&prev.geo&&Math.abs(l.left-prev.left)<2&&cur?.display);
-    let start=!cur||l.opening||(prev&&l.role!==prev.role)||markStart||HEAD.test(t)||CAPTION.test(t)||display||cur.display||cur.head||cur.caption;
+    // 오른쪽으로 멀리 들여 쓴 괄호 한 줄(「(a～c는 반응 계수)」)은 따로 문단 — 매달린 들여쓰기로 앞 식 줄에 붙었다(10-25).
+    const note=/^\(.*\)$/.test(t.replace(/\$/g,'').trim())&&d>INDENT[1]*3;
+    let start=note||!cur||l.opening||(prev&&l.role!==prev.role)||markStart||HEAD.test(t)||CAPTION.test(t)||display||cur.display||cur.head||cur.caption;
     // 들여 쓴 줄(본문 왼쪽 + 한 글자): 새 문단. 매달린 들여쓰기는 잇는다.
     if(!start&&!hanging&&d>=INDENT[0]&&d<=INDENT[1]&&!(prev?.geo&&Math.abs(l.left-prev.left)<2))start=true;
     // 들여 쓴 식 줄(→·⇄·=가 든 반응식·속도식, 10-25): 원본 들여쓰기만큼 빈 폭 표시 글자(U+E1B2, 조판기가 전각 빈칸으로 바꿈)를 앞에 둔다 — 왼쪽에 붙어 찍혔다.
     // 오른쪽에 혼자 찍힌 「[3점]」 줄은 식 줄이 아니다.
-    const pad=display&&/→|⇄|⇌|=|ΔH|\\Delta/.test(t)&&!/^\s*\[\s*3\s*점\s*\]\s*$/.test(t)&&Number.isFinite(l.h)&&l.h>0?'\uE1B2'.repeat(Math.min(24,Math.max(0,Math.round(d/(l.h*.5))-1))):'';
+    // 식 줄이 둘 이상 같은 들여쓰기로 이어지면 둘째 줄은 display로 잡히지 않는다 — 들여쓰기 폭(d)만 본다.
+    const pad=d>INDENT[1]&&!hanging&&/→|⇄|⇌|=|ΔH|\\Delta/.test(t)&&!/^\s*\[\s*3\s*점\s*\]\s*$/.test(t)&&Number.isFinite(l.h)&&l.h>0?'\uE1B2'.repeat(Math.min(24,Math.max(0,Math.round(d/(l.h*.5))-1))):'';
     if(start){cur={lines:[l],text:pad+t,firstLeft:l.left,display,head:HEAD.test(t),caption:CAPTION.test(t),mark:MARK.test(t)};out.push(cur);}
     else{cur.lines.push(l);cur.text+=(/[\-‐]$/.test(cur.text)?'':' ')+t;}
     prev=l;
