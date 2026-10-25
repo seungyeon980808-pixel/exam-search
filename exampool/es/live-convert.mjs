@@ -279,6 +279,12 @@ function clipItems(question, pdf, glyphs) {
       math: /^(?:HyhwpEQ|HYhwpEQ)/u.test(pdf.fonts[item.fontName]?.name?.split('+').at(-1) || '') };
       // A raised or lowered script belongs to its base's line.
       if (scriptOf && attachedScript.test(base.value.trim())) base.y = scriptOf.transform[5];
+      // 5E 기출 복원(10-25 밤): 작은 별표 위 첨자(B*, 돌연변이 대립유전자)는 바로 왼쪽 영문 글자 줄에 붙인다 — 혼자 한 줄 「*」로 떨어졌다.
+      if (/^[*＊]$/u.test(base.value.trim()) && item.height > 0) {
+        const host = clipped.find((o) => o !== item && o.height > item.height * 1.2 && /[A-Za-z]$/u.test(o.str || '')
+          && Math.abs(o.transform[4] + o.width - item.transform[4]) <= 1.5 && item.transform[5] - o.transform[5] >= 1 && item.transform[5] - o.transform[5] <= o.height * 0.7);
+        if (host) { base.y = host.transform[5]; base.value = '*'; }
+      }
       if (!base.math) base.value = underline(item, base.value);
       // 5E 기출 복원(10-25): 본문 글꼴 조각 「X1」처럼 영문 뒤 숫자가 작게(아래 첨자 크기) 찍힌 것. 같은 글자 모양을 작게 찍어 글자는 그대로
       // 「X1」이지만 조각 폭이 글자 폭 합보다 좁다 — 끝 숫자들이 50~85% 크기면 아래 첨자 글자(X₁)로 바꾼다(X₁·Y₂·d₁·Z₁이 X1로 읽힘).

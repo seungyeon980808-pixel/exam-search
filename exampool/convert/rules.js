@@ -172,7 +172,9 @@ export function paragraphs(lines,{B}={}){
     const display=d>INDENT[1]&&!hanging&&!(prev&&prev.geo&&Math.abs(l.left-prev.left)<2&&cur?.display);
     // 오른쪽으로 멀리 들여 쓴 괄호 한 줄(「(a～c는 반응 계수)」)은 따로 문단 — 매달린 들여쓰기로 앞 식 줄에 붙었다(10-25).
     const note=/^\(.*\)$/.test(t.replace(/\$/g,'').trim())&&d>INDENT[1]*3;
-    let start=note||!cur||l.opening||(prev&&l.role!==prev.role)||markStart||HEAD.test(t)||CAPTION.test(t)||display||cur.display||cur.head||cur.caption;
+    // 식 줄(→·⇄) 다음의 식 없는 줄은 새 문단 — 「… ΔH=190 kJ」 뒤에 다음 문단 「25℃, 1 atm에서 …」가 이어 붙었다(10-25 밤 c2_2026_09_03).
+    const afterEq=prev&&/→|⇄|⇌/.test(prev.text)&&(prev.text.match(/[가-힣]/g)||[]).length<=4&&/* 한글 거의 없는 식 줄만(「A → B는 …」 문장은 아님, p1_2025_11_15) */!/→|⇄|⇌/.test(t)&&!/^\(/.test(t.replace(/\$/g,'').trim());
+    let start=note||afterEq||!cur||l.opening||(prev&&l.role!==prev.role)||markStart||HEAD.test(t)||CAPTION.test(t)||display||cur.display||cur.head||cur.caption;
     // 들여 쓴 줄(본문 왼쪽 + 한 글자): 새 문단. 매달린 들여쓰기는 잇는다.
     if(!start&&!hanging&&d>=INDENT[0]&&d<=INDENT[1]&&!(prev?.geo&&Math.abs(l.left-prev.left)<2))start=true;
     // 들여 쓴 식 줄(→·⇄·=가 든 반응식·속도식, 10-25): 원본 들여쓰기만큼 빈 폭 표시 글자(U+E1B2, 조판기가 전각 빈칸으로 바꿈)를 앞에 둔다 — 왼쪽에 붙어 찍혔다.

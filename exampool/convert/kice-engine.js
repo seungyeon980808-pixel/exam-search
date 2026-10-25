@@ -165,7 +165,7 @@ export async function toQuestion(structure,item,{number='1'}={}){
   // 자료 바로 아래 이름 줄 '(가)'·'(가) 아세트산 (나) 뷰테인'과 범례 '(＋: …)'를 그 자료 칸에 붙인다(x 위치로 짝).
   // 그림: 이름은 label, 뒤 글은 text(조판기가 그림 아래에 찍음). 표: 이름은 label, 범례는 table.note.
   // 범례 판정은 수식 표시($)를 뺀 글로 한다 — 「$(○$: 발병함, $×$: 발병 안 함)」처럼 기호가 수식으로 읽혀 범례를 놓쳤다(10-25 6번).
-  const CAPLINE=/^\([가-하]\)(?!.*다\.$)/u,LEGEND_RE=/^\(.*[:：].*\)$/u,LEGEND={test:t=>LEGEND_RE.test(String(t).replace(/\$/g,'').trim())},legendText=t=>String(t).replace(/\$/g,'').trim();
+  const CAPLINE=/^\([가-하]\)(?!.*다\.$)/u,LEGEND_RE=/^\(.*[:：].*\)$/u,LEGEND={test:t=>LEGEND_RE.test(String(t).replace(/\$/g,'').trim())||/^[×○●◯△▲□■*※+\-−]\s*[:：].{1,40}$/.test(String(t).replace(/\$/g,'').trim())||/^([⊙⊗]\s*[^⊙⊗]{2,30}\s*)+$/.test(String(t).replace(/\$/g,'').trim())},legendText=t=>String(t).replace(/\$/g,'').trim();
   const attachCaptions=(seq,i,run,made)=>{
     const xs=run.map(m=>m.box);if(!xs.every(Boolean))return i;
     const bottom=Math.max(...xs.map(b=>b[3]));
@@ -203,7 +203,7 @@ export async function toQuestion(structure,item,{number='1'}={}){
   // 같은 높이에 나란한 자료(표·그림)가 이름 줄 「(가)」「(나)」와 섞여 읽히면(오른쪽 표가 먼저, 사이에 이름 줄) 나란히 묶음을 못 만들어
   // 위아래로, 순서도 뒤바뀌어 쌓였다(10-25 b2_2026_11_05·b2_2026_11_19). 자료는 왼쪽부터, 이름 줄은 그 뒤로 모은다.
   const sideOrder=seq=>{
-    const isMat=n=>(n.k==='figure'||n.k==='table')&&n.box,isCap=n=>n.k==='para'&&(/^\([가-하]\)$/.test(String(n.text||'').trim())||/^\(.*[:：].*\)$/.test(String(n.text||'').replace(/\$/g,'').trim()));/* 이름 줄·범례 줄 */
+    const isMat=n=>(n.k==='figure'||n.k==='table')&&n.box,isCap=n=>n.k==='para'&&(/^\([가-하]\)$/.test(String(n.text||'').trim())||/^\(.*[:：].*\)$/.test(String(n.text||'').replace(/\$/g,'').trim())||/^[×○●◯△▲□■*※+\-−]\s*[:：].{1,40}$/.test(String(n.text||'').replace(/\$/g,'').trim())||/^([⊙⊗]\s*[^⊙⊗]{2,30}\s*)+$/.test(String(n.text||'').replace(/\$/g,'').trim()));/* 이름 줄·범례 줄(괄호 없는 「×: …」 포함, p1_2024_09_12) */
     const out=[];
     for(let i=0;i<seq.length;){
       if(!isMat(seq[i])&&!isCap(seq[i])){out.push(seq[i++]);continue;}
@@ -418,6 +418,8 @@ export async function toQuestion(structure,item,{number='1'}={}){
   mapQuestionText(q,v=>String(v??'').replace(/\$\s*([○●◎△▲▽▼□■◇◆☆★×])\s*\$/gu,'$1'));
   // 괄호를 수식 밖으로 뺀 뒤(「$(mol)$」→「($mol$)」) 단위·화학식·원소 이름 뒤 기호를 한 번 더 바로 세운다(10-25 밤).
   mapQuestionText(q,v=>namedElements(String(v??'').replace(/\$([^$\n]+)\$/g,(m,e)=>'$'+uprightScript(e)+'$')));
+  // 닫는 괄호 바로 뒤 첨자로 시작하는 수식(「(B−V)$_{0}=0.5$」)은 밑글자가 없어 첨자가 떨어져 그려진다 — 괄호를 수식 안으로(10-25 밤 e2_2025_11_16).
+  mapQuestionText(q,v=>String(v??'').replace(/\)\$([_^]\{)/g,'$)$1').replace(/\$\$\)/g,')'));
   attachRowCaptions(q);tidyStrays(q);
   if(figs.size>count.images)diag.notes.push(`그림 ${figs.size}개 중 ${count.images}개만 넣었습니다.`);
   // figures: 넣은 자료 수(그림 + 표 + 조건·실험 상자). images: 그림 수.
