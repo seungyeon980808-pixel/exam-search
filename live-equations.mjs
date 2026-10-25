@@ -63,6 +63,8 @@ function bindScripts(items, baseline) {
       && Math.abs(item.y - baseline) <= Math.max(12, base.height * 1.5)
       // A delimiter stretched around a fraction sits low but is never a script.
       && !tallDelimiter(item)
+      // 첨자는 밑글자보다 크지 않다 — 표 칸의 질량수(작은 m+2) 뒤 큰 X가 2의 아래 첨자로 붙었다(10-25 c1_2024_06_09).
+      && (item.recovered || item.height <= base.height * 1.2)
       && (!integral || item.x >= base.x)
       && item.x < boundary && (limit
         ? center(item) >= base.x - 4 && (item.x <= right(base) + 5 || integral)

@@ -233,8 +233,12 @@ export async function applyReferenceBogiIndent(document,JSZip,CFB=globalThis.XLS
 
 // 한글 엔진은 아래·위 첨자 묶음 바로 뒤의 글자까지 첨자로 읽는다(T_{1}=\frac… 가 T 아래에 모두 붙음).
 // 닫는 괄호 뒤에 띄어쓰기를 하나 둔다. LaTeX·한글 수식 모두 띄어쓰기는 구분 기호일 뿐 모양을 바꾸지 않는다.
+// 앞 첨자(질량수 {}^{b}X, 핵 기호 {}^{A}_{Z}X): rhwp는 빈 밑글자 {}의 위 첨자를 기준선 아래로 그린다(10-25 c1_2026_09_11 「ᵇX」가 아래 첨자처럼 보임).
+// 밑글자를 1/4칸 띄어쓰기({`})로 두면 rhwp·한글 모두 위 첨자로 올라간다.
 export function normalizeEquationScript(script){
-  const s=String(script);let out='';
+  // \text{…} 안 띄어쓰기는 rhwp가 지워 「피리미딘계열염기의개수」로 붙었다(10-25 b2_2025_09_13) — 수식 띄어쓰기(~)로 바꾼다.
+  const s=String(script).replace(/(^|[^\\A-Za-z0-9}])\{\s*\}(?=[_^]\{)/g,'$1{`}')
+    .replace(/\\text\{([^{}]*)\}/g,(m,body)=>`\\text{${body.trim().replace(/\s+/g,'~')}}`);let out='';
   for(let i=0;i<s.length;i++){
     out+=s[i];
     if((s[i]==='_'||s[i]==='^')&&s[i+1]==='{'){

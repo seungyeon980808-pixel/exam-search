@@ -1,5 +1,5 @@
 import { drawingPrimitives, tableGrids, textItemBox } from './pdf-drawings.mjs?v=frame-20261025-1';
-import { recoverEquationItems } from '../../live-equations.mjs';
+import { recoverEquationItems } from '../../live-equations.mjs?v=frame-20261025-1';
 
 const contains = (box, x, y) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
 const pdfItem = (item) => ({ str: item.value, width: item.width, height: item.height,

@@ -2,9 +2,9 @@ import { readQuestionPdf } from '../../pdf-viewer.mjs?v=frame-20261025-1';
 import { questionFigures } from '../../figure-fallback.mjs?v=library-release-20261011-3';
 import { observedContentRegions } from '../../content-integrity.mjs?v=readability-20261004-4';
 import { appendLineRuns } from '../../prose-flow.mjs?v=readability-20261004-4';
-import { ruledTextFractions } from '../../ruled-text-fractions.mjs?v=subject-review-20261011-1';
+import { ruledTextFractions } from '../../ruled-text-fractions.mjs?v=frame-20261025-1';
 import { inQuestion, verifiedGlyphMap } from '../../live-fonts.mjs';
-import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from '../../live-equations.mjs?v=typography-20261003-3';
+import { radicalBarFor, recoverEquationItems, recoverPiecewiseItems, recoverStretchyBrackets } from '../../live-equations.mjs?v=frame-20261025-1';
 import { attachedScript, legacyTable, legacyText } from '../../legacy-glyphs.mjs';
 import { drawingPrimitives, figureRegions, insideFigure } from './pdf-drawings.mjs?v=frame-20261025-1';
 import { recoverQuestionRegion } from '../../question-region.mjs';
@@ -353,13 +353,37 @@ function findLines(items) {
   return lines.sort((left, right) => right.y - left.y);
 }
 
+// 5E 기출 복원(10-25): 수식 글자 왼쪽 위에 붙은 작은 글자(질량수 ᵇX, ¹⁶ᵃ⁻ᵇY)는 앞 첨자다. 뒤 첨자만 알아봐서
+// 「bX」처럼 같은 줄 글자로 붙었다(c1_2026_09_11). 바로 앞에 붙은 수식 글자가 있으면 그 글자의 뒤 첨자로 두고 건드리지 않는다.
+export function leadingScripts(items) {
+  const touching = (a, b, room = 1.6) => b.x - (a.x + a.width) >= -1 && b.x - (a.x + a.width) <= room;
+  const out = [...items], drop = new Set();
+  for (let i = 0; i < out.length; i++) {
+    const start = out[i];
+    if (!start.math || start.recovered || drop.has(start) || !/^[A-Za-z0-9+−-]{1,6}$/u.test(start.value.trim())) continue;
+    const before = out.slice(0, i).reverse().find((item) => !drop.has(item) && item.value.trim());
+    if (before?.math && touching(before, start)) continue;
+    const run = [start];
+    let k = i + 1;
+    while (k < out.length && out[k].math && !out[k].recovered && /^[A-Za-z0-9+−-]{1,6}$/u.test(out[k].value.trim())
+      && Math.abs(out[k].y - start.y) < 1 && Math.abs(out[k].height - start.height) < 0.5 && touching(run.at(-1), out[k], 2)) run.push(out[k++]);
+    const base = out[k];
+    if (!base?.math || !/^[A-Z]/u.test(base.value.trim()) || !touching(run.at(-1), base, 2) || run.map((item) => item.value.trim()).join('').length > 6
+      || start.height > base.height * 0.8 || start.y - base.y < Math.max(1.8, base.height * 0.2) || start.y - base.y > base.height * 0.7) continue;
+    out[k] = { ...base, value: `{}^{${run.map((item) => item.value.trim()).join('')}}${base.value.trim()}`, x: start.x, width: base.x + base.width - start.x };
+    run.forEach((item) => drop.add(item));
+    i = k;
+  }
+  return out.filter((item) => !drop.has(item));
+}
+
 export function lineRuns(line) {
   // Stacked legacy scripts share an x position (¹₁H): superscript first, then subscript.
   const stackRank = (item) => /^[\u00b9\u00b2\u00b3\u2070-\u207f]/u.test(item.value || '') ? 0
     : /^[\u2080-\u209f]/u.test(item.value || '') ? 1 : 2;
-  const items = attachTextScripts(recoverEquationItems(line.items, line.y))
+  const items = leadingScripts(attachTextScripts(recoverEquationItems(line.items, line.y))
     .sort((left, right) => (Math.abs(left.x - right.x) < 0.6 ? 0 : left.x - right.x)
-      || stackRank(left) - stackRank(right) || right.y - left.y);
+      || stackRank(left) - stackRank(right) || right.y - left.y));
   const runs = [];
   let previous = null;
   // 5E 기출 복원: 수식 글꼴의 작은 글자가 바로 앞 수식 글자보다 내려가/올라가 있으면 아래/위첨자(λ_A, v_B).
@@ -388,6 +412,8 @@ export function lineRuns(line) {
     const gap = previous ? item.x - previous.x - previous.width : 0;
     const spaced = previous && gap > (previous.math && item.math ? 5 : Math.max(1.5, Math.min(previous.height, item.height) * 0.2))
       && !attachedScript.test(value) && !/\s$/u.test(previous.value) && !/^\s/u.test(value);
+    // 5E 기출 복원(10-25): 수식 글자 사이가 벌어져 있으면 수식 안 띄어쓰기(4pt 넘으면 ~, 2.2pt부터 `) — 「X 1 mol」이 「X1mol」로 붙었다(c1_2026_09_11).
+    if (!spaced && previous?.math && item.math && runs.at(-1)?.kind === 'equation' && gap >= 2.2 && gap <= 12) runs.at(-1).script += gap > 4 ? '~' : '`';
     if (spaced) {
       if (runs.at(-1)?.kind === 'text') runs.at(-1).value += ' ';
       else runs.push({ kind: 'text', value: ' ' });

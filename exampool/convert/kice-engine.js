@@ -354,6 +354,9 @@ export async function toQuestion(structure,item,{number='1'}={}){
     q.choiceTable=makeTable(6,cols,'선지표');(header||[]).slice(0,cols).forEach((v,c)=>q.choiceTable.cells[0][c].value=v);
     rows.forEach((r,i)=>{if(!q.choiceTable.cells[i+1])return;const cells=r.length>cols?[...r.slice(0,cols-1),r.slice(cols-1).join(' ')]:r;cells.forEach((v,c)=>q.choiceTable.cells[i+1][c].value=v);});
     if(!header?.some(Boolean))diag.notes.push('선지표 머리줄을 찾지 못했습니다.');
+    // 머리줄 낱말만 되풀이한 본문 글 덩이(선지가 2·3묶음이면 「X Y X Y」)는 선지표 머리줄이 본문에도 남은 것 — 뺀다(10-25 c1_2025_06_02).
+    const bare=v=>String(v||'').replace(/[$~`\s{}]/g,''),head=(header||[]).slice(0,cols).map(bare).join('');
+    if(head)for(const b of [...q.blocks])if(b.kind==='text'&&!b.parent&&[1,2,3].some(n=>bare(b.text)===head.repeat(n)))q.blocks.splice(q.blocks.indexOf(b),1);
     diag.pair=P?'위치':'낱말';
   }else if(choiceFigs)choiceFigs.forEach((f,i)=>{const d=f.direct||figs.get(f.run);if(!f.direct||/원본 참고/.test(choices[i]||''))q.choices[i].text='';else q.choices[i].text=choices[i]||'';q.choices[i].figure={name:`${item.id}-선지${i+1}.png`,data:d.data,...(d.box?{widthPt:Math.round((d.box[2]-d.box[0])*10)/10}:{})};});
   else choices.slice(0,5).forEach((t,i)=>{if(q.choices[i])q.choices[i].text=t;});

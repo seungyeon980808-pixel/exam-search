@@ -6,7 +6,25 @@
 
 // 줄 하나의 글. 수식은 $스크립트$. 그림 런은 뺀다.
 export const runsText=runs=>(runs||[]).filter(r=>r.kind!=='figure').map(r=>r.kind==='equation'?`$${String(r.script||r.value||'').trim()}$`:String(r.value||'')).join('');
-export const clean=s=>String(s||'').replace(/\s+/g,' ').replace(/\$\s*\$/g,'').trim();
+// 수식($…$) 짝으로 읽는다: 빈 수식은 빼고, 사이에 아무것도 없는 두 수식은 하나로, 띄어쓰기만 있으면 수식 안 띄어쓰기(~)로 잇는다.
+// 예전 /\$\s*\$/ 지우기는 「$X$ $1mol$」의 띄어쓰기까지 지워 「$X1mol$」로 붙였다(10-25 c1_2026_09_11).
+// 수식 밖 글자 바로잡기: 물결 연산자 ∼(U+223C)는 함초롬바탕에서 ∞처럼 그려지고, 한 점 끌기 ․(U+2024)는 아래에 찍힌다 —
+// 원본(평가원 지면)은 「A～D」 「시·공간적」(10-25 e2_2024_09_03, b1_2026_09_20).
+const TEXT_FIX={'\u223c':'～','\u2024':'·'};
+export const clean=s=>{
+  const parts=String(s||'').replace(/\s+/g,' ').split('$').map((p,i)=>i%2?p:p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
+  if(parts.length%2===0)return parts.join('$').trim();
+  const out=[parts[0]];
+  for(let i=1;i<parts.length;i+=2){
+    const eq=parts[i],after=parts[i+1];
+    if(!eq.trim()){out[out.length-1]+=after;continue;}
+    const prev=out.length>1?out.at(-2):null,gap=out.at(-1);
+    if(prev!==null&&!gap.trim()){out[out.length-2]=prev+(gap?'~':'')+eq;out[out.length-1]=after;}
+    else out.push(eq,after);
+  }
+  let text=out[0];for(let i=1;i<out.length;i+=2)text+=`$${out[i]}$`+out[i+1];
+  return text.replace(/ {2,}/g,' ').trim();
+};
 export const MARK=/^(\[[^\]]{1,12}\]|〔[^〕]{1,12}〕|\((가|나|다|라|마|바|사)\)\s?|[◦○•ㆍ·∙]\s?|[※*]\s?)/;
 export const HEAD=/^[\[〔［]\s*([^\]〕］]{1,12}?)\s*[\]〕］]$/;
 const CAPTION=/^(\s*\((가|나|다|라|마|바)\)\s*)+$/;
