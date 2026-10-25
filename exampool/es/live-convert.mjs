@@ -285,7 +285,8 @@ function clipItems(question, pdf, glyphs) {
       if (!base.math && /[A-Za-z]\d/u.test(base.value)) {
         const adv = (c) => advances.get(`${item.fontName}:${c.codePointAt(0)}`);
         if (item.str === base.value.replace(/\u0332/gu, '') && [...item.str].every((c) => adv(c) !== undefined)) {
-          const scale = Math.abs(item.transform[0]) / 1000, full = [...item.str].reduce((sum, c) => sum + adv(c), 0) * scale;
+          // 띄어쓰기 글리프 폭이 0으로 나오는 글꼴이 있다 — 0이면 0.25em으로 센다(「X2, Y1」처럼 띄어쓰기 든 조각, 10-25 밤).
+          const scale = Math.abs(item.transform[0]) / 1000, full = [...item.str].reduce((sum, c) => sum + (c === ' ' && !adv(c) ? 250 : adv(c)), 0) * scale;
           const runs = [...item.str.matchAll(/(?<=[A-Za-z])\d{1,2}(?!\d)/gu)].map((m) => m[0]);
           const digits = runs.join('') ? [...runs.join('')].reduce((sum, c) => sum + adv(c), 0) * scale : 0, ratio = digits > 0 ? (digits - (full - item.width)) / digits : 1;
           if (ratio >= 0.45 && ratio <= 0.85) base.value = base.value.replace(/(?<=[A-Za-z]\u0332?)\d{1,2}(?!\d)/gu, (d) => [...d].map((c) => '₀₁₂₃₄₅₆₇₈₉'[c]).join(''));

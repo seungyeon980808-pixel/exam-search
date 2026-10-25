@@ -47,7 +47,10 @@ function unitAt(s,i,afterNumber){
   if(!(multi||compound||afterNumber==='decimal'||(afterNumber&&UNIT_SURE.has(toks[0]))))return null;
   return {end:i+all.length,text:all.replace(/μ?[A-Za-zΩ]+/g,t=>rm(t))};
 }
+const ABBR=new Set('LED LCD ATP ADP AMP DNA RNA mRNA tRNA rRNA NAD NADH NADP NADPH FAD FADH TSH ADH ACTH LH FSH GPS CCTV PET CT MRI pH pOH SI'.split(' '));
 export function uprightScript(eq){
+  // 잘 쓰는 약어(LED, ATP, DNA, TSH …)는 바로 선 글자(10-25 밤, c1_2025_09_04 LED 기울어짐). 점 이름(ABC)은 기울임 그대로라 목록으로만.
+  if(ABBR.has(eq))return rm(eq);
   let out='',i=0;
   const whole=unitAt(eq,0,false);if(whole&&whole.end===eq.length&&!/^\{rm/.test(eq))return whole.text;
   while(i<eq.length){
@@ -60,6 +63,7 @@ export function uprightScript(eq){
       if(u){out+=num[0]+u.text;i=u.end;continue;}
       out+=num[0];i+=num[0].length;continue;
     }
+    {const w=/[A-Za-z]/.test(c)&&!/[A-Za-z\\]/.test(eq[i-1]||'')?eq.slice(i).match(/^[A-Za-z]+/)[0]:'';if(w&&ABBR.has(w)){out+=rm(w);i+=w.length;continue;}}
     if(/[A-Z]/.test(c)){const ch=chemAt(eq,i);if(ch){out+=ch.text;i=ch.end;continue;}}
     out+=c;i++;
   }
@@ -68,7 +72,11 @@ export function uprightScript(eq){
 // 수식 밖 글자 바로잡기: 물결 연산자 ∼(U+223C)는 함초롬바탕에서 ∞처럼 그려지고, 한 점 끌기 ․(U+2024)는 아래에 찍힌다 —
 // 원본(평가원 지면)은 「A～D」 「시·공간적」(10-25 e2_2024_09_03, b1_2026_09_20).
 const TEXT_FIX={'\u223c':'～','\u2024':'·'};
-export const clean=s=>{
+// 원소 이름 바로 뒤 괄호 속 한 글자 기호는 실제 원소다(산소(O), 탄소(C), 수소(H)) — 바로 선 글자로(10-25 밤).
+const ELEMENT_NAMES={'수소':'H','헬륨':'He','리튬':'Li','베릴륨':'Be','붕소':'B','탄소':'C','질소':'N','산소':'O','플루오린':'F','네온':'Ne','나트륨':'Na','마그네슘':'Mg','알루미늄':'Al','규소':'Si','인':'P','황':'S','염소':'Cl','아르곤':'Ar','칼륨':'K','칼슘':'Ca','철':'Fe','구리':'Cu','아연':'Zn','은':'Ag','금':'Au','납':'Pb','수은':'Hg'};
+export const namedElements=t=>t.replace(/(수소|헬륨|리튬|베릴륨|붕소|탄소|질소|산소|플루오린|네온|나트륨|마그네슘|알루미늄|규소|황|염소|아르곤|칼륨|칼슘|철|구리|아연|수은|납)\(\$([A-Z][a-z]?)\$\)/g,(m,name,sym)=>ELEMENT_NAMES[name]===sym?`${name}($${'{rm '+sym+'}'}$)`:m);
+export const clean=s=>namedElements(cleanRaw(s));
+const cleanRaw=s=>{
   const parts=String(s||'').replace(/[^\S\u3000]+/g,' ').split('$').map((p,i)=>i%2?uprightScript(p):p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
   if(parts.length%2===0)return parts.join('$').trim();
   const out=[parts[0]];

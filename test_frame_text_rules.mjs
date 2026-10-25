@@ -13,7 +13,7 @@ test('equations separated by a space stay apart as an equation space instead of 
 test('units and real chemical formulas are upright; variables and hypothetical elements stay italic', () => {
   const cases = { '210N': '210{rm N}', '0.2m': '0.2{rm m}', '3m': '3m', '70km/s/Mpc': '70{rm km}/{rm s}/{rm Mpc}', mol: '{rm mol}', s: 's',
     KCl: '{rm KCl}', 'C_{6}H_{12}O_{6}': '{rm C}_{6}{rm H}_{12}{rm O}_{6}', 'H_{3}O^{+}': '{rm H}_{3}{rm O}^{+}', 'Ca^{2+}': '{rm Ca}^{2+}',
-    X: 'X', 'Y^{-}': 'Y^{-}', 'B_{0}': 'B_{0}', 'v_{0}': 'v_{0}', PV: 'PV', LED: 'LED', '2mg': '2mg', '12a+b': '12a+b' };
+    X: 'X', 'Y^{-}': 'Y^{-}', 'B_{0}': 'B_{0}', 'v_{0}': 'v_{0}', PV: 'PV', LED: '{rm LED}', ABC: 'ABC', '\\frac{pH}{pOH}': '\\frac{{rm pH}}{{rm pOH}}', '2mg': '2mg', '12a+b': '12a+b' };
   for (const [input, expected] of Object.entries(cases)) assert.equal(uprightScript(input), expected, input);
   assert.equal(uprightScript(uprightScript('C_{6}H_{12}O_{6}')), '{rm C}_{6}{rm H}_{12}{rm O}_{6}');
 });

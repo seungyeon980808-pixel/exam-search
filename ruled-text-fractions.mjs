@@ -74,7 +74,7 @@ export function ruledTextFractions(items, primitives, pageHeight) {
     const upper = nearby.filter(item => item.y - y >= 1 && item.y - y <= item.height * .6);
     const lower = nearby.filter(item => y - item.y >= item.height * .65 && y - item.y <= item.height * 1.3);
     if (!upper.length || !lower.length) continue;
-    // 한글이 든 분수는 줄이 15pt 넘게 길다. 한글 없는 분수는 짧고(4pt~), 분자·분모 사이가 본문 줄 간격(글자 높이의 1.45배)보다 확실히 좁아야 한다(1.38배 이하 — 10-25 b2_2025_09_13 A/C 1.15배, c2_2026_09_11 수식 글꼴 1/4 1.3배).
+    // 한글이 든 분수는 줄이 15pt 넘게 길다. 한글 없는 분수는 짧고(4pt~), 분자·분모 사이가 본문 줄 간격(글자 높이의 1.45배)보다 확실히 좁아야 한다(1.38배 이하 — 10-25 b2_2025_09_13 A/C 1.15배, c2_2026_09_11 수식 글꼴 1/4 1.3배). 한글 분수는 1.5배, 분자·분모 모두 수식 글자가 들면 1.65배까지(c1_2024_09_17 「(나)에서 H₃O⁺의 양」 1.58배 — 글만 든 두 줄(1.57배)은 분수가 아니다).
     const korean = [...upper, ...lower].some(item => /[가-힣]/u.test(item.value));
     const plain = !korean && [upper, lower].every(row => PLAIN.test(row.map(item => item.math ? 'X' : item.value).join('')));
     if (korean ? width < 15 : !plain) continue;
@@ -83,7 +83,7 @@ export function ruledTextFractions(items, primitives, pageHeight) {
     const u = baseline(upper), l = baseline(lower), separation = u - l;
     const centred = row => Math.abs((Math.min(...row.map(item => item.x)) + Math.max(...row.map(inkRight))) / 2
       - (left + end) / 2) <= Math.max(2, width * .08);
-    if (!Number.isFinite(separation) || separation < height * 1.05 || separation > height * (korean ? 1.5 : 1.38)
+    if (!Number.isFinite(separation) || separation < height * 1.05 || separation > height * (korean ? (upper.some(i => i.math) && lower.some(i => i.math) ? 1.65 : 1.5) : 1.38)
       || !centred(upper) || !centred(lower)
       || upper.some(item => item.height >= height * .8 && Math.abs(item.y - u) > 2) || lower.some(item => item.height >= height * .8 && Math.abs(item.y - l) > 2)
       || [...upper, ...lower].some(item => /[{}"\\]/u.test(item.math ? '' : item.value))) continue;

@@ -9,7 +9,7 @@ import {detectFigures,detectTables} from './figures.js?v=frame-20261025-1';
 import {questionFromShape} from '../sheet/templates.js?v=frame-20261025-1';
 import * as model from '../sheet/model.js?v=frame-20261025-1';
 const {makeTable,block}=model;
-import {analyze,runsText,clean,HEAD,tokens,pairTable,splitEquationParens,mapQuestionText} from './rules.js?v=frame-20261025-1';
+import {analyze,runsText,clean,HEAD,tokens,pairTable,splitEquationParens,mapQuestionText,uprightScript,namedElements} from './rules.js?v=frame-20261025-1';
 export {setPdfSource};
 
 export const FIGURE_SCALE=4;
@@ -200,7 +200,24 @@ export async function toQuestion(structure,item,{number='1'}={}){
     return i;
   };
   // 글·그림·표가 섞인 흐름을 칸으로. 글 옆 그림은 가로 묶음.
-  const emit=(seq,parent,{firstLabel='지문',width=col}={})=>{
+  // 같은 높이에 나란한 자료(표·그림)가 이름 줄 「(가)」「(나)」와 섞여 읽히면(오른쪽 표가 먼저, 사이에 이름 줄) 나란히 묶음을 못 만들어
+  // 위아래로, 순서도 뒤바뀌어 쌓였다(10-25 b2_2026_11_05·b2_2026_11_19). 자료는 왼쪽부터, 이름 줄은 그 뒤로 모은다.
+  const sideOrder=seq=>{
+    const isMat=n=>(n.k==='figure'||n.k==='table')&&n.box,isCap=n=>n.k==='para'&&(/^\([가-하]\)$/.test(String(n.text||'').trim())||/^\(.*[:：].*\)$/.test(String(n.text||'').replace(/\$/g,'').trim()));/* 이름 줄·범례 줄 */
+    const out=[];
+    for(let i=0;i<seq.length;){
+      if(!isMat(seq[i])&&!isCap(seq[i])){out.push(seq[i++]);continue;}
+      let j=i;while(j<seq.length&&(isMat(seq[j])||isCap(seq[j])))j++;
+      const win=seq.slice(i,j),mats=win.filter(isMat),caps=win.filter(isCap);
+      const side=mats.length>=2&&mats.every(m=>yOverlap(m.box,mats[0].box)>4)&&caps.length<=mats.length;
+      if(side)out.push(...[...mats].sort((a,b)=>a.box[0]-b.box[0]),...caps.filter(c=>/^\([가-하]\)$/.test(String(c.text).trim())).sort((a,b)=>String(a.text).localeCompare(String(b.text))),...caps.filter(c=>!/^\([가-하]\)$/.test(String(c.text).trim())));
+      else out.push(...win);
+      i=j;
+    }
+    return out;
+  };
+  const emit=(seq0,parent,{firstLabel='지문',width=col}={})=>{
+    const seq=sideOrder(seq0);
     let i=0,firstText=true;
     while(i<seq.length){
       const n=seq[i];
@@ -302,7 +319,24 @@ export async function toQuestion(structure,item,{number='1'}={}){
           else if(st.lines.length&&!/^[◦○•]/.test(p.text)&&!p.head&&!p.display)st.lines.at(-1).text+=' '+p.text;else st.lines.push({id:crypto.randomUUID(),label:'',text:p.text});itemOf.push(st.lines.length-1);}
         // 과정 문단이 앞 항목에 이어 붙으면 문단 번호와 항목 번호가 달라진다 — 항목 번호로 바꾼다(이어 붙은 문단의 줄은 그 항목 뒤쪽 줄이라 줄 수는 그대로 둔다).
         {const f=out.find(b=>b.parent===host.id&&b.kind==='figure');if(sideFig&&f?.figure?.besideAt)f.figure.besideAt={...f.figure.besideAt,item:itemOf[f.figure.besideAt.item]??0};}
-        {const before=out.length;emit(s.items.filter(n=>n.k!=='para'&&n!==sideFig),g);
+        // 과정 항목 사이에 낀 자료(「(가) … 준비한다. [표] (나) …」): 그 자리에서 과정 칸을 나눠 자료를 항목 사이에 둔다.
+        // 5E 과정 칸은 줄 사이 자료를 담지 못해 표가 과정 끝((나) 뒤)으로 밀렸다(10-25 밤 c2_2026_06_05·b1_2024_09_18).
+        const rest=s.items.filter(n=>n.k!=='para'&&n!==sideFig);
+        if(!sideFig&&rest.length&&st.lines.length>1){
+          const lineTop=paras.map(p=>{const b=paraBox(p);return b?b[1]:null;});
+          const cuts=[];
+          for(const m of rest){if(!m.box)continue;const k=itemOf.findIndex((it,pi)=>lineTop[pi]!==null&&lineTop[pi]>m.box[3]-2);
+            if(k>0&&itemOf[k]>0&&itemOf[k]<st.lines.length)cuts.push({at:itemOf[k],m});}
+          if(cuts.length){
+            const lines=st.lines;st.lines=lines.slice(0,cuts[0].at);let from=cuts[0].at;
+            const groups=[];for(const c of cuts){const g0=groups.find(x=>x.at===c.at);if(g0)g0.ms.push(c.m);else groups.push({at:c.at,ms:[c.m]});}
+            groups.forEach((gr,k)=>{const before=out.length;emit(gr.ms,g);const tb=out.slice(before).find(b=>b.kind==='table');if(tb&&legends.length&&k===0)tb.table.note=[tb.table.note,...legends].filter(Boolean).join('\n');
+              const to=k+1<groups.length?groups[k+1].at:lines.length;if(to>from){const st2=add('steps',g,'');st2.label='';st2.lines=lines.slice(from,to);}from=to;});
+            const left=rest.filter(m=>!cuts.some(c=>c.m===m));if(left.length)emit(left,g);
+            continue;
+          }
+        }
+        {const before=out.length;emit(rest,g);
           const tb=out.slice(before).find(b=>b.kind==='table');if(tb&&legends.length)tb.table.note=[tb.table.note,...legends].filter(Boolean).join('\n');}
         continue;
       }
@@ -351,6 +385,8 @@ export async function toQuestion(structure,item,{number='1'}={}){
   // 글 옆 묶음에 남은 자식이 하나면 풀어 준다.
   for(const g of out.filter(b=>b.kind==='group'&&!b.boxed)){const kids=out.filter(b=>b.parent===g.id);if(kids.length===1){kids[0].parent=g.parent;delete kids[0].ratio;out.splice(out.indexOf(g),1);}}
   q.blocks=[...out,...keep.filter(b=>b.kind==='dialogue'),...keep.filter(b=>b.kind==='bogi')];
+  // 자료 이름(「(나)」)만 든 본문 글 덩이는 그 이름을 가진 자료가 있으면 뺀다(이름 줄이 자료에 붙고 글로도 남음, b2_2026_11_05).
+  q.blocks=q.blocks.filter(b=>!(b.kind==='text'&&/^\([가-하]\)$/.test(String(b.text||'').trim())&&q.blocks.some(x=>x!==b&&x.label===String(b.text).trim())));
   // 〈보기〉 상자 제목(<보 기>)만 든 본문 글 덩이는 〈보기〉 칸이 있으면 뺀다(10-25 b1_2025_06_04 — 제목 줄이 본문에 한 번 더 찍힘).
   if(q.blocks.some(b=>b.kind==='bogi'))q.blocks=q.blocks.filter(b=>!(b.kind==='text'&&/^[<〈＜]\s*보\s*기\s*[>〉＞]$/.test(String(b.text||'').trim())));
   // 쪽 옆 과목 띠(생명과학 Ⅰ)의 로마 숫자가 문장 끝(…다.) 뒤에 붙은 것을 뗀다(10-25 b1_2025_06_04 〈보기〉 ㄷ 「… 운반된다. I」).
@@ -380,6 +416,8 @@ export async function toQuestion(structure,item,{number='1'}={}){
   mapQuestionText(q,splitEquationParens);
   // 기호 하나뿐인 수식($○$ · $×$ 등)은 본문 글자로 — 수식 개체로 넣으면 뒤 글자(「:」)를 가렸다(10-25 16번 「(○: 있음」).
   mapQuestionText(q,v=>String(v??'').replace(/\$\s*([○●◎△▲▽▼□■◇◆☆★×])\s*\$/gu,'$1'));
+  // 괄호를 수식 밖으로 뺀 뒤(「$(mol)$」→「($mol$)」) 단위·화학식·원소 이름 뒤 기호를 한 번 더 바로 세운다(10-25 밤).
+  mapQuestionText(q,v=>namedElements(String(v??'').replace(/\$([^$\n]+)\$/g,(m,e)=>'$'+uprightScript(e)+'$')));
   attachRowCaptions(q);tidyStrays(q);
   if(figs.size>count.images)diag.notes.push(`그림 ${figs.size}개 중 ${count.images}개만 넣었습니다.`);
   // figures: 넣은 자료 수(그림 + 표 + 조건·실험 상자). images: 그림 수.
