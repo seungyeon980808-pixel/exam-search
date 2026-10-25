@@ -31,7 +31,7 @@ function chemAt(s,i){
   // 원소 하나(B₀, N 등)는 두 글자 원소·흔한 이온(H⁺, O²⁻)·분자(H₂, O₂)일 때만 — 물리 변수 B₀·v₀는 그대로.
   // 원소 둘 이상에 상태 기호가 바로 붙으면 화학식이다(CO(g)). 한 글자(B(s), C(g))는 가상 물질 A·B·C일 때가 많아 그대로.
   const state=elems>1&&/^\((?:s|l|g|aq)\b/.test(s.slice(j));
-  const strong=state||(elems>1?parts.some(p=>p.sym.length>1||p.sub||p.sup):parts.some(p=>p.sym.length>1||(p.sub&&/^[HNOFISP]$/.test(p.sym))||(p.sup&&ION1.has(p.sym))));
+  const strong=state||(elems>1?parts.some(p=>p.sym.length>1||p.sub||p.sup):parts.some(p=>p.sym.length>1||(p.sub&&/^[HNOFISP]$/.test(p.sym)&&!/^_\{[01]\}$/.test(p.sub))/* I₀·N₁ 같은 물리 기호는 원소가 아니다(p1_2026_11_15) */||(p.sup&&ION1.has(p.sym))));
   if(!strong)return null;
   // 첨자 없이 이어진 원소 기호는 한 {rm …}로 묶는다(KCl, NaOH → {rm NaOH}, C₆H₁₂O₆ → {rm C}_{6}{rm H}_{12}…).
   let text='',run='';for(const p of parts){run+=p.sym;if(p.sub||p.sup){text+=rm(run)+p.sub+p.sup;run='';}}if(run)text+=rm(run);
@@ -59,7 +59,9 @@ export function uprightScript(eq){
     if(eq.startsWith('{rm',i)){const k=eq.indexOf('}',i);out+=eq.slice(i,k+1);i=k+1;continue;}
     const num=eq.slice(i).match(/^\d+(?:\.\d+)?(?:×10\^\{-?\d+\})?[`~\s]*/);
     if(num&&(i===0||!/[A-Za-z0-9.]/.test(eq[i-1]))){
-      const u=unitAt(eq,i+num[0].length,/\.|×10/.test(num[0])?'decimal':'number');
+      // 「x=1m」처럼 = 바로 뒤 수에 붙어 식 끝에 오는 한 글자 단위도 단위로(10-25 밤 p1_2026_09_06). 「2m인」 같은 질량 변수는 = 뒤가 아니다.
+      const eqEnd=eq[i-1]==='='&&/[xyzdrLhs]\s*$/.test(eq.slice(0,i-1))&&new RegExp('^[A-Za-zΩ]+$').test(eq.slice(i+num[0].length).trim());
+      const u=unitAt(eq,i+num[0].length,/\.|×10/.test(num[0])||eqEnd?'decimal':'number');
       if(u){out+=num[0]+u.text;i=u.end;continue;}
       out+=num[0];i+=num[0].length;continue;
     }
