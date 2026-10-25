@@ -8,11 +8,68 @@
 export const runsText=runs=>(runs||[]).filter(r=>r.kind!=='figure').map(r=>r.kind==='equation'?`$${String(r.script||r.value||'').trim()}$`:String(r.value||'')).join('');
 // 수식($…$) 짝으로 읽는다: 빈 수식은 빼고, 사이에 아무것도 없는 두 수식은 하나로, 띄어쓰기만 있으면 수식 안 띄어쓰기(~)로 잇는다.
 // 예전 /\$\s*\$/ 지우기는 「$X$ $1mol$」의 띄어쓰기까지 지워 「$X1mol$」로 붙였다(10-25 c1_2026_09_11).
+// 바로 선 글자(10-25): 원본은 단위(0.2 m, 210 N, km/s, mol)와 화학식(KCl, H₂O, NaOH, Ca²⁺)을 바로 세워 찍는다. 수식 글꼴이 같아
+// PDF로는 기울임을 가릴 수 없어(X와 KCl이 같은 글꼴) 규칙으로 정한다. 변수(3m의 m, 가상 원소 X·Y·A)는 그대로 기울인다.
+const ELEMENTS=new Set('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Ag Cd Sn I Xe Cs Ba Pt Au Hg Pb U'.split(' '));
+const ION1=new Set(['H','K','O','F','N','S','I']);
+const UNIT_MULTI=new Set('kg km cm mm nm μm mL mol Mpc kpc pc cal kcal kJ atm Pa kPa hPa Hz kHz eV MeV min AU ly'.split(' '));
+const UNIT_ONE=new Set('m g s N J W V K L M A T C Ω h'.split(' ')),UNIT_SURE=new Set('N J W V Ω'.split(' '));
+const rm=v=>`{rm ${v}}`;
+// 화학식: 원소 기호(아래 숫자·전하 첨자 포함)만으로 된 덩이. 두 글자 원소·아래 숫자·전하 중 하나가 있어야 한다(PV, BC 같은 변수 곱은 그대로).
+function chemAt(s,i){
+  if(i>0&&/[A-Za-z\\]/.test(s[i-1]))return null;
+  let j=i,parts=[],elems=0;
+  while(j<s.length&&/[A-Z]/.test(s[j])){
+    let sym=s[j];if(/[a-z]/.test(s[j+1]||'')&&ELEMENTS.has(s[j]+s[j+1])){sym=s[j]+s[j+1];}
+    if(!ELEMENTS.has(sym))return null;
+    let k=j+sym.length,sub='',sup='';
+    const m1=s.slice(k).match(/^_\{(\d+)\}/);if(m1){sub=m1[0];k+=sub.length;}
+    const m2=s.slice(k).match(/^\^\{(\d*[+\-])\}/);if(m2){sup=m2[0];k+=sup.length;}
+    parts.push({sym,sub,sup});elems++;j=k;
+  }
+  if(!elems||/[A-Za-z]/.test(s[j]||''))return null;
+  // 원소 하나(B₀, N 등)는 두 글자 원소·흔한 이온(H⁺, O²⁻)·분자(H₂, O₂)일 때만 — 물리 변수 B₀·v₀는 그대로.
+  // 원소 둘 이상에 상태 기호가 바로 붙으면 화학식이다(CO(g)). 한 글자(B(s), C(g))는 가상 물질 A·B·C일 때가 많아 그대로.
+  const state=elems>1&&/^\((?:s|l|g|aq)\b/.test(s.slice(j));
+  const strong=state||(elems>1?parts.some(p=>p.sym.length>1||p.sub||p.sup):parts.some(p=>p.sym.length>1||(p.sub&&/^[HNOFISP]$/.test(p.sym))||(p.sup&&ION1.has(p.sym))));
+  if(!strong)return null;
+  // 첨자 없이 이어진 원소 기호는 한 {rm …}로 묶는다(KCl, NaOH → {rm NaOH}, C₆H₁₂O₆ → {rm C}_{6}{rm H}_{12}…).
+  let text='',run='';for(const p of parts){run+=p.sym;if(p.sub||p.sup){text+=rm(run)+p.sub+p.sup;run='';}}if(run)text+=rm(run);
+  return {end:j,text};
+}
+// 단위 식: 단위(·, / 로 이음, 끝 ^{2} 허용). 앞에 수가 있으면 판정이 너그럽다.
+function unitAt(s,i,afterNumber){
+  const m=s.slice(i).match(/^((?:μ?[A-Za-zΩ]+)(?:\^\{-?\d\})?)((?:[\/·](?:μ?[A-Za-zΩ℃]+)(?:\^\{-?\d\})?)*)/);
+  if(!m)return null;const all=m[0],toks=all.split(/[\/·]/).map(t=>t.replace(/\^\{-?\d\}$/,''));
+  if(/[A-Za-z]/.test(s[i+all.length]||''))return null;
+  if(!toks.every(t=>t==='℃'||UNIT_MULTI.has(t)||UNIT_ONE.has(t)))return null;
+  const compound=toks.length>1,multi=toks.some(t=>UNIT_MULTI.has(t));
+  if(!(multi||compound||afterNumber==='decimal'||(afterNumber&&UNIT_SURE.has(toks[0]))))return null;
+  return {end:i+all.length,text:all.replace(/μ?[A-Za-zΩ]+/g,t=>rm(t))};
+}
+export function uprightScript(eq){
+  let out='',i=0;
+  const whole=unitAt(eq,0,false);if(whole&&whole.end===eq.length&&!/^\{rm/.test(eq))return whole.text;
+  while(i<eq.length){
+    const c=eq[i];
+    if(c==='\\'){const m=eq.slice(i).match(/^\\text\{[^{}]*\}|^\\[A-Za-z]+/);out+=m[0];i+=m[0].length;continue;}
+    if(eq.startsWith('{rm',i)){const k=eq.indexOf('}',i);out+=eq.slice(i,k+1);i=k+1;continue;}
+    const num=eq.slice(i).match(/^\d+(?:\.\d+)?(?:×10\^\{-?\d+\})?[`~\s]*/);
+    if(num&&(i===0||!/[A-Za-z0-9.]/.test(eq[i-1]))){
+      const u=unitAt(eq,i+num[0].length,/\.|×10/.test(num[0])?'decimal':'number');
+      if(u){out+=num[0]+u.text;i=u.end;continue;}
+      out+=num[0];i+=num[0].length;continue;
+    }
+    if(/[A-Z]/.test(c)){const ch=chemAt(eq,i);if(ch){out+=ch.text;i=ch.end;continue;}}
+    out+=c;i++;
+  }
+  return out;
+}
 // 수식 밖 글자 바로잡기: 물결 연산자 ∼(U+223C)는 함초롬바탕에서 ∞처럼 그려지고, 한 점 끌기 ․(U+2024)는 아래에 찍힌다 —
 // 원본(평가원 지면)은 「A～D」 「시·공간적」(10-25 e2_2024_09_03, b1_2026_09_20).
 const TEXT_FIX={'\u223c':'～','\u2024':'·'};
 export const clean=s=>{
-  const parts=String(s||'').replace(/\s+/g,' ').split('$').map((p,i)=>i%2?p:p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
+  const parts=String(s||'').replace(/\s+/g,' ').split('$').map((p,i)=>i%2?uprightScript(p):p.replace(/[\u223c\u2024]/g,c=>TEXT_FIX[c]));
   if(parts.length%2===0)return parts.join('$').trim();
   const out=[parts[0]];
   for(let i=1;i<parts.length;i+=2){

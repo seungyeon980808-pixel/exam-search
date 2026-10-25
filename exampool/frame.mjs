@@ -5,7 +5,7 @@
 // 한글 엔진은 5E 본체와 같은 rhwp 0.8.7 빌드(rhwp/)를 쓴다. 기출 탐색기의 기존 변환기(0.8.6)와 따로 읽는다.
 import { buildQuestionHtml, verifyNativeQuestion } from './sheet/handoff.js?v=frame-20261025-1';
 import { pageProfile, materializeEquations, normalizeQuestionImport, applyQuestionIndent, applyReferenceBogiIndent, applyCellEquationLines,
-  applyFloatingPictures, applyCellFloatingPictures, settleFloatingPictures, applyFloatingTable, centerCellPictures, fixedLabelSpaces } from './sheet/typeset-model.js?v=frame-20261025-1';
+  applyFloatingPictures, applyCellFloatingPictures, settleFloatingPictures, applyFloatingTable, centerCellPictures, fixedLabelSpaces, growCellsToContent } from './sheet/typeset-model.js?v=frame-20261025-1';
 import { KICE_STANDARD, standardForPaper } from './sheet/typeset-standard.js?v=frame-20261025-1';
 import { fitQuestionLines } from './sheet/line-fit.js?v=frame-20261025-1';
 import { questionPageProfile, questionPageMetrics, fitQuestionPage } from './sheet/question-page.js?v=frame-20261025-1';
@@ -138,6 +138,7 @@ export async function typesetFrame(value, profile = PROFILE) {
         at('다시 열기');
         const settled = new Document(exportLayoutHwpx(styled, CFB));
         try {
+          at('칸 높이'); growCellsToContent(settled);
           at('용지 맞춤'); fitQuestionPage(settled, profile); at('글 확인'); verifyNativeQuestion(settled, plan);
           height = questionPageMetrics(settled, profile).usedHeightMm;
           bytes = await applyCellEquationLines(exportLayoutHwpx(settled, CFB), JSZip);

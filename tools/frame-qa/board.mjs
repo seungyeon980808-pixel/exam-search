@@ -1,7 +1,7 @@
 // 눈 검사판: 원본 문항 카드(왼쪽)와 5E 문항 틀로 만든 한글 문서(오른쪽)를 나란히 놓는다.
 //   node tools/frame-qa/board.mjs [--ids a,b] [--sample N] [--from results.jsonl --failed] [--out _work/frame-qa/board]
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { ROOT, startServer } from './server.mjs';
 
@@ -15,7 +15,8 @@ if (args.from) {
 }
 if (args.sample) { const n = Number(args.sample), step = ids.length / n; ids = Array.from({ length: Math.min(n, ids.length) }, (_, k) => ids[Math.floor(k * step)]); }
 
-const server = await startServer();
+// --root <폴더>: 고정 사본(예: 이전 커밋)을 내보내 견준다. 원본 카드 그림은 이 저장소 것을 쓴다.
+const server = await startServer(0, args.root ? resolve(args.root) : undefined);
 const browser = await chromium.launch();
 const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
 await page.goto(server.origin + '/__blank');
@@ -38,8 +39,9 @@ const rendered = await page.evaluate(async (ids) => {
 }, ids);
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 const rows = rendered.map((r) => `<section><h2>${esc(r.id)}${r.notes?.length ? ` <small>${esc(r.notes.join(' · '))}</small>` : ''}</h2>
-<div class="pair"><img src="/cards/${encodeURIComponent(r.id)}.webp"><div class="doc">${r.error ? `<p class="err">${esc(r.error)}</p>` : `<img class="paper" src="${r.png}">`}</div></div></section>`).join('\n');
-writeFileSync(join(ROOT, '_work/frame-qa/board.html'), `<!doctype html><meta charset="utf-8"><title>5E 문항 틀 비교판</title><style>
+<div class="pair"><img src="${args.root ? 'data:image/webp;base64,' + readFileSync(join(ROOT, 'cards', r.id + '.webp')).toString('base64') : '/cards/' + encodeURIComponent(r.id) + '.webp'}"><div class="doc">${r.error ? `<p class="err">${esc(r.error)}</p>` : `<img class="paper" src="${r.png}">`}</div></div></section>`).join('\n');
+const SERVED = args.root ? resolve(args.root) : ROOT; mkdirSync(join(SERVED, '_work/frame-qa'), { recursive: true });
+writeFileSync(join(SERVED, '_work/frame-qa/board.html'), `<!doctype html><meta charset="utf-8"><title>5E 문항 틀 비교판</title><style>
 body{font:13px system-ui;margin:16px;background:#f3f4f6}section{background:#fff;margin:0 0 14px;padding:10px;border-radius:8px}
 h2{font-size:13px;margin:0 0 8px}small{color:#b45309;font-weight:400}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
 .pair img{width:100%;border:1px solid #ddd}.doc{border:1px solid #ddd;overflow:hidden}.paper{width:100%;height:auto;display:block}.err{color:#b91c1c}</style>${rows}`);

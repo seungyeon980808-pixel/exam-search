@@ -238,6 +238,17 @@ function clipItems(question, pdf, glyphs) {
       // A raised or lowered script belongs to its base's line.
       if (scriptOf && attachedScript.test(base.value.trim())) base.y = scriptOf.transform[5];
       if (!base.math) base.value = underline(item, base.value);
+      // 5E 기출 복원(10-25): 본문 글꼴 조각 「X1」처럼 영문 뒤 숫자가 작게(아래 첨자 크기) 찍힌 것. 같은 글자 모양을 작게 찍어 글자는 그대로
+      // 「X1」이지만 조각 폭이 글자 폭 합보다 좁다 — 끝 숫자들이 50~85% 크기면 아래 첨자 글자(X₁)로 바꾼다(X₁·Y₂·d₁·Z₁이 X1로 읽힘).
+      if (!base.math && /[A-Za-z]\d/u.test(base.value)) {
+        const adv = (c) => advances.get(`${item.fontName}:${c.codePointAt(0)}`);
+        if (item.str === base.value.replace(/\u0332/gu, '') && [...item.str].every((c) => adv(c) !== undefined)) {
+          const scale = Math.abs(item.transform[0]) / 1000, full = [...item.str].reduce((sum, c) => sum + adv(c), 0) * scale;
+          const runs = [...item.str.matchAll(/(?<=[A-Za-z])\d{1,2}(?!\d)/gu)].map((m) => m[0]);
+          const digits = runs.join('') ? [...runs.join('')].reduce((sum, c) => sum + adv(c), 0) * scale : 0, ratio = digits > 0 ? (digits - (full - item.width)) / digits : 1;
+          if (ratio >= 0.45 && ratio <= 0.85) base.value = base.value.replace(/(?<=[A-Za-z]\u0332?)\d{1,2}(?!\d)/gu, (d) => [...d].map((c) => '₀₁₂₃₄₅₆₇₈₉'[c]).join(''));
+        }
+      }
       if (!base.math || !/[\uE05C\uE06D\uE06E]/u.test(item.str) || [...item.str.trim()].length < 2) return [base];
       const chars = [...item.str];
       const widths = chars.map((char) => advances.get(`${item.fontName}:${char.codePointAt(0)}`)
@@ -388,7 +399,7 @@ export function lineRuns(line) {
   let previous = null;
   // 5E 기출 복원: 수식 글꼴의 작은 글자가 바로 앞 수식 글자보다 내려가/올라가 있으면 아래/위첨자(λ_A, v_B).
   let base = null, script = null;
-  for (const item of items) {
+  for (let item of items) {
     if (!item.value) continue;
     if (item.math && base && previous?.math && !item.recovered && /^[A-Za-z0-9+−-]{1,3}$/u.test(item.value.trim())
       && item.height > 0 && item.height <= base.height * 0.8
@@ -403,6 +414,12 @@ export function lineRuns(line) {
         previous = item;
         continue;
       }
+    }
+    // 5E 기출 복원(10-25): 본문 글꼴 영문 뒤에 작게 내려 찍힌 숫자 조각(d 뒤 「1～」)은 아래 첨자 글자로(d₁～). 수식이 아닌 글끼리.
+    if (!item.math && previous && !previous.math && /[A-Za-z]$/u.test(previous.value) && /^\d{1,2}/u.test(item.value)
+      && item.height > 0 && item.height <= previous.height * 0.8 && previous.y - item.y >= 1 && previous.y - item.y <= previous.height * 0.5
+      && item.x - (previous.x + previous.width) >= -1 && item.x - (previous.x + previous.width) <= 1.6) {
+      item = { ...item, value: item.value.replace(/^\d{1,2}/u, (d) => [...d].map((c) => '₀₁₂₃₄₅₆₇₈₉'[c]).join('')), y: previous.y };
     }
     script = null;
     if (item.math && !(base && item.height <= base.height * 0.8 && Math.abs(item.y - base.y) >= 1.2)) base = item;

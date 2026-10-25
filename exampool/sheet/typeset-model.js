@@ -360,6 +360,35 @@ export function applyCellFloatingPictures(document,floats){
   if(want.some(f=>!f.done))throw Error('상자 안 어울림 그림을 찾지 못했습니다.');
   document.reflowLinesegs?.();
 }
+// 칸 높이를 글에 맞춰 늘린다(10-25). 들여온 뒤 문단 모양(줄 간격 145% 등)을 바꾸면 칸 높이(cellSz)는 들여올 때 값 그대로라
+// 마지막 줄이 칸 아래 테두리에 잘렸다(b1_2026_06_09 상자 「… 결론을 내렸다.」). 맨 바깥 표 칸만 보고, 줄지는 않는다.
+export function growCellsToContent(document,section=0){
+  const J=JSON.parse;let grown=0;
+  const ci=x=>[x.controlIndex??x.controlIdx,x.cellIndex??x.cellIdx];
+  for(let page=0;page<document.pageCount();page++){
+    const tables=(J(document.getPageControlLayout(page)).controls||[]).filter(c=>c.type==='table'&&!c.cellPath?.length&&c.secIdx===section);
+    if(!tables.length)continue;
+    const runs=J(document.getPageTextLayout(page)).runs.filter(r=>r.cellPath?.length&&r.secIdx===section);
+    const inner=(J(document.getPageControlLayout(page)).controls||[]).filter(c=>c.cellPath?.length&&c.secIdx===section&&Number.isFinite(c.y)&&Number.isFinite(c.h));
+    for(const t of tables){
+      let boxes;try{boxes=J(document.getTableCellBboxes(t.secIdx,t.paraIdx,t.controlIdx));}catch{continue;}
+      for(const b of boxes.filter(b=>b.pageIndex===page)){
+        // 칸 안 조각의 paraIdx는 칸 문단 번호 — 바깥 문단은 parentParaIdx다.
+        const mine=x=>(x.parentParaIdx??x.paraIdx)===t.paraIdx&&(()=>{const [ctrl,cell]=ci(x.cellPath[0]);return ctrl===t.controlIdx&&cell===b.cellIdx;})();
+        // 칸 상자 안에서 시작하는 조각만(같은 문단의 다른 표·상자 조각이 섞여 들어와 칸을 수백 px 늘렸다).
+        const inside=x=>x.x>=b.x-1&&x.x<b.x+b.w&&x.y>=b.y-1&&x.y<b.y+b.h;
+        const bottom=Math.max(...runs.filter(r=>mine(r)&&inside(r)).map(r=>r.y+r.h),...inner.filter(c=>mine(c)&&inside(c)).map(c=>c.y+c.h),-Infinity);
+        if(!Number.isFinite(bottom))continue;
+        let props;try{props=J(document.getCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx));}catch{continue;}const need=bottom+props.paddingBottom/75-(b.y+b.h);
+        if(need<=0.5||need>60)continue;
+        const r=J(document.setCellProperties(t.secIdx,t.paraIdx,t.controlIdx,b.cellIdx,JSON.stringify({height:props.height+Math.ceil(need*75)})));
+        if(r?.ok!==false)grown++;
+      }
+    }
+  }
+  if(grown)document.reflowLinesegs();
+  return grown;
+}
 // 어울림 그림을 놓은 뒤의 줄 배치 점검. 한글 엔진은 그림 높이 안에 든 두 줄짜리 문단을 그림 반대쪽으로 밀어 잘못 흐르게 한다.
 // 그림이 붙은 문단이 그림과 겹치거나 그림보다 짧으면(다음 문단도 그림 옆에 와야 함) 엔진의 어울림 대신
 // 그림은 글 앞(단 기준 정렬)에 두고, 그림 옆에서 시작하는 문단마다 오른쪽(왼쪽) 여백을 그림 폭만큼 둔다(평가원처럼 발문도 그림 옆).
@@ -381,23 +410,28 @@ export function settleFloatingPictures(document){
   const bottomOf=ls=>ls.length?Math.max(...ls.map(l=>l.y+l.h)):-Infinity;
   const space=(p,para,needed)=>{const props=JSON.parse(document.getParaPropertiesAt(p.sec,para));document.applyParaFormat(p.sec,para,JSON.stringify({spacingAfter:Math.round(((props.spacingAfter||0)/2+needed)*150)}));document.reflowLinesegs();};
   const count=document.getParagraphCount?.(pics[0].sec);
+  // 한 문단은 한 번만 좁힌다 — 자료 표와 그 아래 범례 표를 함께 띄우면(10-25) 두 개체가 같은 문단을 두 번 좁혔다.
+  const narrowed=new Set();
   for(const p of pics){
     const right=p.props.horzAlign!=='Left';let b=box(p);if(!b)continue;
     const own=lines(p,p.para),overlaps=own.some(l=>l.y<b.y+b.h&&l.y+l.h>b.y&&(right?l.x1>b.x+1:l.x0<b.x+b.w-1));
     if(!overlaps&&bottomOf(own)+GAP>=b.y+b.h)continue;
     const room=b.w+((right?p.props.outerMarginLeft:p.props.outerMarginRight)||0)/75+GAP+2;
-    const narrow=para=>{const props=JSON.parse(document.getParaPropertiesAt(p.sec,para));document.applyParaFormat(p.sec,para,JSON.stringify(right?{marginRight:Math.round(((props.marginRight||0)+room)*150)}:{marginLeft:Math.round(((props.marginLeft||0)+room)*150)}));};
+    const narrow=para=>{if(narrowed.has(para))return;narrowed.add(para);const props=JSON.parse(document.getParaPropertiesAt(p.sec,para));document.applyParaFormat(p.sec,para,JSON.stringify(right?{marginRight:Math.round(((props.marginRight||0)+room)*150)}:{marginLeft:Math.round(((props.marginLeft||0)+room)*150)}));};
     setProps(p,{textWrap:'InFrontOfText',horzRelTo:'Column'});
     if(own.length)narrow(p.para);document.reflowLinesegs();b=box(p);
     let last=p.para;
     for(let para=p.para+1;Number.isInteger(count)?para<count:para<p.para+20;para++){
       const ls=lines(p,para);
+      // 띄운 개체만 든 문단(함께 띄운 범례 표)은 건너뛰고 그 아래 글 문단까지 좁힌다(b1_2026_11_09 표가 글을 덮음).
+      if(!ls.length&&pics.some(q=>q!==p&&q.sec===p.sec&&q.para===para))continue;
       if(!ls.length||controlParas(p).has(para))break;
       if(Math.min(...ls.map(l=>l.y))>=b.y+b.h)break;
       // 그림 아래로 네 줄 가까이 넘게 길어지는 문단은 좁히지 않고 그림 밑에서 단 폭으로 시작하게 한다(긴 설명이 좁은 폭으로 길게 늘어지지 않게).
       const before=JSON.parse(document.getParaPropertiesAt(p.sec,para));
       narrow(para);document.reflowLinesegs();b=box(p);
-      if(bottomOf(lines(p,para))>b.y+b.h+90){document.applyParaFormat(p.sec,para,JSON.stringify(right?{marginRight:Math.round((before.marginRight||0)*150)}:{marginLeft:Math.round((before.marginLeft||0)*150)}));document.reflowLinesegs();b=box(p);break;}
+      // 단, 문단이 개체 윗변과 같은 높이에서 시작하면(번호 문단 위에 띄운 글 옆 표) 그림 밑으로 보낼 수 없다 — 좁힌 채 둔다(10-25 b1_2026_11_09 긴 발문이 표 밑에 깔림).
+      if(Math.min(...ls.map(l=>l.y))>b.y+2&&bottomOf(lines(p,para))>b.y+b.h+90){document.applyParaFormat(p.sec,para,JSON.stringify(right?{marginRight:Math.round((before.marginRight||0)*150)}:{marginLeft:Math.round((before.marginLeft||0)*150)}));document.reflowLinesegs();b=box(p);break;}
       last=para;
     }
     // 글 없는 문단에 붙은 표: 그 문단 높이만큼 내려 다음 문단 첫 줄과 위를 맞춘다.
@@ -414,10 +448,32 @@ export function applyFloatingTable(document,spec,number){
   const prefix=`${number}. `;
   for(let page=0;page<document.pageCount();page++){
     const run=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>!r.cellPath?.length&&(r.text.startsWith(prefix)||r.text===`${number}.`));if(!run)continue;
-    const t=(JSON.parse(document.getPageControlLayout(page)).controls||[]).find(c=>c.type==='table'&&!c.cellPath?.length&&c.paraIdx===run.paraIdx-1);
-    if(!t)throw Error('글 옆 표를 찾지 못했습니다.');
-    const r=JSON.parse(document.setTableProperties(t.secIdx,t.paraIdx,t.controlIdx,JSON.stringify({treatAsChar:false,textWrap:'InFrontOfText',horzRelTo:'Column',horzAlign:spec.align,vertRelTo:'Para',vertAlign:'Top',vertOffset:0,horzOffset:0})));
-    if(r?.ok===false)throw Error('글 옆 표를 배치하지 못했습니다.');return;
+    // 번호 문단 바로 앞에 이어진 맨 바깥 표 문단들(자료 표, 그 아래 범례 「(단위: kcal)」 표)을 함께 띄운다. 범례가 따로 한 문단이 된 뒤(10-25 표 범례 오른쪽 끝)
+    // 바로 앞 문단 하나만 띄우면 범례만 글 옆으로 가고 자료 표는 번호 위에 남았다(b1_2026_06_02). 뒤 표는 앞 표 높이만큼 내려 놓는다.
+    const controls=(JSON.parse(document.getPageControlLayout(page)).controls||[]).filter(c=>c.type==='table'&&!c.cellPath?.length);
+    const group=[];for(let p=run.paraIdx-1;p>=0;p--){const t=controls.find(c=>c.paraIdx===p);if(!t)break;group.unshift(t);}
+    if(!group.length)throw Error('글 옆 표를 찾지 못했습니다.');
+    let offset=0;
+    for(const t of group){
+      const r=JSON.parse(document.setTableProperties(t.secIdx,t.paraIdx,t.controlIdx,JSON.stringify({treatAsChar:false,textWrap:'InFrontOfText',horzRelTo:'Column',horzAlign:spec.align,vertRelTo:'Para',vertAlign:'Top',vertOffset:Math.round(offset*75),horzOffset:0})));
+      if(r?.ok===false)throw Error('글 옆 표를 배치하지 못했습니다.');offset+=t.h;
+    }
+    // 표가 둘 이상이면 띄운 표 문단들이 빈 줄로 남아 번호 줄이 내려간다 — 다시 재서 표 윗변을 번호 줄 윗변에 맞춘다.
+    if(group.length>1){
+      // 띄운 표만 든 문단은 줄 높이를 1pt로(빈 줄로 남지 않게, 시험지 첫 빈 문단과 같은 방법).
+      for(const t of group){document.applyParaFormat(t.secIdx,t.paraIdx,JSON.stringify({lineSpacingType:'Percent',lineSpacing:100,spacingBefore:0,spacingAfter:0}));
+        const n=document.getParagraphLength(t.secIdx,t.paraIdx);if(n)document.applyCharFormat(t.secIdx,t.paraIdx,0,n,JSON.stringify({fontSize:100}));}
+      document.reflowLinesegs();
+      const now=JSON.parse(document.getPageTextLayout(page)).runs.find(r=>!r.cellPath?.length&&(r.text.startsWith(prefix)||r.text===`${number}.`));
+      const placed=(JSON.parse(document.getPageControlLayout(page)).controls||[]).filter(c=>c.type==='table'&&!c.cellPath?.length&&group.some(g=>g.paraIdx===c.paraIdx));
+      const first=placed.find(c=>c.paraIdx===group[0].paraIdx);
+      if(now&&first&&Math.abs(now.y-first.y)>1){
+        let at=0;
+        for(const t of group){const c=placed.find(x=>x.paraIdx===t.paraIdx);if(!c)continue;
+          const anchor=c.y-at;document.setTableProperties(c.secIdx,c.paraIdx,c.controlIdx,JSON.stringify({vertOffset:Math.round((now.y-anchor+at)*75)}));at+=t.h;}
+      }
+    }
+    return;
   }
   throw Error('글 옆 표의 지문을 찾지 못했습니다.');
 }

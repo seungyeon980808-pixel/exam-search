@@ -342,6 +342,11 @@ export async function toQuestion(structure,item,{number='1'}={}){
   // 글 옆 묶음에 남은 자식이 하나면 풀어 준다.
   for(const g of out.filter(b=>b.kind==='group'&&!b.boxed)){const kids=out.filter(b=>b.parent===g.id);if(kids.length===1){kids[0].parent=g.parent;delete kids[0].ratio;out.splice(out.indexOf(g),1);}}
   q.blocks=[...out,...keep.filter(b=>b.kind==='dialogue'),...keep.filter(b=>b.kind==='bogi')];
+  // 〈보기〉 상자 제목(<보 기>)만 든 본문 글 덩이는 〈보기〉 칸이 있으면 뺀다(10-25 b1_2025_06_04 — 제목 줄이 본문에 한 번 더 찍힘).
+  if(q.blocks.some(b=>b.kind==='bogi'))q.blocks=q.blocks.filter(b=>!(b.kind==='text'&&/^[<〈＜]\s*보\s*기\s*[>〉＞]$/.test(String(b.text||'').trim())));
+  // 쪽 옆 과목 띠(생명과학 Ⅰ)의 로마 숫자가 문장 끝(…다.) 뒤에 붙은 것을 뗀다(10-25 b1_2025_06_04 〈보기〉 ㄷ 「… 운반된다. I」).
+  const tail=t=>String(t||'').replace(/([다요]\.)\s+(?:I{1,2}|Ⅰ|Ⅱ)$/u,'$1');
+  for(const b of q.blocks){if(b.kind==='text')b.text=tail(b.text);for(const l of b.lines||[])l.text=tail(l.text);}
   // 선지
   const choices=by('choice').map(b=>clean(runsText(b.runs)));
   // 여백 과목명 끝 글자(II)가 마지막 선지에 붙어 읽힌 경우
