@@ -67,12 +67,9 @@ async function runBatch(browser, batch) {
         catch (error) { return { ok: true, question, diag, typeset: { error: String(error?.message || error), status: '' }, timing }; }
         timing.typeset = Math.round(performance.now() - t);
         const Document = await f.loadFrameEngine(), doc = new Document(typeset.bytes);
-        let text = '', textAlt = '', textAlt2 = '', eq = -1, eqScripts = [], warn = '';
+        let text = '', eq = -1, eqScripts = [], warn = '';
         try {
           const raw = doc.getTextFileText(); text = raw.startsWith('"') ? JSON.parse(raw) : raw;
-          // 번호 문단(「n. 」) 앞 글(글 옆에 띄운 표)을 맨 뒤로 옮긴 순서(원본 채점 글 bodyAll은 표 글을 맨 뒤에 둠) — 채점이 두 순서 중 더 맞는 쪽을 쓴다.
-          { const parts = text.split(/\r?\n/), k = parts.findIndex((line) => /^\s*\d{1,2}\.\s/.test(line));
-            if (k > 0 && parts.slice(0, k).some((line) => line.trim())) { textAlt = [...parts.slice(k), ...parts.slice(0, k)].join('\n'); textAlt2 = [parts[k], ...parts.slice(0, k), ...parts.slice(k + 1)].join('\n'); } }
           const zip = await window.JSZip.loadAsync(typeset.bytes), xml = await zip.file('Contents/section0.xml').async('string');
           eq = (xml.match(/<hp:equation\b/g) || []).length; eqScripts = [...xml.matchAll(/<hp:script>([\s\S]*?)<\/hp:script>/g)].map((m) => m[1]).slice(0, 80);
         } finally { doc.free(); }
@@ -90,7 +87,7 @@ async function runBatch(browser, batch) {
           try { const raw = od.getTextFileText(), got = raw.startsWith('"') ? JSON.parse(raw) : raw; if (flat(got) !== flat(text)) assemble = '글 달라짐'; if (!od.getBookmarks().includes('exam_question_')) assemble = '이동 표시 없음'; } finally { od.free(); }
           (window.__docs ||= []).push({ id: q.id, bytes: typeset.bytes, height: typeset.height, text: flat(text) });
         } catch (error) { assemble = String(error?.message || error); }
-        return { ok: true, question, diag, typeset: { text, textAlt, textAlt2, eq, eqScripts, usedMm: Math.round(typeset.height * 10) / 10, status: warn, error: false, size: typeset.bytes.length }, timing, bytes, assemble };
+        return { ok: true, question, diag, typeset: { text, eq, eqScripts, usedMm: Math.round(typeset.height * 10) / 10, status: warn, error: false, size: typeset.bytes.length }, timing, bytes, assemble };
       } catch (error) { return { ok: false, error: String(error?.message || error), timing }; }
     }, { q, keep: !!args['keep-bytes'] }), new Promise((ok) => setTimeout(() => ok({ ok: false, error: '시간 초과(120초)' }), 120000))]);
     result.ms = Date.now() - t0; result.id = item.id; out.push(result);

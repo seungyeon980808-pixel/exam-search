@@ -42,27 +42,13 @@ function score(item,ref,conv,ts,{convertOnly=false}={}){
   // 원본 글은 표 안 글 뺀 것/넣은 것 중 더 맞는 쪽(표를 그림으로 넣었는지 편집 표로 넣었는지에 따라). 수식 안 한글(세로 분수 속 낱말)은 원본에서 한 번씩 뺀다.
   // 수식 하나 안의 한글은 원본에서 이어진 글(예: '일때의순간반응속도')이므로 통째로 먼저 빼고, 못 찾으면 낱말 단위로 뺀다.
   const prep=b=>{let t=kor(norm(b));const cut=w=>{const k=t.indexOf(w);if(k<0)return false;t=t.slice(0,k)+t.slice(k+w.length);return true;};
-    for(const sc of ts.eqScripts||[]){const whole=kor(String(sc));/* 10-25: 본문과 같은 거르개(kor — (가)·(나) 빼기)로 — 분수 속 「(나)에서」가 원본에서 안 빠졌다 */if(whole.length>=2&&cut(whole))continue;
-      // 못 찾으면 \text{…} 묶음마다(분자·분모 사이에 「=1이다」가 끼어 통째로는 안 맞는다), 그래도 없으면 낱말마다.
-      const groups=[...String(sc).matchAll(/\\text\{([^{}]*)\}/g)].map(m=>kor(m[1])).filter(Boolean);
-      // 묶음들이 원본에서 4자 안 간격으로 차례로 나오는 자리(분자 「(가)의 pH」 / 분모 「(나)의 pOH」 → 원본 「의…의」)를 찾아 그 글자만 뺀다.
-      if(groups.length){const re=new RegExp(groups.map(w=>'('+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')').join('(.{0,4}?)'));const m=t.match(re);
-        if(m){let keep='';for(let g=1;g<m.length;g++)if(g%2===0)keep+=m[g];t=t.slice(0,m.index)+keep+t.slice(m.index+m[0].length);continue;}}for(const w of String(sc).match(/[가-힣]{2,}/g)||[])cut(w);}return t;};
-  // 10-25: 글 옆에 띄운 표(번호 문단 앞 문단에 붙음)는 문서 글 순서로 번호 문단보다 먼저 나온다. 눈으로는 발문 옆이므로
-  // 번호 문단 앞 글을 맨 뒤로 옮긴 순서(textAlt, 원본 bodyAll과 같은 순서)도 견주어 더 맞는 쪽을 쓴다.
-  const gots=[ts.text,ts.textAlt,ts.textAlt2].filter(Boolean).map(t=>kor(norm(t))),got=gots[0];
-  const sim=ref?Math.max(...gots.flatMap(g=>[similarity(g,prep(ref.body)),ref.bodyAll?similarity(g,prep(ref.bodyAll)):0])):0;row.textSim=Math.round(sim*1000)/1000;row.textHead=String(ts.text).slice(0,120);
-  // 10-25: 순서와 상관없는 글 보존(원본 두 글자 조각 중 우리 글에 있는 몫). 그림 단마다 설명을 붙이거나 상자 옆 그림을 옮기면 PDF 줄 순서(단을 가로질러 읽음)와
-  // 달라져 LCS가 크게 떨어진다(p1_2026_09_01 그림 셋 아래 설명). 복원 합격은 순서 무관 97% 이상이면 「다 들어감」으로 본다. 모양 일치는 순서까지(LCS) 본다.
-  const bag=(a,b)=>{const m=new Map();for(let i=0;i<a.length-1;i++){const k=a.slice(i,i+2);m.set(k,(m.get(k)||0)+1);}let hit=0;for(let i=0;i<b.length-1;i++){const k=b.slice(i,i+2),n=m.get(k);if(n){hit++;m.set(k,n-1);}}return b.length>1?hit/(b.length-1):1;};/* 원본(b) 조각 중 찾은 몫(재현율) — 원본이 그림으로 본 글(상자·그림 설명)을 편집 글로 살리면 우리 쪽 글이 더 많아 Dice는 떨어진다 */
-  row.textBag=ref?Math.round(Math.max(...gots.flatMap(g=>[bag(g,prep(ref.body)),ref.bodyAll?bag(g,prep(ref.bodyAll)):0]))*1000)/1000:0;
+    for(const sc of ts.eqScripts||[]){const whole=(String(sc).match(/[가-힣]+/g)||[]).join('');if(whole.length>=2&&cut(whole))continue;for(const w of String(sc).match(/[가-힣]{2,}/g)||[])cut(w);}return t;};
+  const got=kor(norm(ts.text));
+  const sim=ref?Math.max(similarity(got,prep(ref.body)),ref.bodyAll?similarity(got,prep(ref.bodyAll)):0):0;row.textSim=Math.round(sim*1000)/1000;row.textHead=String(ts.text).slice(0,120);
   if(sim<TEXT_MIN)fail('text',`글 일치 ${(sim*100).toFixed(1)}%`);pass('text');
   // ③ 수식: 문항의 $…$ 수 = 한글 문서의 수식 개체 수
   const want=equationsIn(q);row.eq={want,got:ts.eq};
-  // 10-25: 5E 대응표는 선지를 2·3묶음으로 놓고 묶음마다 머리줄(X Y)을 다시 찍는다 — 머리줄 수식이 묶음 수만큼 더 나와도 맞다.
-  const t=q.choiceTable,headEq=(q.form==='pair'||q.style==='대응표')&&t?t.cells[0].reduce((n,c)=>n+(String(c.value||'').match(EQ)||[]).length,0):0;
-  const okEq=ts.eq===want||(headEq>0&&[1,2,3].some(k=>ts.eq===want+headEq*k||ts.eq===want-headEq+headEq*k));
-  if(ts.eq<0||!okEq)fail('equation',`수식 ${ts.eq}/${want}`);pass('equation');
+  if(ts.eq<0||ts.eq!==want)fail('equation',`수식 ${ts.eq}/${want}`);pass('equation');
   // ⑤ 조판: 경고 없음 + 원본 대비 높이
   const st=String(ts.status||'');
   if(ts.error||/넘습니다|겹칩니다|읽지 못|실패|오류|초과/.test(st))fail('typeset',st.slice(0,80));
@@ -71,16 +57,13 @@ function score(item,ref,conv,ts,{convertOnly=false}={}){
   pass('typeset');
   row.shape=Object.values(row.checks).every(Boolean);// 모양 일치(엄격): 높이 0.85~1.2·경고 없음·글 97%
   // 복원 합격(사용자 기준 2026-10-19): 제자리에 다 들어가면 합격. 조판이 아예 안 되는 경우·내용이 빠진 경우만 불합격.
-  // 10-25: 자료 둘 이상(기록)을 그림 한 장으로 묶어 넣은 문항은 내용이 빠진 것이 아니다(눈 확인 6/6: 원본과 같은 한 장) — 복원 합격에서는 통과, 모양 일치에서는 그대로 불합격.
-  const mergedFigure=x=>/^template: 그림 \d+개\(기록 자료 구조 (two|three|complex)\)/.test(x)&&(c.figures>=1);
-  row.mergedFigure=row.reasons.some(mergedFigure);
-  row.restoreReasons=row.reasons.filter(x=>!mergedFigure(x)).filter(x=>x.startsWith('structure')||x.startsWith('template')||x.startsWith('equation')||x.startsWith('convert')||(x.startsWith('text')&&(row.textSim??0)<RESTORE_TEXT&&(row.textBag??0)<0.97)||(x.startsWith('typeset')&&/읽지 못|실패|조판 결과 없음|대기 실패|불러오기/.test(x)));
-  if((row.textSim??1)<RESTORE_TEXT&&(row.textBag??0)<0.97&&!row.restoreReasons.some(x=>x.startsWith('text')))row.restoreReasons.push(`text: 글 일치 ${((row.textSim??0)*100).toFixed(1)}%`);
+  row.restoreReasons=row.reasons.filter(x=>x.startsWith('structure')||x.startsWith('template')||x.startsWith('equation')||x.startsWith('convert')||(x.startsWith('text')&&(row.textSim??0)<RESTORE_TEXT)||(x.startsWith('typeset')&&/읽지 못|실패|조판 결과 없음|대기 실패|불러오기/.test(x)));
+  if((row.textSim??1)<RESTORE_TEXT&&!row.restoreReasons.some(x=>x.startsWith('text')))row.restoreReasons.push(`text: 글 일치 ${((row.textSim??0)*100).toFixed(1)}%`);
   row.pass=row.restoreReasons.length===0;return row;
 }
 function summarize(rows){
   const pct=(a,b)=>b?`${(a/b*100).toFixed(1)}%`:'-';const n=rows.length,ok=rows.filter(r=>r.pass).length;
-  const sh=rows.filter(r=>r.shape).length;const lines=[`# 기출 복원 채점 결과`,'',`**복원 합격 ${ok}/${n} (${pct(ok,n)})** — 제자리에 다 들어가면 합격(조판 실패·내용 누락만 불합격)`,'',`모양 일치(엄격: 높이 0.85~1.2·경고 없음·글 97%) ${sh}/${n} (${pct(sh,n)})`,`(복원 합격 중 자료 여럿을 그림 한 장으로 묶은 문항 ${rows.filter(r=>r.pass&&r.mergedFigure).length}개 — 그림 개수 기준으로는 불합격)`,'',`(복원 합격 중 글 순서가 다르거나 원본이 그림으로 본 글을 더 살린 문항(원본 글 97% 이상 들어감, 순서 기준 95% 미만) ${rows.filter(r=>r.pass&&(r.textSim??1)<RESTORE_TEXT).length}개)`,'','','| 검사 | 통과 |','|---|---|'];
+  const sh=rows.filter(r=>r.shape).length;const lines=[`# 기출 복원 채점 결과`,'',`**복원 합격 ${ok}/${n} (${pct(ok,n)})** — 제자리에 다 들어가면 합격(조판 실패·내용 누락만 불합격)`,'',`모양 일치(엄격: 높이 0.85~1.2·경고 없음·글 97%) ${sh}/${n} (${pct(sh,n)})`,'','| 검사 | 통과 |','|---|---|'];
   for(const k of ['convert','structure','text','equation','template','typeset']){const has=rows.filter(r=>k in r.checks);if(!has.length)continue;const p=has.filter(r=>r.checks[k]).length;lines.push(`| ${k} | ${p}/${has.length} (${pct(p,has.length)}) |`);}
   const group=(key,label)=>{const m=new Map();for(const r of rows){const g=r[key];if(!m.has(g))m.set(g,[0,0]);const v=m.get(g);v[1]++;if(r.pass)v[0]++;}
     lines.push('',`| ${label} | 합격 |`,'|---|---|',...[...m].sort((a,b)=>b[1][1]-a[1][1]).map(([g,[a,b]])=>`| ${g} | ${a}/${b} (${pct(a,b)}) |`));};
