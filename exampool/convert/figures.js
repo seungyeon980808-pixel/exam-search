@@ -257,6 +257,30 @@ function gutterSplit(m,s,body,whole){
   return groups.map((g,i)=>{const cell=rect(i?cuts[i-1]:0,0,i<cuts.length?cuts[i]:m.W,m.H);return {r:trim(m,rect(g.x0,whole.y0,g.x1,whole.y1)),cap:null,cell};});
 }
 
+// 조사 기록이 「자료 여럿」인데 그림이 한 장으로 잡혔을 때(10-26): 빈 띠(가로·세로)로 나눈다. 원본도 따로 놓인 그림·표를 한 장으로 넣었다(26문항).
+// 각 조각은 글자 한 줄보다 충분히 커야 한다(그림 아래 이름 줄·범례 줄은 떼지 않음). order: 먼저 볼 방향.
+function blankSplit(m,r,s,body,want,order=['x','y']){
+  const minGap=Math.round(.35*body*s),minPart=1.5*body*s;
+  const tryAxis=(r,axis)=>{
+    const segs=runs(projection(m,r,axis),minGap).map(([a,b])=>axis==='x'?trim(m,rect(r.x0+a,r.y0,r.x0+b,r.y1)):trim(m,rect(r.x0,r.y0+a,r.x1,r.y0+b))).filter(Boolean);
+    if(segs.length<2)return null;
+    const ext=axis==='x'?r.x1-r.x0:r.y1-r.y0,size=t=>axis==='x'?t.x1-t.x0:t.y1-t.y0;
+    const big=segs.filter(t=>size(t)>=Math.max(minPart,ext*.15)&&(t.x1-t.x0)>=minPart&&(t.y1-t.y0)>=minPart);
+    if(big.length<2)return null;
+    // 작은 조각(이름 줄 등)은 가까운 큰 조각에 붙인다.
+    const groups=big.map(t=>({...t}));
+    for(const t of segs){if(big.includes(t))continue;let best=groups[0],d=Infinity;for(const g of groups){const dd=axis==='x'?Math.max(0,g.x0-t.x1,t.x0-g.x1):Math.max(0,g.y0-t.y1,t.y0-g.y1);if(dd<d){d=dd;best=g;}}
+      best.x0=Math.min(best.x0,t.x0);best.y0=Math.min(best.y0,t.y0);best.x1=Math.max(best.x1,t.x1);best.y1=Math.max(best.y1,t.y1);}
+    return groups.sort((a,b)=>axis==='x'?a.x0-b.x0:a.y0-b.y0).map(g=>rect(g.x0,g.y0,g.x1,g.y1));};
+  let parts=[r];
+  for(let guard=0;parts.length<want&&guard<4;guard++){
+    let done=false;
+    for(const axis of order){const i=parts.findIndex(p=>tryAxis(p,axis));if(i<0)continue;parts.splice(i,1,...tryAxis(parts[i],axis));done=true;break;}
+    if(!done)break;
+  }
+  return parts.length>1?parts:null;
+}
+
 // 한 후보 캔버스를 캡션 기준으로 패널로 나눈다. 결과: [{r(픽셀), cap|null}] (캡션 순서)
 function panels(m,s,body,texts,split=true,given=null){
   const whole=trim(m,rect(0,0,m.W,m.H));if(!whole)return [];
@@ -368,6 +392,12 @@ export async function detectFigures(item,{signal,scale=4,choices=false}={}){
       // 캡션 자리를 지운 잉크로 다시 자른다(캔버스에도 흰색으로).
       if(p.cap)g.fillRect(p.cap.x0-2,p.cap.y0-2,p.cap.x1-p.cap.x0+4,p.cap.y1-p.cap.y0+4);
       order.push({r,box:pt,caption});
+    }
+    // 조사 기록상 자료가 여럿(two·three·complex)인데 이 후보가 한 장뿐이면 빈 띠로 나눠 본다(표 후보 제외).
+    const wantN=item.struct==='two'?2:['three','complex'].includes(item.struct)?(item.struct==='three'?3:2):1;
+    if(wantN>1&&!cand.table&&order.length===1&&cands.filter(c=>!c.strip).length===1){
+      const parts=blankSplit(m,order[0].r,scale,body,wantN,item.layout==='row'?['x','y']:['y','x']);
+      if(parts)order.splice(0,1,...parts.map(r=>({r,box:[box[0]+r.x0/scale,box[1]+r.y0/scale,box[0]+r.x1/scale,box[1]+r.y1/scale],caption:null})));
     }
     for(const o of order)figs.push({data:crop(canvas,o.r),box:o.box,page:item.page,caption:o.caption,kind:cand.kind,widthPt:o.box[2]-o.box[0],role:cand.table?'table':'figure',group:cands.indexOf(cand)});
   }
