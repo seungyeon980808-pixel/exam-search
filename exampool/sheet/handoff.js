@@ -642,7 +642,8 @@ export async function buildQuestionHtml(value,prepareFigure=async f=>f,width=540
     // 묶음 간격은 선지 탭과 같다(3묶음 36mm=102pt, 2묶음 56mm=159pt — 원본 240문항 실측). 마지막 묶음이 남은 폭을 쓴다.
     const step=n=>Math.min(L.choiceTabs?.[{3:1,2:2}[n]]||width/n,width/n*1.2),fit=n=>{const s=step(n),last=width-s*(n-1);return Math.min(s,last)-numW-8*k>=longest*k;};
     // 묶음 안 값 칸은 열마다 가장 긴 값 + 여백만큼 주고 남는 폭은 고르게 나눈다(10-25 p2 26-6월 1번: 똑같이 나눠 「중력 렌즈 효과」가 두 줄이 됐다).
-    const g=fit(3)?3:2,lines=Math.ceil(5/g),gw=side=>side<g-1?step(g):width-step(g)*(g-1);
+    // 변환기가 원본 배치를 「2열」로 적어 두었으면 원본처럼 2묶음(①② / ③④ / ⑤, 10-26 c1_2025_06_02 — 3묶음이면 머리줄이 한 번 더 찍혔다).
+    const g=q.choiceLayout==='2열'?2:fit(3)?3:2,lines=Math.ceil(5/g),gw=side=>side<g-1?step(g):width-step(g)*(g-1);
     const need=Array.from({length:k},(_,c)=>Math.max(0,...t.cells.map(row=>measureRich(row[c]?.value,FS)))+10);
     const valW=(side,c=0)=>{const room=gw(side)-numW,sum=need.reduce((a,b)=>a+b,0);return sum<=room?need[c]+(room-sum)/k:need[c]*room/sum;};
     recordTable(lines+1,g*(k+1),[],{kind:'choices'});
