@@ -1,0 +1,23 @@
+# OmO 작성. main / 레거시 Pages 게시에서 실행에 필요 없는 빌드 원본은 제외한다.
+# 그림은 압축률/해상도를 바꾸지 않고, 검색용 전송 색인만 gzip으로 저장한다.
+exclude:
+  # 이 그림들은 같은 저장소의 raw.githubusercontent.com 주소로 읽는다.
+  - "cards/*_03_*.webp"
+  - "cards/*_04_*.webp"
+  - "cards/*_05_*.webp"
+  - "cards/*_07_*.webp"
+  - "cards/*_10_*.webp"
+  - data/questions.json
+  - data/preview-assets.json
+  - data/files.json
+  - data/synonyms.json
+  - tools
+  - test-fixtures
+  - "test*"
+  - "qa*"
+  - "*.py"
+  - DESIGN.md
+  - docs
+  - package.json
+  - package-lock.json
+  - node_modules

@@ -1,9 +1,9 @@
-import { driveFilePath } from './data.mjs?v=library-release-20261011-3';
+import { driveFilePath } from './data.mjs?v=hakpyeong-20261103';
 import { driveLink } from './drive-source.mjs';
 import { resolveEditableContent } from './editable-source.mjs?v=frame-20261025-1';
-import { createEditableBatch } from './editable-batch.mjs?v=frame-20261025-1';
+import { createEditableBatch } from './editable-batch.mjs?v=hakpyeong-20261103';
 import { createCollectionHwpx, readQuestionTargets, readEditablePageGeometry } from './editable-convert.mjs?v=frame-20261025-1';
-import { renderQuestion } from './pdf-viewer.mjs?v=frame-20261025-1';
+import { renderQuestion } from './pdf-viewer.mjs?v=hakpyeong-20261103';
 import { passageKey, sharedPassageRegions } from './shared-passage.mjs?v=library-release-20261011-3';
 import { contentQualitySummary } from './content-quality.mjs?v=frame-20261025-1';
 

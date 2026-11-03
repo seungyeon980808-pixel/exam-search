@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="description" content="평가원 기출문항을 세 단어까지 검색하고 PDF 원본을 확인합니다." />
+    <meta name="description" content="모평·수능과 학력평가 과학 기출문항을 검색하고 PDF 원본을 확인합니다." />
     <title>기출 탐색기</title>
     <link rel="stylesheet" href="./styles.css?v=preview-speed-20261009-1" />
     <link rel="stylesheet" href="./library-ux.css?v=subject-review-20261011-1" />
@@ -12,7 +12,7 @@
     <script>
       if (location.protocol === 'file:') document.documentElement.classList.add('local-file');
     </script>
-    <script src="./app.js?v=frame-20261025-1" type="module"></script>
+    <script src="./app.js?v=hakpyeong-20261103" type="module"></script>
   </head>
   <body>
     <main class="local-file-notice" hidden>
@@ -43,7 +43,7 @@
           <details class="scope-details year-details" id="year-details"><summary class="button secondary" aria-label="연도 범위"><span id="year-summary">전체 연도</span><span aria-hidden="true">⌄</span></summary>
             <div class="filter-panel year-panel"><strong>학년도 범위</strong><div class="year-endpoints"><label>시작 <select id="year-from" aria-label="시작 학년도" aria-describedby="year-error"><option value="">제한 없음</option></select></label><span aria-hidden="true">–</span><label>종료 <select id="year-to" aria-label="종료 학년도" aria-describedby="year-error"><option value="">제한 없음</option></select></label></div><p id="year-error" role="status" aria-live="polite"></p><div class="year-actions"><button type="button" class="button secondary" id="year-all">전체</button><button type="button" class="button secondary" id="year-recent">최근 5개 학년도</button><button type="button" class="button primary" id="year-apply">적용</button></div></div>
           </details>
-          <label class="filter-control"><span class="filter-label">시험</span><select id="month-filter" aria-label="시험"><option value="">전체 시험</option><option value="6">6월 모평</option><option value="9">9월 모평</option><option value="11">수능</option></select></label>
+          <label class="filter-control"><span class="filter-label">시험</span><select id="month-filter" aria-label="시험" title="학년도 기준입니다. 2027학년도 학평은 2026년 시행입니다."><option value="">모평·수능</option><option value="6">6월 모평</option><option value="9">9월 모평</option><option value="11">수능</option><option value="hakpyeong">학평 전체</option><option value="3">3월 학평</option><option value="4">4월 학평</option><option value="5">5월 학평</option><option value="7">7월 학평</option><option value="10">10월 학평</option><option value="all">모든 시험</option></select></label>
           <label class="filter-control" id="track-filter-control" hidden><span class="filter-label">선택과목</span><select id="track-filter" aria-label="선택과목"><option value="">선택과목 선택</option></select></label>
           <label class="filter-control" id="variant-filter-control" hidden><span class="filter-label">시험 유형</span><select id="variant-filter" aria-label="시험 유형"><option value="odd">홀수형</option><option value="even">짝수형</option></select></label>
           <details class="scope-details" id="framework-details"><summary class="button secondary"><span>교육과정</span><span aria-hidden="true">⌄</span></summary><div class="filter-panel"><label for="framework-filter">교육과정</label><select id="framework-filter" aria-label="교육과정"><option value="">전체</option></select></div></details>
@@ -109,7 +109,7 @@
           <div class="story-navigation" role="group" aria-label="기능 소개 단계"><button type="button" data-story-step aria-current="step">찾기</button><button type="button" data-story-step aria-current="false">모으기</button><button type="button" data-story-step aria-current="false">변환·편집</button><span data-story-count>1 / 3</span></div>
           <button class="story-try" type="button" data-story-try>이 단계 직접 해보기 <span aria-hidden="true">→</span></button>
         </section>
-        <div class="landing-footer"><span class="release-badge" title="2026-10-20 KST · 과학탐구 한글 변환에 5E 문항 틀 적용(발문·자료·보기·선지 칸, 그림 가운데), 변환 속도 개선">10/20 · 5E 문항 틀</span><button class="button secondary" id="landing-browse" type="button">시험지 전체 둘러보기 ↗</button></div>
+        <div class="landing-footer"><span class="release-badge" title="OmO 작성 · 2026-11-03 · 시험 필터에서 과학탐구 학평을 고르면 자료를 불러옵니다. 학년도는 시행 연도보다 1년 큽니다.">11/03 · 학평 추가 · OmO 작성</span><button class="button secondary" id="landing-browse" type="button">시험지 둘러보기 ↗</button></div>
       </section>
       <main class="workspace" id="workspace">
         <section class="results-pane" aria-label="검색 결과">

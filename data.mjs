@@ -1,16 +1,24 @@
-import {loadCatalog} from './catalog-cache.mjs?v=library-release-20261011-3';
-import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=library-release-20261011-3';
+import {loadCatalog} from './catalog-cache.mjs?v=hakpyeong-20261103';
+import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=hakpyeong-20261103';
+import {needsHakpyeong,mergeCatalogs} from './exam-scope.mjs';
 let catalogPromise, workerPromise,worker,answersPromise;
 let publicPaths=new Map(),nextId=0;
 const requests=new Map(),listeners=new Set();
 let searchState={phase:'idle',done:0,total:0};
+let expandedPromise, workerExpanded=false;
 function emit(state){searchState=state;for(const listener of listeners)listener(state);}
 export function onSearchState(listener){listeners.add(listener);listener(searchState);return()=>listeners.delete(listener);}
 export function driveFilePath(name){return publicPaths.get(name)||'';}
-export async function browserCatalog(){
+export async function browserCatalog(filters={}){
  if(!catalogPromise)catalogPromise=loadCatalog(()=>emit({...searchState,updateAvailable:true})).then(value=>{
   publicPaths=new Map(value.files.map(f=>[f.pdfFile,f.publicPath]));return value;
- }).catch(e=>{catalogPromise=null;throw e;});return catalogPromise;
+ }).catch(e=>{catalogPromise=null;throw e;});
+ const base=await catalogPromise;
+ if(!needsHakpyeong(filters))return base;
+ if(!expandedPromise)expandedPromise=loadCatalog(()=>emit({...searchState,updateAvailable:true}),'data/hakpyeong/catalog.json')
+  .then(extra=>{const value=mergeCatalogs(base,extra);for(const f of extra.files)publicPaths.set(f.pdfFile,f.publicPath);return value;})
+  .catch(error=>{expandedPromise=null;throw error;});
+ return expandedPromise;
 }
 function call(type,args={}, {signal,priority}={}){
  signal?.throwIfAborted();
@@ -23,10 +31,11 @@ function call(type,args={}, {signal,priority}={}){
   worker.postMessage({id,type,priority,...args});
  });
 }
-async function searchWorker(){
+async function searchWorker(filters={}){
+ const catalog=await browserCatalog(filters);
  if(!workerPromise)workerPromise=(async()=>{
-  const catalog=await browserCatalog();
-  worker=new Worker(new URL('./search-worker.mjs?v=library-release-20261011-3',import.meta.url),{type:'module'});
+  workerExpanded=!!catalog.shards.hp_p1;
+  worker=new Worker(new URL('./search-worker.mjs?v=hakpyeong-20261103',import.meta.url),{type:'module'});
   worker.onmessage=({data})=>{
    if(data.type==='progress'){if(requests.has(data.id))emit({...searchState,phase:'preparing',done:data.done,total:data.total});return;}
    const request=requests.get(data.id);if(!request)return;requests.delete(data.id);
@@ -38,13 +47,16 @@ async function searchWorker(){
    emit({...searchState,phase:'error',message:error.message});
   };
   await call('init',{catalog});return worker;
- })().catch(e=>{workerPromise=null;throw e;});return workerPromise;
+ })().catch(e=>{workerPromise=null;throw e;});
+ await workerPromise;
+ if(catalog.shards.hp_p1&&!workerExpanded){await call('catalog',{catalog});workerExpanded=true;}
+ return worker;
 }
 let preparePromise;
 export async function prepareSearch(filters={}){
- const all=!filters.subject&&!filters.group;
+ const all=!filters.subject&&!filters.group&&!filters.month;
  if(all&&preparePromise)return preparePromise;
- const work=(async()=>{emit({...searchState,phase:'preparing',done:0});await searchWorker();
+ const work=(async()=>{emit({...searchState,phase:'preparing',done:0});await searchWorker(filters);
   const result=await call('prepare',{filters});emit({...searchState,phase:'ready',done:result.subjects,total:result.subjects});return result;
  })().catch(e=>{emit({...searchState,phase:'error',message:e.message});if(all)preparePromise=null;throw e;});
  if(all)preparePromise=work;return work;
@@ -54,7 +66,7 @@ export async function prepareSearch(filters={}){
 // explicit keyword-input intent; opening the landing page does not trigger it.
 export async function prefetchSearch(filters,{signal,intent=false}={}){
  if(!filters.subject&&!intent)return;
- signal?.throwIfAborted();await searchWorker();signal?.throwIfAborted();
+ signal?.throwIfAborted();await searchWorker(filters);signal?.throwIfAborted();
  return call('prepare',{filters},{signal,priority:'background'});
 }
 async function answers(){
@@ -65,7 +77,8 @@ export async function getJson(path, options={}){
  options.signal?.throwIfAborted();
  const url=new URL(path,location.href),params=url.searchParams;
  if(url.pathname==='/api/answer'){const entry=(await answers()).get(params.get('id'));return entry?.verificationStatus === 'verified'?entry:null;}
- const catalog=await browserCatalog();
+ const filters=Object.fromEntries(params);
+ const catalog=await browserCatalog(filters);
  if(url.pathname==='/api/status')return catalog.status;
  if(url.pathname==='/api/curriculum')return curriculumOptions(catalog,Object.fromEntries(params));
  if(url.pathname==='/api/files' && !['q','framework','unit','standard'].some(k=>params.get(k))) {
@@ -76,5 +89,5 @@ export async function getJson(path, options={}){
   return {total:found.length,offset,limit,items:found.slice(offset,offset+limit)};
  }
  if(url.pathname==='/api/file-pages'){const f=catalog.files.find(f=>f.pdfFile===params.get('name'));if(!f?.pageCount)throw new Error('시험지를 찾을 수 없습니다.');return{pageCount:f.pageCount};}
- await searchWorker();options.signal?.throwIfAborted();return call('request',{path},options);
+ await searchWorker(filters);options.signal?.throwIfAborted();return call('request',{path},options);
 }

@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 const root=new URL('./',import.meta.url);
-const read=path=>JSON.parse(readFileSync(new URL(path,root)));
+const read=path=>{const bytes=readFileSync(new URL(path,root));return JSON.parse(path.endsWith('.gz')?gunzipSync(bytes):bytes);};
 const index=read('data/questions.json'),catalog=read('data/catalog.json'),assets=read('data/preview-assets.json');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 test('all indexed questions and papers have source-matched display previews',()=>{

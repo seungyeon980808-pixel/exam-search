@@ -5,7 +5,8 @@ import { chromium } from 'playwright';
 
 const base = process.env.EXAM_SEARCH_URL || 'http://127.0.0.1:8768/';
 const pdfDirectory = process.env.EXAM_PDF_DIR;
-const evidence = '/tmp/exam-search-qa';
+const sharedRoot = process.env.EXAM_SHARED_ROOT;
+const evidence = process.env.EXAM_QA_OUTPUT || '/tmp/exam-search-qa';
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const failures = [];
@@ -16,13 +17,13 @@ const driveLoads = [];
 try {
   for (const width of [1280, 768, 375]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
-    if (pdfDirectory) {
+    if (pdfDirectory || sharedRoot) {
       await page.route('https://5e-google-drive-gateway.5e-desktop.workers.dev/**', async (route) => {
         const publicPath = new URL(route.request().url()).pathname.split('/public/')[1]
           ?.split('/').map(decodeURIComponent).join('/');
         const name = pdfByPath.get(publicPath);
         if (!name) return route.fulfill({ status: 404, body: 'Unknown public file' });
-        const body = await readFile(join(pdfDirectory, name));
+        const body = await readFile(pdfDirectory ? join(pdfDirectory, name) : join(sharedRoot, publicPath));
         return route.fulfill({ status: 200, contentType: 'application/pdf', body,
           headers: { 'access-control-allow-origin': '*' } });
       });

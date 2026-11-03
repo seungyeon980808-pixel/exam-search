@@ -1,4 +1,4 @@
-const CACHE = 'exam-library-catalog-v4';
+const CACHE = 'exam-library-catalog-v5';
 const pending = new Map();
 export function validCatalog(value) {
   return value?.schema === 'exam-browser-v3' && /^[a-f\d]{64}$/u.test(value.revision || '')
@@ -9,15 +9,15 @@ export function validCatalog(value) {
     && value.status.questionCount > 0 && value.status.subjects.length > 0
     && value.files.every(f=>typeof f.pdfFile === 'string' && typeof f.publicPath === 'string')
     && value.status.subjects.every(s=>['browse','detail','search'].every(kind=>{
-      const a=value.shards?.[s.value]?.[kind];
-      return a && /^data\/browser\/[a-z_\d-]+\.json$/u.test(a.path) && /^[a-f\d]{64}$/u.test(a.sha256) && a.bytes>0
+      const a=value.shards?.[s.value]?.[kind] || value.shards?.[`hp_${s.value}`]?.[kind];
+      return a && /^data\/(?:browser|hakpyeong)\/[a-z_\d-]+\.json(?:\.gz)?$/u.test(a.path) && /^[a-f\d]{64}$/u.test(a.sha256) && a.bytes>0
         && (kind!=='search'||a.format==='compact-search-v1');
     }));
 }
 async function cacheStore() { try { return await caches.open(CACHE); } catch { return null; } }
 const base = new URL('./', import.meta.url);
-export async function loadCatalog(onChange = () => {}) {
-  const url = new URL('data/catalog.json', base).href;
+export async function loadCatalog(onChange = () => {}, path = 'data/catalog.json') {
+  const url = new URL(path, base).href;
   const cache = await cacheStore();
   const network = async () => {
     const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),30000);
@@ -50,7 +50,10 @@ export async function loadAsset(asset, {signal} = {}) {
       if(buffer.byteLength!==asset.bytes)throw new Error('문항 자료 크기를 확인하지 못했습니다.');
       const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',buffer))].map(b=>b.toString(16).padStart(2,'0')).join('');
       if(hash!==asset.sha256)throw new Error('문항 자료가 변경되었습니다. 새로고침해 주세요.');
-      const value=JSON.parse(new TextDecoder().decode(buffer));
+      const decoded=asset.path.endsWith('.gz')
+        ? await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+        : new TextDecoder().decode(buffer);
+      const value=JSON.parse(decoded);
       signal?.throwIfAborted();
       const valid = asset.format==='compact-search-v1'
         ? q=>Array.isArray(q) && q.length>=6 && typeof q[0]==='string' && typeof q[1]==='string'
@@ -82,7 +85,8 @@ export async function pruneAssets(catalog) {
   const cache=await cacheStore();
   if(!cache)return;
   try { for(const name of await caches.keys())if(name.startsWith('exam-library-catalog-v')&&name!==CACHE)await caches.delete(name); } catch {}
-  const allowed=new Set([new URL('data/catalog.json',base).href,...Object.values(catalog.shards)
+  const allowed=new Set([new URL('data/catalog.json',base).href,new URL('data/hakpyeong/catalog.json',base).href,...Object.values(catalog.shards)
     .flatMap(s=>[s.browse,s.detail,s.search]).map(a=>new URL(a.path,base).href)]);
-  try { for(const key of await cache.keys())if(!allowed.has(key.url))await cache.delete(key); } catch {}
+  try { for(const key of await cache.keys())if(!allowed.has(key.url)
+    &&(!key.url.includes('/data/hakpyeong/')||catalog.shards.hp_p1))await cache.delete(key); } catch {}
 }

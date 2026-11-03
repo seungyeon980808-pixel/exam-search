@@ -1,5 +1,6 @@
-import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=library-release-20261011-3';
-import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions} from './search.mjs?v=library-release-20261011-3';
+import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=hakpyeong-20261103';
+import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions,subjectGroup} from './search.mjs?v=hakpyeong-20261103';
+import {needsHakpyeong} from './exam-scope.mjs';
 import {questionSubject} from './question-id.mjs?v=subject-review-20261011-1';
 import {paperLabel,paperPages,paperReady} from './paper-profile.mjs';
 let catalog,running=0;
@@ -45,8 +46,11 @@ async function items(subject,kind,ctx){
  loading.set(key,job);queue.push(job);pump();
  try{return await job.promise;}finally{if(loading.get(key)===job)loading.delete(key);}
 }
-function scope(filters){return catalog.status.subjects.filter(s=>(!filters.subject||s.value===filters.subject)
- &&(!filters.group||s.group===filters.group)).map(s=>s.value);}
+function scope(filters){return Object.keys(catalog.shards).filter(key=>{
+ const hp=key.startsWith('hp_'),subject=hp?key.slice(3):key;
+ const sources=filters.month==='all'||hp===needsHakpyeong(filters);
+ return sources&&(!filters.subject||subject===filters.subject)&&(!filters.group||subjectGroup(subject).value===filters.group);
+});}
 const clean=item=>{const {_hay,_hayNs,_sourceOrder,_scoreText,_scoreTitle,_scoreTags,...value}=item;return value;};
 async function searchItems(subject,ctx){
  guard(ctx);if(indexes.has(subject))return indexes.get(subject);
@@ -78,12 +82,13 @@ async function request(path,ctx){
  if(url.pathname==='/api/question'){
   const id=p.get('id'),subject=questionSubject(id,catalog.status.subjects);
   if(!subject)throw new Error('문항을 찾을 수 없습니다.');
-  const item=(await items(subject,'detail',ctx)).find(q=>q.id===id);guard(ctx);
+  const shard=needsHakpyeong({id})?`hp_${subject}`:subject;
+  const item=(await items(shard,'detail',ctx)).find(q=>q.id===id);guard(ctx);
   if(!item)throw new Error('문항을 찾을 수 없습니다.');return clean(item);
  }
  if(url.pathname==='/api/file-questions'){
   const file=catalog.files.find(f=>f.pdfFile===p.get('name'));if(!file)throw new Error('시험지를 찾을 수 없습니다.');
-  const questions=await items(file.subject,'detail',ctx);guard(ctx);
+  const questions=await items(file.source==='hakpyeong'?`hp_${file.subject}`:file.subject,'detail',ctx);guard(ctx);
   const all=fileQuestions(questions,file.pdfFile),found=fileQuestions(questions,file.pdfFile,null,filters);
   return {items:found.map(clean),pages:['math','kor'].includes(file.subject)?paperPages(all,found):null,label:paperLabel(found,filters),ready:paperReady(found,filters)};
  }
@@ -111,6 +116,7 @@ self.onmessage=async({data})=>{
  try{
   let value;
   if(data.type==='init'){catalog=data.catalog;void pruneAssets(catalog);value=true;}
+  else if(data.type==='catalog'){catalog=data.catalog;results.clear();void pruneAssets(catalog);value=true;}
   else if(data.type==='prepare'){
    let done=0;const subjects=scope(data.filters||{});
    await Promise.all(subjects.map(async s=>{await searchItems(s,ctx);guard(ctx);

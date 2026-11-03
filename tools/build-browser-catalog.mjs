@@ -1,5 +1,7 @@
 // Derived browser assets only. The source index and conversion metadata stay intact.
-import { readFile, mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, readdir, rename } from 'node:fs/promises';
+import {gzipSync} from 'node:zlib';
+import {homedir} from 'node:os';
 import { createHash } from 'node:crypto';
 import { catalogFiles,compactSearchRecord } from '../search.mjs';
 import {createCatalogMetadata} from '../catalog-metadata.mjs';
@@ -17,9 +19,9 @@ const directory = new URL('data/browser/', root);
 await mkdir(directory, {recursive:true});
 const keep = new Set();
 async function asset(label, value) {
-  const json = JSON.stringify(value), hash = digest(json), name = `${label}-${hash.slice(0,16)}.json`;
-  keep.add(name); await writeFile(new URL(name, directory), json);
-  return {path:`data/browser/${name}`, sha256:hash, bytes:Buffer.byteLength(json)};
+  const bytes = gzipSync(JSON.stringify(value),{level:9}), hash = digest(bytes), name = `${label}-${hash.slice(0,16)}.json.gz`;
+  keep.add(name); await writeFile(new URL(name, directory), bytes);
+  return {path:`data/browser/${name}`, sha256:hash, bytes:bytes.length};
 }
 const {subjects,groups,facets,status}=createCatalogMetadata(index);
 const sourceOrder=new Map(index.items.map((q,index)=>[q.id,index]));
@@ -54,7 +56,10 @@ const files=catalogFiles(records,index.items).map(f=>({...f,...records.find(r=>r
 const contents={schema:'exam-browser-v3',sourceRevision,status,files,facets,shards,synonyms:synonyms.map||{}};
 const catalog={...contents,revision:digest(JSON.stringify(contents))};
 await writeFile(new URL('data/catalog.json',root),JSON.stringify(catalog));
-for(const old of await readdir(directory))if(old.endsWith('.json')&&!keep.has(old))await unlink(new URL(old,directory));
+const retired = `${homedir()}/.Trash/exam-search-catalog-${Date.now()}`;
+for(const old of await readdir(directory))if(/\.json(?:\.gz)?$/u.test(old)&&!keep.has(old)){
+ await mkdir(retired,{recursive:true});await rename(new URL(old,directory),`${retired}/${old}`);
+}
 console.log(JSON.stringify({catalogBytes:Buffer.byteLength(JSON.stringify(catalog)),subjects:subjects.length,questions:index.items.length,
  browseBytes:Object.values(shards).reduce((n,s)=>n+s.browse.bytes,0),detailBytes:Object.values(shards).reduce((n,s)=>n+s.detail.bytes,0),
  searchBytes:Object.values(shards).reduce((n,s)=>n+s.search.bytes,0)}));

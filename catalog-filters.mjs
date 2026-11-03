@@ -1,10 +1,11 @@
 import {matchesPaper} from './paper-profile.mjs';
+import {matchesExam} from './exam-scope.mjs';
 import { subjectGroup } from './search.mjs?v=library-release-20261011-3';
 export function curriculumOptions(catalog, filters = {}) {
   const from = Number(filters.yearFrom || filters.year) || 0, to = Number(filters.yearTo || filters.year) || Infinity;
   const rows=catalog.facets.filter(f=>(!filters.group||subjectGroup(f.subject).value===filters.group)
     &&(!filters.subject||f.subject===filters.subject)&&f.year>=from&&f.year<=to
-    &&(!filters.month||f.month===Number(filters.month))&&matchesPaper(f,filters));
+    &&matchesExam(f,filters)&&matchesPaper(f,filters));
   const frameworks=[...new Set(rows.map(f=>f.framework).filter(Boolean))].sort();
   const applicable=rows.filter(f=>!filters.framework||f.framework===filters.framework);
   const units=[...new Set(applicable.flatMap(f=>[...f.unit.split(/\s*·\s*/u),...f.standards.map(s=>s.unit)]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
@@ -14,9 +15,9 @@ export function curriculumOptions(catalog, filters = {}) {
 }
 
 export function listFiles(catalog,filters={}) {
- const from=Number(filters.yearFrom)||0,to=Number(filters.yearTo)||Infinity,month=Number(filters.month)||0;
+ const from=Number(filters.yearFrom)||0,to=Number(filters.yearTo)||Infinity;
  return catalog.files.filter(f=>(!filters.group||subjectGroup(f.subject).value===filters.group)&&(!filters.subject||f.subject===filters.subject)
-  &&f.year>=from&&f.year<=to&&(!month||f.month===month)).flatMap(file=>{
+  &&f.year>=from&&f.year<=to&&matchesExam(f,filters)).flatMap(file=>{
    const {profiles,...value}=file;
    const eligible=(profiles||[]).filter(p=>matchesPaper({...p,subject:file.subject},filters));
    if(file.questionCount&&!eligible.length)return [];

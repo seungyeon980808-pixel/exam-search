@@ -1,20 +1,20 @@
 import { mountCompactToolbar } from './compact-toolbar.mjs?v=compact-20261011-1';
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=library-release-20261011-3';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=hakpyeong-20261103';
 import { driveLink } from './drive-source.mjs';
 import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=frame-20261025-1').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=hakpyeong-20261103').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=library-release-20261011-3';
-import { curriculumOptions } from './catalog-filters.mjs?v=library-release-20261011-3';
+import { curriculumDisplayState } from './search.mjs?v=hakpyeong-20261103';
+import { curriculumOptions } from './catalog-filters.mjs?v=hakpyeong-20261103';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=frame-20261025-1').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=hakpyeong-20261103').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }
@@ -86,11 +86,11 @@ function stopWarmup() {
   }
   warmTimer=undefined;warmSubject='';
 }
-const warmScope=()=>subject.value||`group:${group.value||'all'}`;
+const warmScope=()=>`${subject.value||`group:${group.value||'all'}`}:${month.value}`;
 function warmSelectedSubject({intent=false}={}) {
   if(!catalogData||(!subject.value&&!intent)||warmSubject===warmScope())return;
   stopWarmup();warmSubject=warmScope();warmController=new AbortController();
-  const filters={subject:subject.value,group:group.value},signal=warmController.signal;
+  const filters={subject:subject.value,group:group.value,month:month.value},signal=warmController.signal;
   const prepare=()=>{warmTimer=undefined;if(!signal.aborted)void prefetchSearch(filters,{signal,intent}).catch(()=>{});};
   warmTimer=window.requestIdleCallback?requestIdleCallback(prepare,{timeout:300}):setTimeout(prepare,80);
 }

@@ -1,4 +1,5 @@
 import { matchesPaper } from './paper-profile.mjs';
+import { matchesExam } from './exam-scope.mjs';
 
 export function normalize(value) {
   return String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko');
@@ -85,12 +86,11 @@ export function searchQuestions(items, query, filters = {}) {
   const prepared = tokens.length && items[0]?._hay === undefined ? prepareQuestions(items) : items;
   const yearFrom = Number(filters.yearFrom) || 0;
   const yearTo = Number(filters.yearTo) || Infinity;
-  const month = Number(filters.month) || 0;
   const hits = prepared.filter((item) => {
     if (filters.group && subjectGroup(item.subject).value !== filters.group) return false;
     if (filters.subject && item.subject !== filters.subject) return false;
     if (item.year < yearFrom || item.year > yearTo) return false;
-    if (month && item.month !== month) return false;
+    if (!matchesExam(item, filters)) return false;
     if (!matchesPaper(item, filters)) return false;
     const curriculum = item.curriculum || {};
     // A mismatched legacy link cannot qualify a framework, unit, or standard filter.
@@ -148,10 +148,9 @@ export function searchFiles(files, questions, query, filters = {}) {
   const tokens = parseTokens(query);
   const yearFrom = Number(filters.yearFrom) || 0;
   const yearTo = Number(filters.yearTo) || Infinity;
-  const month = Number(filters.month) || 0;
   const eligible = files.filter((file) => (!filters.group || subjectGroup(file.subject).value === filters.group)
     && (!filters.subject || file.subject === filters.subject)
-    && file.year >= yearFrom && file.year <= yearTo && (!month || file.month === month));
+    && file.year >= yearFrom && file.year <= yearTo && matchesExam(file, filters));
   const counts = new Map();
   for (const item of questions) if (matchesPaper(item, filters)) {
     const entry = counts.get(item.pdfFile) || { questionCount: 0, firstMatchPage: item.page || 1 };

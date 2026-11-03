@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
 import {questionSubject} from './question-id.mjs';
 import {validCatalog} from './catalog-cache.mjs';
 import {curriculumOptions,listFiles} from './catalog-filters.mjs';
@@ -13,7 +14,7 @@ const browse=[],detail=[],searchRecords=[];
 for(const shard of Object.values(catalog.shards))for(const kind of ['browse','detail','search']){
  const a=shard[kind],bytes=readFileSync(new URL(a.path,import.meta.url));
  assert.equal(bytes.length,a.bytes);assert.equal(hash(bytes),a.sha256);
- (kind==='browse'?browse:kind==='detail'?detail:searchRecords).push(...JSON.parse(bytes));
+ (kind==='browse'?browse:kind==='detail'?detail:searchRecords).push(...JSON.parse(a.path.endsWith('.gz')?gunzipSync(bytes):bytes));
 }
 test('generated assets match the full source revision and all original detail fields',()=>{
  assert(validCatalog(catalog));assert(!validCatalog({schema:'exam-browser-v1'}));

@@ -1,4 +1,4 @@
-import { getJson } from './data.mjs?v=library-release-20261011-3';
+import { getJson } from './data.mjs?v=hakpyeong-20261103';
 import { resolveEditableContent } from './editable-source.mjs?v=frame-20261025-1';
 
 const cache = new Map();
