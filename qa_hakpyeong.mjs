@@ -85,6 +85,10 @@ for(const [engine,type] of Object.entries({chromium,webkit})) {
    await page.locator('.file-row img').first().evaluate(i=>i.decode());
    await page.screenshot({path:join(output,`hakpyeong-files-${engine}-${width}.png`)});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   await page.goto(base+'?group=math&year=2025&month=all&track=calculus');
+   await page.waitForFunction(()=>document.querySelector('#result-count')?.textContent.includes('검색 결과'));
+   assert.equal(await page.locator('#track-filter').inputValue(),'calculus','모든 시험에서도 수학 선택과목을 유지해야 합니다.');
+   assert.equal(await page.locator('#variant-filter').inputValue(),'odd');
    rows.push({engine,width,lazyBrowseMs,searches:metrics.rows,control,errors,
     hakpyeongRequests:requests.filter(url=>url.includes('/data/hakpyeong/')).length,
     rawCardRequests:requests.filter(url=>url.includes('raw.githubusercontent.com')).length});

@@ -10,6 +10,7 @@ const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...
 import { trackLabels, variantLabels } from './paper-profile.mjs';
 import { curriculumDisplayState } from './search.mjs?v=hakpyeong-20261103';
 import { curriculumOptions } from './catalog-filters.mjs?v=hakpyeong-20261103';
+import { matchesExam } from './exam-scope.mjs';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
@@ -303,7 +304,7 @@ function updateCurriculumOptions(preferred = {}) {
 function updatePaperOptions(preferredTrack = track.value, preferredVariant = variant.value) {
   const applicable = ['math', 'kor'].includes(group.value);
   const entries = paperOptions.filter((entry) => entry.subject === group.value
-    && includesYear(entry.year, yearRange) && (!month.value || entry.month === Number(month.value)));
+    && includesYear(entry.year, yearRange) && matchesExam(entry, {month:month.value}));
   const tracks = [...new Set(entries.map((entry) => entry.track))].filter((value) => !['common', 'all'].includes(value));
   const variants = [...new Set(entries.map((entry) => entry.variant))].filter((value) => value && value !== 'single');
   const modern = entries.some((entry) => entry.track === 'common');
