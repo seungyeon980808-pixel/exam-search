@@ -1,0 +1,7 @@
+const study = new URLSearchParams(location.search).get('view') === 'study';
+if (study) {
+  document.documentElement.classList.add('study-mode');
+  await import('./study.mjs?v=1.1.0');
+} else {
+  await import('./app.js?v=imyong-20261109-1');
+}
