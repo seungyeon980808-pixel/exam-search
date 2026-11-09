@@ -1,7 +1,7 @@
 import {mountTopicPicker,topicIds} from './imyong-topics.mjs?v=1.1.0';
 import {readProgress,filterStudy,STORAGE_KEY} from './study-state.mjs?v=1.1.0';
 import {driveLink} from './drive-source.mjs';
-import {createEmbeddedHost} from './embedded-host.mjs';
+import {publishStudyAddress} from './study-host.mjs?v=1.1.1';
 const css=document.createElement('link');css.rel='stylesheet';css.href='./study.css?v=1.1.0';document.head.append(css);
 const shell=document.createElement('main');shell.className='study-shell';document.body.append(shell);
 shell.innerHTML=`<header class="study-head"><div><a id="study-back" href="?group=imyong">기출 검색으로</a><h1>임용 기출 학습</h1><p>단어로 찾고, 원문으로 풀고, 다시 볼 문항을 남기세요.</p></div><a class="study-link" id="study-print" href="https://www.5e.ai.kr/print/?source=imyong" target="_top">학습교재 만들기</a></header>
@@ -9,8 +9,8 @@ shell.innerHTML=`<header class="study-head"><div><a id="study-back" href="?group
 <p id="study-message" class="study-message" role="status" aria-live="polite">문항을 준비하고 있습니다…</p><p id="study-storage" class="study-message" hidden role="alert"></p>
 <div id="study-empty" class="study-empty" hidden><h2>조건에 맞는 문항이 없습니다.</h2><p>검색어를 줄이거나 과목·학년도·학습 상태를 넓혀 보세요.</p></div>
 <div class="study-work" id="study-work" hidden><article class="study-paper"><nav class="study-nav" aria-label="학습 문항 이동"><button id="study-prev" type="button">이전 문항</button><output id="study-position"></output><button id="study-next" type="button">다음 문항</button></nav><h2 id="study-title"></h2><p class="study-meta" id="study-meta"></p><div class="study-actions"><button id="study-zoom" type="button" aria-pressed="false">원본 확대</button><a id="study-pdf" target="_blank" rel="noopener">시험지 PDF 열기</a></div><div class="study-image-wrap"><img id="study-image" src="./previews/imyong/t_physics_2026_A_01.webp" alt="" decoding="async"></div><p id="study-image-error" hidden>문항 이미지를 불러오지 못했습니다. 위의 시험지 PDF에서 원문을 확인해 주세요.</p></article><aside class="study-side" aria-label="학습 기록"><h2>학습 기록</h2><div class="study-actions"><button id="study-done" type="button" aria-pressed="false">풀이 완료</button><button id="study-review" type="button" aria-pressed="false">다시 풀기</button></div><label for="study-note">내 풀이·메모</label><textarea id="study-note" maxlength="20000" placeholder="풀이 과정이나 헷갈린 개념을 적어 보세요."></textarea><small id="study-save" role="status">이 브라우저에 자동 저장됩니다.</small><small>기기 간 동기화는 지원하지 않습니다. 영역은 원문 용어로 자동 분류했습니다.</small><button id="study-export" type="button">학습 기록 백업</button><label for="study-import">백업 불러오기</label><input id="study-import" type="file" accept="application/json,.json"></aside></div>
-<footer class="study-footer"><span>기출 탐색기 v1.1.0 · 2026-11-09</span><a href="https://github.com/seungyeon980808-pixel/exam-search/blob/main/CHANGELOG.md" target="_blank" rel="noopener">변경 내역</a><span>출처: 한국교육과정평가원 · 2002–2026학년도</span></footer>`;
-const $=s=>shell.querySelector(s),form=$('#study-filters'),params=new URLSearchParams(location.search),publish=createEmbeddedHost(window);
+<footer class="study-footer"><span>기출 탐색기 v1.1.1 · 2026-11-09</span><a href="https://github.com/seungyeon980808-pixel/exam-search/blob/main/CHANGELOG.md" target="_blank" rel="noopener">변경 내역</a><span>출처: 한국교육과정평가원 · 2002–2026학년도</span></footer>`;
+const $=s=>shell.querySelector(s),form=$('#study-filters'),params=new URLSearchParams(location.search),publish=publishStudyAddress;
 for(const name of ['yearFrom','yearTo'])for(let y=2002;y<=2026;y++)form.elements[name].add(new Option(`${y}학년도`,String(y)));
 for(const name of ['subject','domain','yearFrom','yearTo','points','status','q']){const e=form.elements[name];e.value=params.get(name)||(name==='yearFrom'?'2017':name==='yearTo'?'2026':'');if(e.tagName==='SELECT'&&!e.value&&['yearFrom','yearTo'].includes(name))e.value=name==='yearFrom'?'2017':'2026';}
 let progress={schema:1,items:{}},items=[],hits=[],current=null,index=0,zoomUrl='',generation=0,picker=null,taxonomy=null;
