@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+  <title id="title">5E 기출 탐색기</title>
+  <desc id="desc">찾고, 풀고, 내 교재로. 수능과 임용을 연결하는 기출 라이브러리.</desc>
+  <rect width="1280" height="360" rx="16" fill="#edf5f2"/>
+  <path d="M48 48h36" stroke="#23776b" stroke-width="5"/>
+  <g font-family="Pretendard, Apple SD Gothic Neo, Malgun Gothic, sans-serif">
+    <text x="48" y="92" fill="#23776b" font-size="17" font-weight="700" letter-spacing="3">5E / EXAM LIBRARY</text>
+    <text x="48" y="169" fill="#163c38" font-size="52" font-weight="700">찾고, 풀고, 내 교재로.</text>
+    <text x="50" y="216" fill="#49665f" font-size="21">원문으로 이어지는 기출 학습</text>
+    <text x="50" y="302" fill="#49665f" font-size="16">SEARCH  /  STUDY  /  PRINT</text>
+    <g transform="translate(830 48)">
+      <rect x="44" y="0" width="300" height="244" rx="10" fill="#d2e7df"/>
+      <rect x="22" y="15" width="300" height="244" rx="10" fill="#e0eee8" stroke="#b9d6ca"/>
+      <rect y="30" width="300" height="244" rx="10" fill="#fff" stroke="#b9d6ca"/>
+      <circle cx="27" cy="58" r="5" fill="#23776b"/>
+      <text x="44" y="64" fill="#23776b" font-size="15" font-weight="700">ORIGINAL QUESTIONS</text>
+      <path d="M24 86h252M24 115h203M24 132h240M24 149h173" stroke="#cadad5" stroke-width="5"/>
+      <rect x="24" y="176" width="112" height="72" rx="5" fill="#edf5f2"/>
+      <path d="M158 187h113M158 207h95M158 227h106" stroke="#cadad5" stroke-width="5"/>
+      <path d="M42 229l23-23 18 9 32-23" fill="none" stroke="#23776b" stroke-width="3"/>
+    </g>
+  </g>
+</svg>

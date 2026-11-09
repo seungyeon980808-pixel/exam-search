@@ -1,140 +1,123 @@
-# 기출 탐색기
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="5E 기출 탐색기 — 찾고, 풀고, 내 교재로." width="100%">
+</p>
 
-5E의 기출 검색 화면을 별도 정적 사이트로 분리한 저장소입니다. 서버나 켜진 Mac 없이 GitHub Pages에서 동작합니다. 검색은 브라우저에서 최대 세 단어를 AND 조건으로 수행하며, 문항 카드·교육과정/성취기준 확인을 제공합니다. 고해상도 문항과 시험지 전체 페이지는 5E의 공개 Google Drive 게이트웨이에서 PDF 원본을 받아 PDF.js로 표시합니다. 방문자의 Google 로그인은 필요하지 않습니다.
+<h1 align="center">5E 기출 탐색기</h1>
 
-## 중등 임용 추가 (2026-11-09, OmO 작성)
+<p align="center">
+  수능·모의평가·학력평가부터 과학 임용까지.<br>
+  <b>원문 속 단어로 찾고, 원본을 보며 공부하는 기출 라이브러리.</b>
+</p>
 
-첫 화면 **중등 임용**에서 물리·화학·생물·지구과학의 2002~2026학년도 공식 1차 시험지 152개, 2,588문항을 검색합니다. **영역 → 과학교육론**은 네 과목의 교육론 문항을 함께 찾으며, 세부과목·학년도·전공 A/B·단일 시험지를 추가로 고를 수 있습니다. `개념변화`, `전자기 유도`, `유전`, `판구조론`, `POE` 등 원문 단어를 기존 수능 검색과 같은 방식으로 입력합니다. 최대 세 단어가 같은 문항에 모두 들어가는 검색, 띄어쓰기 차이, 시험지별 검색, 주소 복원을 지원합니다.
+<p align="center">
+  <a href="https://github.com/seungyeon980808-pixel/exam-search/tags"><img src="https://img.shields.io/github/v/tag/seungyeon980808-pixel/exam-search?label=version&color=23776b&style=flat-square" alt="최신 버전 태그"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/code-AGPL--3.0-414c50?style=flat-square" alt="코드 라이선스 AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/web-no_install-414c50?style=flat-square" alt="설치 없이 웹에서 사용">
+</p>
 
-자료는 한국교육과정평가원 중등 교사 임용 기출 게시판에서 수집했습니다. PDF는 기존 공개 공유 폴더의 `기출문제/임용기출/<과목>/`에 두고, 출처 주소·파일 해시·원본 영역을 보존합니다. 24개 스캔/중첩 글자 PDF의 본문은 macOS Vision OCR로 보완했습니다. OCR에는 인식 오류가 있을 수 있습니다. **과학교육론 영역은 원문 용어에 따른 자동 분류**이며 경계 문항은 전체 영역으로도 검색할 수 있습니다. 문항 경계·중복 번호·연속 지문은 원본 위치로 구분하고, 여러 쪽에 이어지는 문항은 미리보기에서 합쳐 표시합니다. 임용 Hwp 변환은 검증 완료 자료가 아니며, 스캔/여러 영역 문항의 안전한 색인 초안에는 원문 대조 안내를 표시합니다. 미해결 수식은 완성본으로 처리하지 않습니다.
+<p align="center">
+  <a href="https://www.5e.ai.kr/examlibrary/"><b>기출 검색 열기 ↗</b></a> ·
+  <a href="https://www.5e.ai.kr/examlibrary/?view=study&amp;group=imyong"><b>임용 학습 모드 ↗</b></a> ·
+  <a href="https://www.5e.ai.kr/print/?source=imyong">교재 만들기 ↗</a>
+</p>
 
-`data/imyong/catalog.json`은 작은 목록이고 과목별 gzip 본문 색인은 임용 검색 시 읽습니다. 임용 전송 색인은 기존 수능·학평 색인과 분리되어 있으며 기본 모평·수능 범위를 보존합니다. 원본 수집·검색 자료 재생성은 다음 순서로 실행합니다. OCR이 필요한 PDF는 `swiftc -O tools/ocr-imyong.swift -o <OCR실행파일>`로 도구를 만든 뒤 `<OCR실행파일> 원본.pdf <OCR폴더>/원본.pdf.json`으로 읽습니다.
+---
+
+## 찾기에서 학습까지
+
+| 하고 싶은 일 | 할 수 있는 것 |
+| --- | --- |
+| **필요한 기출 찾기** | 최대 세 단어의 본문 검색, 과목·학년도·시험·영역 필터, 검색 주소 복원 |
+| **원문 확인하기** | 문항 이미지, 고해상도 원본 확대, 시험지 PDF와 출처 확인 |
+| **과학 임용 공부하기** | 단원·세부 주제 복수 선택, 풀이 완료·다시 풀기, 개인 메모와 JSON 백업 |
+| **내 범위로 교재 만들기** | 선택 범위를 [5E_print](https://github.com/seungyeon980808-pixel/print)에 전달해 제작 요청 만들기 |
+| **문항을 모아 편집하기** | 지원 범위에서 문항 선택·모아 보기·HWPX 초안 편집. [변환 한계 확인](docs/EDITABLE.md) |
+
+<p align="center">
+  <a href="https://www.5e.ai.kr/examlibrary/?view=study&amp;group=imyong&amp;subject=t_physics&amp;yearFrom=2017&amp;yearTo=2026"><img src="docs/assets/study.png" alt="물리 임용 원문과 필터, 풀이 상태·메모·백업을 함께 보는 실제 학습 화면" width="100%"></a><br>
+  <sub>실제 공개 서비스의 임용 학습 모드 · 2026-11-10 촬영</sub>
+</p>
+
+## 바로 사용하기
+
+1. [기출 탐색기](https://www.5e.ai.kr/examlibrary/)에서 시험 종류와 과목을 고릅니다.
+2. `전자기 유도`, `유전`, `판구조론`, `개념변화`처럼 원문에 나오는 단어로 검색합니다. 여러 단어는 **한 문항에 모두 포함**되어야 합니다.
+3. 학년도·시험·영역으로 좁히고, 문항 이미지와 원본 PDF를 확인합니다.
+4. 임용은 [학습 모드](https://www.5e.ai.kr/examlibrary/?view=study&group=imyong)에서 풀이 기록을 남기거나, 선택 범위를 교재 제작으로 이어 갑니다.
+
+웹 사용에는 설치나 방문자의 Google 로그인이 필요하지 않습니다. 학습 기록은 **현재 브라우저에 저장**되며 기기 간 동기화는 지원하지 않습니다. 기기를 옮길 때는 JSON 백업을 사용하세요.
+
+## 수록 범위
+
+| 자료 | 범위 | 문항 수 |
+| --- | --- | ---: |
+| 수능·6월·9월 모의평가 | 2007–2027학년도 · 과학탐구·사회탐구·국어·영어·수학 | 19,760 |
+| 교육청 학력평가 | 3·4·5·7·10월 · 과학탐구 8과목 · 560개 시험지 | 11,200 |
+| 중등 임용 | 2002–2026학년도 · 물리·화학·생물·지구과학 · 공식 1차 시험지 152개 | 2,588 |
+
+2026-11-09 자료판 기준입니다. 임용의 **과학교육론은 네 과목에 포함된 문항을 모아 보는 영역**이므로 별도 문항 수로 더하지 않습니다. 학년도와 시행 연도는 다를 수 있습니다. 예를 들어 2027학년도 3월 학평은 2026년 3월 시행 시험입니다.
+
+임용은 **30개 단원·72개 세부 주제**를 선택할 수 있습니다. 영역·주제는 원문 용어로 자동 분류한 학습용 태그이며 공식 출제영역을 확정한 분류가 아닙니다. 경계 문항은 본문 검색과 미분류에서도 확인해 주세요. [자료 출처와 분류 기준 →](docs/DATA.md)
+
+## 임용 학습교재
+
+[교재 제작 화면](https://www.5e.ai.kr/print/?source=imyong)에서 과목·영역·주제·학년도·배점·문항 수·정렬·제외어·풀이 여백을 정합니다. 기존 수능 제작과 같이 **설정과 제작 요청을 복사해 AI에게 전달하는 방식**이며, 서버에서 맞춤 PDF를 즉시 생성하지는 않습니다.
+
+최근 10개년 **2017–2026학년도**의 완성 문제편 5종과 원문 확대본·문항표도 받을 수 있습니다. A3 가로에 **2점 4문항/쪽, 4점 2문항/쪽**으로 배치합니다. 네 과목의 중복 없는 문항은 867개이며 과학교육론 모음은 이 중 일부를 다시 모은 책입니다.
+
+**현재 공개 PDF는 문제편입니다.** 해설·개념 옵션은 별도 작성·대조 단계에 전달하는 요청입니다. [임용 교재 안내 →](https://github.com/seungyeon980808-pixel/print/blob/main/docs/IMYONG.md)
+
+## 로컬에서 실행하기
+
+Node.js와 Python 3를 사용합니다. Node.js는 `node --test`와 `DecompressionStream`을 지원하는 환경을 사용하세요.
 
 ```bash
-python tools/collect-imyong.py --source-root <공유폴더/기출문제/임용기출> --cache-root <작업폴더/공식게시판캐시>
-python tools/build-imyong.py --source-root <공유폴더/기출문제/임용기출> --ocr-root <OCR폴더>
-npm run build:imyong
-npm run test:imyong
-npm run qa:imyong
-```
-
-Python 도구에는 PyMuPDF와 Pillow가 필요합니다. 이미 만든 원본 카드의 픽셀을 다시 렌더링하지 않고 OCR/영역 분류만 갱신하려면 `build-imyong.py`에 `--refresh-text`를 붙입니다. `qa:imyong`은 Chromium·WebKit의 데스크톱/모바일에서 검색·주소 복원·실제 공개 PDF 보기와 기존 수능 회귀를 검사합니다.
-
-## 학력평가 추가 (2026-11-03, OmO 작성)
-
-시험 필터의 **학평 전체**, **3·4·5·7·10월 학평**에서 과학탐구 8과목, 560개 시험지의 11,200문항을 찾습니다. 기본 **모평·수능**은 종전 자료만 읽고, **모든 시험**은 두 출처를 함께 검색합니다. 학평 색인과 본문은 해당 범위를 선택할 때만 내려받습니다. 기존 표기와 같은 학년도 기준으로, `2027학년도 3월 학평`은 `2026년 3월 시행`입니다. 스캔 원본을 읽은 OCR 검색어는 인식이 부정확할 수 있으며, 단원·성취기준은 추정해 채우지 않습니다.
-
-첫 화면의 주 동작은 기존 검색입니다. 과목·학년도·시험 조건, 결과 수, 원본 카드 순서와 기존 화면 배치를 유지하고 시험 선택지만 확장했습니다.
-
-`data/hakpyeong/catalog.json`과 과목별 gzip 목록·본문·상세 색인이 추가됩니다. 카드는 기존과 같은 `cards/{문항ID}.webp`와 2배율 규격으로 원본 그대로 저장합니다. 1 GB Pages 제한을 지키기 위해 **학평 카드만 같은 저장소의 `raw.githubusercontent.com/.../main/cards/` 주소에서 제공**합니다. 파일 해시를 주소에 붙여 캐시를 구별합니다. 별도 저장소나 인증은 필요하지 않고 같은 push로 반영됩니다.
-
-Pages는 **main / 루트의 레거시 배포**를 유지합니다. `.nojekyll`을 다시 만들지 마세요. `_config.yml`의 제외 규칙이 학평 카드와 빌드 원본을 게시본에서 분리합니다. 검색용 gzip은 `DecompressionStream`으로 풀기 전에 전송 바이트 크기와 SHA-256을 검사합니다. `data/questions.json` 등 빌드 입력은 저장소에 남지만 게시되지 않습니다.
-
-```bash
-node tools/build-hakpyeong.mjs <추출-data-source-폴더> <인계-cards-폴더>
-uv run tools/build-hakpyeong-thumbnails.py <추출-data-source-폴더>/index.json <공유폴더-루트>
-npm run build:catalog
-npm test
-npm run test:hakpyeong
-EXAM_QA_OUTPUT=<검사-폴더> npm run qa:hakpyeong
-```
-
-푸시 전 로컬 카드 검수에는 `EXAM_LOCAL_CARDS=1`, 읽기 전용 로컬 원본 PDF 검수에는 `EXAM_SHARED_ROOT=<공유폴더-루트>`를 추가합니다. 이때만 브라우저 검사에서 원격 응답을 해당 로컬 파일로 대신합니다. 서비스 코드는 항상 실제 원본 호스트 주소를 씁니다.
-
-## 구성
-
-첫 화면에서 과목을 고르면 가벼운 문항 목록부터 표시합니다. 본문 검색 색인은 과목별로 필요한 시점에 준비하며, 검색 중에도 이전 결과와 입력한 검색어를 유지합니다. 학년도는 시작·종료 범위를 고른 뒤 적용하며, 기존 단일 학년도 주소도 사용할 수 있습니다. 교육과정·단원·성취기준은 검색어 앞에서 설정하고, 선택한 과목과 학년도 범위에 맞춰 좁혀집니다. 좁은 화면에서는 검색창 앞의 `조건` 버튼으로 모든 검색 조건을 엽니다. 문항 표시 개수는 6·9·18·36개 중 고를 수 있습니다. 상단 컨트롤은 선택값의 길이에 따라 움직이지 않으며, 누를 때 위치 이동 없이 색상으로 즉시 반응합니다.
-
-`data/catalog.json`과 `data/browser/`는 기존 원본 색인에서 생성한 브라우저용 자료입니다. 원본 색인을 변경한 뒤에는 `npm run build:catalog`를 실행하고 생성물을 함께 배포합니다. 검수는 `npm test`, `npm run qa:library`, `npm run qa:library-state`, `npm run qa:search-response`, `npm run qa:toolbar`로 수행합니다. 상단 검수는 실제 자료의 범위 검색, 초안 취소, 한 번의 적용 검색, 주소 복원, 컨트롤 위치 안정성, 좁은 화면과 동작 줄이기 설정을 Chromium·WebKit에서 확인합니다. 측정 조건과 성능·품질 검수 결과는 [검색 반응성 개선 기록](docs/SEARCH_RESPONSIVENESS.md)에 있습니다.
-
-- `data/questions.json`: 과학탐구·국어·영어·수학·사회탐구 19,760개 문항의 텍스트 색인과 메타데이터
-- `cards/`: PDF에서 미리 만든 문항별 WebP 이미지
-- `data/files.json`: 시험지의 페이지 수와 공개 공유 폴더 내 상대 경로. PDF 바이트나 비공개 파일 ID는 포함하지 않음
-- `thumbnails/`: 시험지 첫 페이지 미리보기
-- `search.mjs`: 5E 로컬 검색 규칙을 브라우저용으로 옮긴 코드
-- `drive-source.mjs`: 5E 공개 게이트웨이를 통해 원본 PDF를 가져옴
-- `pdf-viewer.mjs`: 받은 PDF 바이트를 PDF.js로 문항과 스크롤 가능한 시험지 페이지에 렌더링
-- `data/editable/`: 대표 문항의 구조화 초안과 편집 가능한 HWPX, 지원 여부 목록
-- `editable-editor.mjs`: 문항 화면에서 rhwp 편집기를 열고 수정본을 내려받는 기능
-
-`build_static.py`는 기존 과학탐구 색인을 재생성할 때 로컬 색인·PDF 폴더·공유 폴더의 `pack.json`을 입력받습니다. 확장 과목 색인은 별도의 비공개 원본 수집·검토 절차에서 생성했으며, 이 명령만으로 19,760문항 전체를 재생성할 수는 없습니다. 개인 Google Drive 경로와 PDF 원본은 저장소에 기록하지 않습니다.
-
-```bash
-uv run build_static.py \
-  --pdf-dir "/path/to/PDF-folder" \
-  --index "/path/to/exam-search/.cache/questions.json" \
-  --synonyms "/path/to/5E/assets/exam-library/synonyms.json" \
-  --public-pack "/path/to/5E_공유폴더테스트_0916/pack.json"
-```
-
-로컬 확인:
-
-```bash
-python3 -m http.server 8768
+git clone https://github.com/seungyeon980808-pixel/exam-search.git
+cd exam-search
 npm ci
-npm run qa
+python3 -m http.server 8768 --bind 127.0.0.1
 ```
 
-`npm run qa`는 공개 게이트웨이에서 실제 PDF를 읽으므로 로컬 PDF가 필요하지 않습니다. 네트워크 없이 화면을 점검하려면 `EXAM_PDF_DIR="/path/to/PDF-folder" npm run qa`로 로컬 PDF를 모의 응답에 사용합니다.
-
-## 편집 가능한 문항 초안
-
-문항 카드의 이미지·제목·여백 또는 체크박스를 누르면 선택과 해제가 됩니다. 카드 상단의 눈 모양 버튼은 선택 상태를 바꾸지 않고 상세 미리보기를 엽니다. 여러 문항을 담아 `모아 보기`를 누르면 선택 순서대로 하나의 rhwp 문서를 만듭니다. 검색·페이지·시험지별 모드를 바꿔도 현재 탭의 선택은 유지되며, 선택 목록에서 순서를 바꾸거나 제거할 수 있습니다. 선택한 문항의 순서와 출처는 이 브라우저에 보관되어 새로고침 후에도 복원됩니다. 저장을 허용하지 않는 환경에서는 현재 탭에서만 유지됩니다. 문항을 제거하거나 모두 해제한 직후에는 되돌릴 수 있습니다. 편집 중인 문서 내용은 이 선택 목록에 저장되지 않으므로 HWPX로 내려받아 보관하세요. 문항별 원래 번호와 출처, 편집 가능한 수식 개체를 보존하고 자연스럽게 다음 쪽으로 이어집니다. `문항 목록·원본`에서 각 문항의 PDF와 이미지를 엽니다.
-
-준비가 실패한 문항은 이유와 함께 남으며 재시도할 수 있습니다. `성공한 N개만 열기`를 명시적으로 눌러야 일부 문항만 열리고, 제외 목록은 계속 표시됩니다. 연 뒤에는 재시도가 편집 내용을 자동으로 교체하지 않습니다. 닫기는 남은 준비를 취소하며, 편집한 문서를 닫거나 교체하기 전에는 확인합니다. 색인 초안과 그림·도표 생략 등 기존 복원 한계는 묶음에도 동일합니다. 내려받기는 `선택문항-N개-YYYYMMDD-edited.hwpx` 한 파일입니다.
-
-일괄 회귀 검사는 `EXAM_SEARCH_URL=http://127.0.0.1:8770/ npm run qa:batch`로 실행하며 `.omo/evidence/multi-question-rhwp/`에 화면과 실제 HWPX 재열기 증거를 기록합니다.
-
-문항 원본 이미지를 누르거나 `한글 문서에서 보기`를 누르면 rhwp 편집 화면이 열립니다. 준비된 편집본이 있으면 우선 사용하고, 없으면 브라우저가 공개 Google Drive의 PDF 원본에서 문항 글자·수식 위치를 읽어 그 자리에서 HWPX를 만듭니다. 내장 HyhwpEQ 글꼴의 특수 글자는 배포된 글리프 윤곽·메트릭 검증표와 실제 PDF 글꼴을 대조한 경우에만 수식으로 옮깁니다. 일반 문항은 원본 분석에 실패해도 안전한 색인 텍스트 초안을 만들 수 있으며, 이때 화면에 색인 초안임을 명시합니다. `시험지 PDF` 버튼은 원본 PDF의 해당 쪽을 새 탭에서 엽니다. 이미지 확대는 별도 `이미지 확대` 버튼에서 사용합니다. 본문·발문·<보기>·선지를 수정하고 `HWPX 내려받기`로 별도 파일을 저장합니다. 그림·도표는 변환 대상에서 제외됩니다. PDF 원본과 검색 자료는 변경되지 않습니다. 편집기는 브라우저 보안상 `file://` 직접 열기에서는 동작하지 않으므로 GitHub Pages 또는 로컬 웹 서버로 접속해야 합니다.
-
-현재 원본 PDF를 바탕으로 준비된 편집본은 물리학Ⅱ 5문항과 물리학Ⅰ `p1_2027_06_06`, `p1_2027_06_18`입니다. 물리학Ⅰ 두 문항에는 각각 7개와 16개의 편집 가능한 수식이 들어갑니다. 준비되지 않은 문항도 클릭 시 PDF에서 복원을 시도하며, 이 저장소의 검증표는 로컬 시험지 195개에 있는 HyhwpEQ 글꼴의 84종 특수 글자를 포함합니다. 그림형 선지, 읽을 수 없는 PDF, 아직 검증되지 않은 글꼴이나 문항 구조는 변환을 중단하고 이유를 표시할 수 있습니다. 전체 문항의 완전한 복원을 보증하지 않으므로 내려받은 문서를 원본 PDF와 대조해야 합니다.
-
-더 정밀한 문항별 사전 편집본은 원본 PDF가 있는 로컬 환경에서 생성합니다. PDF와 ExamPool 소스는 이 저장소에 복사하지 않습니다.
+[http://127.0.0.1:8768/](http://127.0.0.1:8768/)에서 검색 화면을, `/?view=study&group=imyong`에서 학습 모드를 엽니다. 정적 웹앱이므로 별도 앱 서버나 번들 빌드는 없습니다. 고해상도 원문 PDF는 공개 게이트웨이에 접근할 수 있어야 열립니다.
 
 ```bash
-UV_CACHE_DIR=/path/to/uv-cache uv run --no-project --python 3.12 \
-  --with pymupdf==1.28.0 --with 'pydantic>=2' --with 'fonttools>=4.63' \
-  --with pillow --with olefile \
-  python tools/build_editable.py \
-  --exampool-root /path/to/ExamPool \
-  --pdf-root /path/to/exam-search-public/pdfs \
-  p2_2018_06_06
+npm test                  # 기본 단위 검사
+npm run test:imyong        # 임용 색인 검사
+npm run test:study         # 학습 기록·필터 검사
 ```
 
-전체 색인 대상은 문항 ID 대신 `--all`을 지정할 수 있습니다. 반복 실행해도 기존 편집 문서 목록은 보존되며, 변환 실패가 이미 준비된 편집본을 덮어쓰지 않습니다. 기본적으로 `tools/embedded-font-proofs.json`의 검증된 내장 글꼴 윤곽·메트릭 36개를 실제 PDF 글리프와 대조합니다. 일치한 글리프만 해당 PDF 글꼴의 SHA-256·글리프 번호·코드포인트에 묶어 ExamPool에 등록하므로 Windows 글꼴 설치 없이 복원할 수 있습니다. 등록되지 않은 모양은 허용하지 않습니다. 기존 `--equation-font /path/to/HYHWPEQ.TTF`도 사용할 수 있습니다. 글꼴이 확인돼도 문항 경계·문장 순서·그림형 선지는 별도 검토가 필요합니다. 사전 생성 HWPX가 필요할 때만 `node tools/render_editable.mjs --rhwp-core /path/to/5E/manual-library/vendor/rhwp-core`를 실행합니다.
+브라우저 검사 준비와 데이터 재생성은 [개발 안내](docs/DEVELOPMENT.md), 변경 제안은 [기여 안내](CONTRIBUTING.md)를 참고하세요.
 
-`vendor/rhwp-editor`와 `vendor/rhwp-studio`는 5E에서 이미 사용하던 rhwp 0.8.6 편집기 정적 자산을 재사용합니다. 편집기는 사이트에서 직접 제공하므로 방문자가 별도 앱을 설치하거나 외부 편집기 페이지에 접속할 필요가 없습니다.
+## 저장소와 문서
 
-## 공개 Google Drive 원본
-
-1. 5E의 공유 폴더 `5E_공유폴더테스트_0916/기출문제`와 하위 시험지 PDF에 `링크가 있는 모든 사용자: 보기` 권한을 유지합니다.
-2. 확장 과목의 별도 폴더 `기출확장_국영수사탐`과 하위 문제지 PDF에도 같은 보기 권한을 유지합니다.
-3. `data/files.json`의 `publicPath`가 해당 공유 폴더 안의 실제 파일 경로와 일치해야 합니다.
-4. 사이트는 `drive-source.mjs`에 설정한 5E 게이트웨이의 공개 URL을 사용합니다. OAuth 클라이언트 ID나 방문자 로그인이 필요하지 않습니다.
-
-새 파일을 추가하거나 Drive에서 파일을 교체한 경우에는 해당 과목 색인과 공개 경로를 갱신해야 합니다. 색인된 전 과목의 문항과 시험지 첫 페이지는 사전 생성된 WebP 미리보기를 먼저 표시합니다. 공유 권한이나 5E 게이트웨이가 해제되더라도 목록 미리보기는 열리지만, 고해상도 원본·한글 변환은 원본 PDF 접근이 필요합니다. 미리보기 파일이 없거나 손상되면 기존 PDF 렌더링으로 대체합니다.
-
-## 배포와 주의
-
-GitHub Pages는 `main` 브랜치의 루트를 배포합니다. 기존 배포에서 추적하던 `pdfs/`는 배포 트리에서 제외해야 합니다. `.gitignore`는 새 PDF 추가를 막지만, 이미 추적된 421개를 자동으로 제거하지는 않습니다. 또한 새 커밋에서 PDF를 제거해도 과거 Git 기록의 용량은 줄지 않으므로 저장소 자체를 줄이려면 별도의 기록 정리가 필요합니다. 확장 색인 11,340문항은 본문·공통 지문·문항 경계를 모두 원본 대조한 확정본이 아닙니다. 그중 734문항은 읽을 수 있는 본문이 없어 단어 검색 대상이 아니며, 신규 검증 정답은 아직 제공하지 않습니다. 새 교육과정 연결은 검증 표시된 456건만 노출합니다. 특수 글꼴 PDF 일부는 텍스트 검색이 불완전할 수 있으므로 이미지와 원본으로 대조하세요.
-
-코드 라이선스는 [LICENSE](LICENSE)를 따릅니다. PDF와 문항 이미지의 저작권은 각 원저작자에게 있으며, 코드 라이선스가 이 자료의 재배포 권리를 부여하지는 않습니다. 공개 운영 전에 원자료의 이용 조건을 별도로 확인해야 합니다.
-
-
-## 이미지 표시 속도
-
-측정 조건, 개선 전후 수치와 기능 검수 결과는 [이미지 로딩 개선 보고](docs/IMAGE_LOADING_PERFORMANCE.md)에 기록했습니다.
-
-`preview-loader.mjs`는 화면과 인접한 문항만 불러오며, 화면에 보이는 이미지에 우선순위를 둡니다. 정적 이미지 4개와 원본 대체 렌더링 2개의 동시 작업 수를 따로 제한합니다. 검색·페이지 전환으로 필요 없어진 대기 작업을 취소하고, 제거된 카드의 이미지 URL을 해제합니다. 이미지 너비·높이를 목록에 포함해 이미지가 뜰 때 카드가 밀리지 않게 합니다. 목록용 이미지는 한글 변환 입력으로 사용하지 않습니다.
-
-새 원본을 색인한 뒤 로컬에 보관된 PDF로 미리보기를 생성하고 목록을 갱신합니다. 기존 과학탐구 카드, 원본 PDF, 검색 본문과 한글 변환 메타데이터는 유지됩니다. 브라우저의 실제 PDF 렌더·크롭 코드를 사용하며 AI 호출은 없습니다.
-
-```bash
-# 로컬 서버를 먼저 실행한 뒤 실제 원본 폴더를 지정합니다.
-EXAM_SEARCH_URL=http://127.0.0.1:8813/ npm run build:previews -- /path/to/exam-search-public
-npm run build:catalog
-EXAM_SOURCE_ROOT=/path/to/exam-search-public npm run qa:images
-npm run measure:images -- after
+```text
+entry.mjs                     검색 / 학습 모드 진입점
+app.js · search*.mjs           검색 화면과 본문 검색
+study*.mjs · study.css         임용 학습 모드와 브라우저 학습 기록
+imyong-topics.mjs              학습용 단원·세부 주제 선택
+data/                         원본 색인과 브라우저용 목록·gzip 색인
+cards/ · previews/             문항 이미지와 시험지 미리보기
+drive-source.mjs               공개 원본 PDF 연결
+editable-*.mjs · vendor/       편집 가능한 문항 초안
+tools/ · test_*.mjs            데이터 생성 도구와 검사
+docs/                         사용·데이터·운영 안내와 검수 기록
 ```
 
-원본 폴더에는 `pdfs/`와 `기출확장_국영수사탐/`가 있어야 합니다. 생성 결과는 `previews/`, 원본 버전·이미지 크기·파일 목록은 `data/preview-assets.json`에 보관합니다. 공개 경로나 원본 내용이 바뀌면 먼저 색인을 갱신한 뒤 다시 생성합니다. 이미지 생성으로 기존의 미검증 문항 경계가 검증되는 것은 아닙니다.
+| 문서 | 내용 |
+| --- | --- |
+| [문서 안내](docs/README.md) | 사용·데이터·개발·검수 문서 찾아보기 |
+| [데이터와 출처](docs/DATA.md) | 자료 범위, OCR·분류 한계, 원본 연결 |
+| [개발과 배포](docs/DEVELOPMENT.md) | 로컬 검사, 색인 생성, GitHub Pages 운영 |
+| [문항 편집](docs/EDITABLE.md) | 모아 보기, HWPX 초안, 글꼴·복원 한계 |
+| [5E 저장소 구성과 버전](docs/REPOSITORIES.md) | 기출 탐색기·print·5E 본체의 역할과 버전 구분 |
+| [변경 내역](CHANGELOG.md) · [제품 원칙](PRODUCT.md) · [설계](DESIGN.md) | 릴리스 기록과 구현 기준 |
+
+## 문제 제보
+
+[GitHub Issues](https://github.com/seungyeon980808-pixel/exam-search/issues)에 사용한 주소, 브라우저, 재현 순서와 문항 ID 또는 학년도·과목·번호를 남겨 주세요. 학습 메모와 백업에는 개인 기록이 들어갈 수 있으니 제보에 그대로 첨부하지 마세요.
+
+## 라이선스와 출처
+
+코드는 [AGPL-3.0](LICENSE), 포함된 외부 구성 요소는 [THIRD_PARTY.md](THIRD_PARTY.md)를 따릅니다. 원본 PDF·문항·이미지의 권리는 한국교육과정평가원·교육청 등 각 원저작자에게 있습니다. 코드 라이선스가 해당 자료의 재배포 권리를 부여하지는 않습니다.
+
+개발 박승연 · 서울특별시교육청
