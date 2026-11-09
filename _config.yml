@@ -10,6 +10,9 @@ exclude:
   - data/questions.json
   - data/preview-assets.json
   - data/files.json
+  - data/imyong/questions.json
+  - data/imyong/files.json
+  - data/imyong/quality.json
   - data/synonyms.json
   - tools
   - test-fixtures
@@ -17,6 +20,7 @@ exclude:
   - "qa*"
   - "*.py"
   - DESIGN.md
+  - PRODUCT.md
   - docs
   - package.json
   - package-lock.json

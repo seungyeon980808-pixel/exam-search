@@ -1,6 +1,6 @@
-import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=hakpyeong-20261103';
-import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions,subjectGroup} from './search.mjs?v=hakpyeong-20261103';
-import {needsHakpyeong} from './exam-scope.mjs';
+import {loadAsset,pruneAssets} from './catalog-cache.mjs?v=imyong-20261109-1';
+import {searchFiles,searchQuestions,attachSearchRecord,fileQuestions,subjectGroup} from './search.mjs?v=imyong-20261109-1';
+import {needsHakpyeong,needsImyong} from './exam-scope.mjs?v=imyong-20261109-1';
 import {questionSubject} from './question-id.mjs?v=subject-review-20261011-1';
 import {paperLabel,paperPages,paperReady} from './paper-profile.mjs';
 let catalog,running=0;
@@ -47,6 +47,8 @@ async function items(subject,kind,ctx){
  try{return await job.promise;}finally{if(loading.get(key)===job)loading.delete(key);}
 }
 function scope(filters){return Object.keys(catalog.shards).filter(key=>{
+ if(key.startsWith('t_'))return needsImyong(filters)&&(!filters.subject||key===filters.subject)&&(!filters.group||filters.group==='imyong');
+ if(filters.domain||String(filters.month||'').startsWith('imyong'))return false;
  const hp=key.startsWith('hp_'),subject=hp?key.slice(3):key;
  const sources=filters.month==='all'||hp===needsHakpyeong(filters);
  return sources&&(!filters.subject||subject===filters.subject)&&(!filters.group||subjectGroup(subject).value===filters.group);
@@ -78,7 +80,7 @@ async function searchItems(subject,ctx){
 }
 async function request(path,ctx){
  const url=new URL(path,'https://exam.local/'),p=url.searchParams;
- const filters=Object.fromEntries(['group','subject','yearFrom','yearTo','month','framework','unit','standard','track','allProfiles'].map(k=>[k,p.get(k)||'']));filters.variant=p.get('variant')||'odd';
+ const filters=Object.fromEntries(['group','subject','yearFrom','yearTo','month','domain','framework','unit','standard','track','allProfiles'].map(k=>[k,p.get(k)||'']));filters.variant=p.get('variant')||'odd';
  if(url.pathname==='/api/question'){
   const id=p.get('id'),subject=questionSubject(id,catalog.status.subjects);
   if(!subject)throw new Error('문항을 찾을 수 없습니다.');

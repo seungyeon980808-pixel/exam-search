@@ -56,7 +56,7 @@ for(const [engine,type] of Object.entries({chromium,webkit})) {
    await page.waitForFunction(()=>document.querySelector('#result-count')?.textContent==='검색 결과 80개');
    const lazyBrowseMs=performance.now()-start;
    const metrics=await page.evaluate(async()=>{
-    const data=await import('./data.mjs?v=hakpyeong-20261103'),rows=[];
+    const data=await import('./data.mjs?v=imyong-20261109-1'),rows=[];
     for(const query of ['전자기파','파동','힘','에너지','전기']) {
      const start=performance.now(),value=await data.getJson(`/api/search?subject=p1&month=hakpyeong&q=${encodeURIComponent(query)}`);
      rows.push({query,ms:performance.now()-start,total:value.total});

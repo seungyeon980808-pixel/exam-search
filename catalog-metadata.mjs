@@ -3,7 +3,7 @@ export function createCatalogMetadata(index) {
 const subjects = [...new Map(index.items.map(q => [q.subject, q.subjectLabel || q.subject]))]
   .map(([value,label])=>({value,label,group:subjectGroup(value).value, count:index.items.filter(q=>q.subject===value).length}))
   .sort((a,b)=>a.label.localeCompare(b.label,'ko'));
-const groups = ['kor','eng','math','science','social','other'].filter(g=>subjects.some(s=>s.group===g))
+const groups = ['kor','eng','math','science','social','imyong','other'].filter(g=>subjects.some(s=>s.group===g))
   .map(value=>({...subjectGroup(subjects.find(s=>s.group===value).value),count:index.items.filter(q=>subjectGroup(q.subject).value===value).length}));
 const applicable=index.items.filter(q=>!curriculumYearMismatch(q));
 const facets=[...new Map(applicable.filter(q=>q.curriculum).map(q=>{

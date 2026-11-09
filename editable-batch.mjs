@@ -1,5 +1,5 @@
-import { getJson } from './data.mjs?v=hakpyeong-20261103';
-import { resolveEditableContent } from './editable-source.mjs?v=frame-20261025-1';
+import { getJson } from './data.mjs?v=imyong-20261109-1';
+import { resolveEditableContent } from './editable-source.mjs?v=imyong-20261109-1';
 
 const cache = new Map();
 export function clearEditableBatchCache() { cache.clear(); }

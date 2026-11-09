@@ -1,5 +1,5 @@
-import { readQuestionPdf } from './pdf-viewer.mjs?v=frame-20261025-1';
-import { questionFigures } from './figure-fallback.mjs?v=library-release-20261011-3';
+import { readQuestionPdf } from './pdf-viewer.mjs?v=imyong-20261109-1';
+import { questionFigures } from './figure-fallback.mjs?v=imyong-20261109-1';
 import { observedContentRegions } from './content-integrity.mjs?v=readability-20261004-4';
 import { appendLineRuns } from './prose-flow.mjs?v=readability-20261004-4';
 import { ruledTextFractions } from './ruled-text-fractions.mjs?v=frame-20261025-1';
@@ -687,6 +687,9 @@ function locate(question, pdf) {
 }
 
 export async function convertQuestionNow(question, options = {}) {
+  if (question.source === 'imyong' && (question.regions?.length > 1 || question.textQuality === 'ocr')) {
+    throw new Error('여러 원본 영역 또는 스캔본으로 구성된 임용 문항은 색인 초안과 원문을 대조해야 합니다.');
+  }
   const check = () => options.signal?.throwIfAborted();
   const build = (item, page, glyphs) => {
     check();

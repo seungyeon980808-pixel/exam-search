@@ -1,6 +1,6 @@
 import './stream-iterator-polyfill.mjs';
 import * as pdfjs from './vendor/pdfjs/pdf.mjs';
-import { driveFilePath } from './data.mjs?v=hakpyeong-20261103';
+import { driveFilePath } from './data.mjs?v=imyong-20261109-1';
 import { downloadDriveFile } from './drive-source.mjs';
 import { equationTextItems } from './pdf-text-geometry.mjs';
 import { PREVIEW_VERTICAL_PADDING_PT, previewCropBounds, previewPaperEnd, previewQuestionBox } from './preview-crop.mjs?v=preview-crop-20261004-1';
@@ -263,7 +263,21 @@ async function questionCanvas(item, scale, preview = false, signal) {
 }
 
 export async function renderQuestion(item, scale = 3, { signal } = {}) {
-  const canvas = await questionCanvas(item, scale, true, signal);
+  let canvas;
+  if (item.source === 'imyong' && item.regions?.length) {
+    const parts = [];
+    for (const region of item.regions) {
+      signal?.throwIfAborted();
+      parts.push(await questionCanvas({...item, ...region}, scale, false, signal));
+    }
+    canvas = document.createElement('canvas');
+    canvas.width = Math.max(...parts.map(part=>part.width));
+    canvas.height = parts.reduce((n,part)=>n+part.height,0) + Math.round(scale*7)*(parts.length-1);
+    const context = canvas.getContext('2d', {alpha:false});
+    context.fillStyle = '#fff'; context.fillRect(0,0,canvas.width,canvas.height);
+    let top = 0;
+    for (const part of parts) {context.drawImage(part,0,top);top+=part.height+Math.round(scale*7);}
+  } else canvas = await questionCanvas(item, scale, true, signal);
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.86));
   if (!blob) throw new Error('문항 이미지를 생성하지 못했습니다.');
   signal?.throwIfAborted();

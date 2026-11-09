@@ -1,5 +1,5 @@
 import { matchesPaper } from './paper-profile.mjs';
-import { matchesExam } from './exam-scope.mjs';
+import { matchesExam } from './exam-scope.mjs?v=imyong-20261109-1';
 
 export function normalize(value) {
   return String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko');
@@ -12,6 +12,7 @@ const socialSubjects = new Set(['east_asia_history', 'economics', 'ethics_though
   'society_culture', 'world_geography', 'world_history']);
 
 export function subjectGroup(code) {
+  if (/^t_(?:physics|chemistry|biology|earth)$/u.test(code)) return { value: 'imyong', label: '중등 임용', hasDetails: true };
   if (scienceSubjects.has(code)) return { value: 'science', label: '과학탐구', hasDetails: true };
   if (generalSubjects.has(code)) return { value: code, label: generalSubjects.get(code), hasDetails: false };
   if (socialSubjects.has(code)) return { value: 'social', label: '사회탐구', hasDetails: true };
@@ -137,9 +138,11 @@ export function catalogFiles(records, questions) {
     const subject = record.subject || first?.subject || match?.[1];
     const year = Number(record.year || first?.year || match?.[2]);
     const month = Number(record.month || first?.month || match?.[3]);
-    if (!subject || !year || !month) return [];
+    if (!subject || !year || (!month && record.source !== 'imyong' && first?.source !== 'imyong')) return [];
     return [{ pdfFile, subject, subjectLabel: record.subjectLabel || first?.subjectLabel || subjects[subject] || subject,
-      year, month, exam: record.exam || first?.exam || `${year}학년도 ${month === 11 ? '수능' : `${month}월 모평`}`,
+      year, month, ...(record.source || first?.source ? {source: record.source || first?.source} : {}),
+      ...(record.paper || first?.paper ? {paper: record.paper || first?.paper} : {}),
+      exam: record.exam || first?.exam || `${year}학년도 ${month === 11 ? '수능' : `${month}월 모평`}`,
       questionCount: grouped.get(pdfFile)?.length || 0 }];
   }).sort((a, b) => b.year - a.year || b.month - a.month || a.subject.localeCompare(b.subject));
 }
@@ -152,7 +155,7 @@ export function searchFiles(files, questions, query, filters = {}) {
     && (!filters.subject || file.subject === filters.subject)
     && file.year >= yearFrom && file.year <= yearTo && matchesExam(file, filters));
   const counts = new Map();
-  for (const item of questions) if (matchesPaper(item, filters)) {
+  for (const item of questions) if (matchesPaper(item, filters) && matchesExam(item, filters)) {
     const entry = counts.get(item.pdfFile) || { questionCount: 0, firstMatchPage: item.page || 1 };
     entry.questionCount += 1;
     entry.firstMatchPage = Math.min(entry.firstMatchPage, item.page || 1);
@@ -175,5 +178,5 @@ export function searchFiles(files, questions, query, filters = {}) {
 }
 export function fileQuestions(questions, pdfFile, page = null, filters = { allProfiles: true }) {
   return questions.filter((item) => item.pdfFile === pdfFile && (page === null || item.page === page) && matchesPaper(item, filters))
-    .sort((a, b) => a.page - b.page || a.no - b.no || a.id.localeCompare(b.id));
+    .sort((a, b) => a.page - b.page || (a.source === 'imyong' ? (a.order || a.no) - (b.order || b.no) : a.no - b.no) || a.id.localeCompare(b.id));
 }

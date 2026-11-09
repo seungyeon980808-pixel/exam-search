@@ -10,7 +10,7 @@ export function validCatalog(value) {
     && value.files.every(f=>typeof f.pdfFile === 'string' && typeof f.publicPath === 'string')
     && value.status.subjects.every(s=>['browse','detail','search'].every(kind=>{
       const a=value.shards?.[s.value]?.[kind] || value.shards?.[`hp_${s.value}`]?.[kind];
-      return a && /^data\/(?:browser|hakpyeong)\/[a-z_\d-]+\.json(?:\.gz)?$/u.test(a.path) && /^[a-f\d]{64}$/u.test(a.sha256) && a.bytes>0
+      return a && /^data\/(?:browser|hakpyeong|imyong)\/[a-z_\d-]+\.json(?:\.gz)?$/u.test(a.path) && /^[a-f\d]{64}$/u.test(a.sha256) && a.bytes>0
         && (kind!=='search'||a.format==='compact-search-v1');
     }));
 }
@@ -85,7 +85,7 @@ export async function pruneAssets(catalog) {
   const cache=await cacheStore();
   if(!cache)return;
   try { for(const name of await caches.keys())if(name.startsWith('exam-library-catalog-v')&&name!==CACHE)await caches.delete(name); } catch {}
-  const allowed=new Set([new URL('data/catalog.json',base).href,new URL('data/hakpyeong/catalog.json',base).href,...Object.values(catalog.shards)
+  const allowed=new Set([new URL('data/catalog.json',base).href,new URL('data/hakpyeong/catalog.json',base).href,new URL('data/imyong/catalog.json',base).href,...Object.values(catalog.shards)
     .flatMap(s=>[s.browse,s.detail,s.search]).map(a=>new URL(a.path,base).href)]);
   try { for(const key of await cache.keys())if(!allowed.has(key.url)
     &&(!key.url.includes('/data/hakpyeong/')||catalog.shards.hp_p1))await cache.delete(key); } catch {}

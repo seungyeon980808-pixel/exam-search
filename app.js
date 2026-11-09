@@ -1,21 +1,21 @@
 import { mountCompactToolbar } from './compact-toolbar.mjs?v=compact-20261011-1';
-import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=hakpyeong-20261103';
+import { driveFilePath, getJson, browserCatalog, onSearchState, prefetchSearch } from './data.mjs?v=imyong-20261109-1';
 import { driveLink } from './drive-source.mjs';
 import { createPreviewLoader } from './preview-loader.mjs?v=preview-speed-20261009-1';
 let pdfModule;
-const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=hakpyeong-20261103').catch(error => { pdfModule = null; throw error; });
+const pdfViewer = () => pdfModule ||= import('./pdf-viewer.mjs?v=imyong-20261109-1').catch(error => { pdfModule = null; throw error; });
 const renderFilePages = async (...args) => (await pdfViewer()).renderFilePages(...args);
 const renderFileThumbnail = async (...args) => (await pdfViewer()).renderFileThumbnail(...args);
 const renderQuestion = async (...args) => (await pdfViewer()).renderQuestion(...args);
 import { trackLabels, variantLabels } from './paper-profile.mjs';
-import { curriculumDisplayState } from './search.mjs?v=hakpyeong-20261103';
-import { curriculumOptions } from './catalog-filters.mjs?v=hakpyeong-20261103';
-import { matchesExam } from './exam-scope.mjs';
+import { curriculumDisplayState } from './search.mjs?v=imyong-20261109-1';
+import { curriculumOptions } from './catalog-filters.mjs?v=imyong-20261109-1';
+import { matchesExam } from './exam-scope.mjs?v=imyong-20261109-1';
 let editorModule;
 async function openEditor(method, args) {
   setHelp('편집 문서를 준비하고 있습니다.');
   try {
-    editorModule ||= import('./editable-editor.mjs?v=hakpyeong-20261103').catch(error => { editorModule = null; throw error; });
+    editorModule ||= import('./editable-editor.mjs?v=imyong-20261109-1').catch(error => { editorModule = null; throw error; });
     return (await editorModule)[method](...args);
   } catch (error) { setHelp(error.message, true); }
 }
@@ -51,6 +51,7 @@ const loadMore = $('#load-more');
 const previewToggle = $('#preview-toggle');
 const group = $('#group-filter');
 const subject = $('#subject-filter');
+const domain = $('#domain-filter');
 const yearFrom = $('#year-from');
 const yearTo = $('#year-to');
 let yearRange = { from: '', to: '' };
@@ -87,7 +88,7 @@ function stopWarmup() {
   }
   warmTimer=undefined;warmSubject='';
 }
-const warmScope=()=>`${subject.value||`group:${group.value||'all'}`}:${month.value}`;
+const warmScope=()=>`${subject.value||`group:${group.value||'all'}`}:${month.value}:${domain.value}`;
 function warmSelectedSubject({intent=false}={}) {
   if(!catalogData||(!subject.value&&!intent)||warmSubject===warmScope())return;
   stopWarmup();warmSubject=warmScope();warmController=new AbortController();
@@ -95,7 +96,7 @@ function warmSelectedSubject({intent=false}={}) {
   const prepare=()=>{warmTimer=undefined;if(!signal.aborted)void prefetchSearch(filters,{signal,intent}).catch(()=>{});};
   warmTimer=window.requestIdleCallback?requestIdleCallback(prepare,{timeout:300}):setTimeout(prepare,80);
 }
-const searchAddressKeys = ['q', 'group', 'subject', 'year', 'yearFrom', 'yearTo', 'month', 'mode', 'id', 'file', 'unit', 'framework', 'standard'];
+const searchAddressKeys = ['q', 'group', 'subject', 'domain', 'year', 'yearFrom', 'yearTo', 'month', 'mode', 'id', 'file', 'unit', 'framework', 'standard'];
 let landingOpen = !searchAddressKeys.some(key => initialParams.has(key));
 const story = mountLandingStory($('#landing-story'), { isVisible: () => landingOpen, onTry: async step => {
   if (step === 0) { $('#landing-subjects').querySelector('button')?.focus(); return; }
@@ -169,7 +170,7 @@ function syncToolbar() {
   }
   const fileParent = mobileWorkspace.matches ? $('#toolbar-menu-panel') : $('#workspace-tools');
   if (fileTools.parentElement !== fileParent) fileParent.append(fileTools);
-  const description = [group, subject, month, track, variant, framework, unit, standard]
+  const description = [group, subject, domain, month, track, variant, framework, unit, standard]
     .filter((control) => !control.disabled && !control.closest('[hidden]'))
     .map((control) => control.selectedOptions[0]?.textContent).filter(Boolean).join(' · ');
   filterToggle.title = [description, yearRangeLabel(yearRange)].filter(Boolean).join(' · ');
@@ -219,7 +220,7 @@ toolbar.addEventListener('keydown', (event) => {
 syncToolbar();
 
 function updateSubjectOptions(selected = '') {
-  const details = group.value === 'science' || group.value === 'social' || group.value === 'other';
+  const details = ['science', 'social', 'imyong', 'other'].includes(group.value);
   const control = $('#subject-filter-control');
   control.hidden = !details;
   $('#search-form').classList.toggle('has-details', details);
@@ -231,8 +232,25 @@ function updateSubjectOptions(selected = '') {
   }
   subject.disabled = !details;
   subject.value = [...subject.options].some((option) => option.value === selected) ? selected : '';
+  syncImyongFilters();
   updateYearOptions();
   syncToolbar();
+}
+
+function syncImyongFilters() {
+  const active = group.value === 'imyong';
+  $('#domain-filter-control').hidden = !active;
+  domain.disabled = !active;
+  if (!active) domain.value = '';
+  for (const option of month.options) {
+    const imyong = option.value.startsWith('imyong');
+    option.hidden = active ? !imyong : false;
+    option.disabled = active ? !imyong : false;
+  }
+  if (active && !month.value.startsWith('imyong')) month.value = 'imyong';
+  if (!active && month.value.startsWith('imyong')) month.value = '';
+  for (const id of ['framework-details', 'unit-details', 'standard-details']) $(`#${id}`).hidden = active;
+  input.placeholder = active ? '예: 전자기 유도, 개념 변화' : '키워드 검색';
 }
 
 function updateYearOptions() {
@@ -513,6 +531,7 @@ function queryUrl(offset) {
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
   if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
+  if (domain.value) params.set('domain', domain.value);
   writeYearRange(params, yearRange);
   if (month.value) params.set('month', month.value);
   if (framework.value) params.set('framework', framework.value);
@@ -533,10 +552,13 @@ function queryUrl(offset) {
 
 function applySearchAddress(params) {
   const legacySubject = params.get('subject') || '';
-  group.value = params.get('group') || availableSubjects.find(entry => entry.value === legacySubject)?.group || '';
+  group.value = params.get('group') || availableSubjects.find(entry => entry.value === legacySubject)?.group
+    || (params.get('domain') || params.get('month')?.startsWith('imyong') || params.get('id')?.startsWith('t_') ? 'imyong' : '');
   updateSubjectOptions(legacySubject);
   setYearRange(readYearRange(params));
   month.value = params.get('month') || '';
+  syncImyongFilters();
+  domain.value = group.value === 'imyong' ? params.get('domain') || '' : '';
   allProfiles.checked = params.get('allProfiles') === '1';
   const saved = savedProfiles[group.value] || {};
   updatePaperOptions(params.has('track') ? params.get('track') : saved.track || '', params.get('variant') || saved.variant || 'odd');
@@ -589,7 +611,7 @@ window.addEventListener('popstate', async event => {
 });
 
 function renderAppliedFilters() {
-  const controls = [group, subject, month, track, variant, framework, unit, standard];
+  const controls = [group, subject, domain, month, track, variant, framework, unit, standard];
   const chips = controls.filter(control => control.value && !control.disabled && !control.closest('[hidden]')).map(control => {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'filter-chip';
@@ -631,6 +653,7 @@ function updateAddress({ push = false } = {}) {
   if (state.tokens.length) params.set('q', state.tokens.join(' '));
   if (group.value) params.set('group', group.value);
   if (subject.value) params.set('subject', subject.value);
+  if (domain.value) params.set('domain', domain.value);
   writeYearRange(params, yearRange);
   if (month.value) params.set('month', month.value);
   if (framework.value) params.set('framework', framework.value);
@@ -1158,7 +1181,7 @@ async function selectQuestion(id, openDetail = true, { push = false } = {}) {
     if (!openDetail) selectedCard?.scrollIntoView({ block: 'nearest' });
     $('#detail-empty').hidden = true;
     $('#detail-content').hidden = false;
-    $('#detail-heading').textContent = `${item.subjectLabel} ${item.no}번`;
+    $('#detail-heading').textContent = `${item.subjectLabel} ${item.section ? `${item.section} ` : ''}${item.no}번`;
     $('#detail-subheading').textContent = `${item.exam} · ${item.page}쪽`;
     const href = driveLink(driveFilePath(item.pdfFile));
     $('#open-pdf').href = href ? `${href}#page=${item.page}` : '';
@@ -1208,7 +1231,8 @@ async function selectQuestion(id, openDetail = true, { push = false } = {}) {
         }
       }
     });
-    $('#source-note').textContent = `${item.pdfFile} · ${item.page}쪽 원본입니다. 수식과 그림은 PDF에서 대조하세요.`;
+    const pages = [...new Set((item.regions || [{page:item.page}]).map(region=>region.page))].join('·');
+    $('#source-note').textContent = `${item.pdfFile} · ${pages}쪽 원본입니다.${item.regions?.length > 1 ? ' 이어지는 부분을 함께 표시합니다.' : ''} 수식과 그림은 PDF에서 대조하세요.`;
     const tagList = $('#tag-list');
     tagList.replaceChildren();
     const names = [...new Set([...(item.parts || []), ...(item.tags || [])])];
@@ -1372,6 +1396,7 @@ $('#clear-search').addEventListener('click', () => {
   subject.value = '';
   setYearRange({ from: '', to: '' });
   month.value = '';
+  domain.value = '';
   allProfiles.checked = false;
   framework.value = '';
   unit.value = '';
@@ -1389,7 +1414,10 @@ function restoreFilterFocus(control) {
 }
 group.addEventListener('change', () => { updateSubjectOptions(); allProfiles.checked = false;
   const saved = savedProfiles[group.value] || {}; updatePaperOptions(saved.track || '', saved.variant || 'odd'); updateCurriculumOptions({ framework: '', unit: '', standard: '' }); search(); restoreFilterFocus(group); });
-for (const select of [subject, month, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
+for (const select of [subject, month, domain, framework, unit, standard, track, variant, allProfiles]) select.addEventListener('change', () => {
+  if (select === month && month.value.startsWith('imyong') && group.value !== 'imyong') {
+    group.value = 'imyong'; updateSubjectOptions(); updateCurriculumOptions({framework:'',unit:'',standard:''});
+  }
   if (select === subject) updateYearOptions();
   if (select === subject) { framework.value = ''; unit.value = ''; standard.value = ''; }
   updatePaperOptions(); updateCurriculumOptions(); rememberProfile(); search(); restoreFilterFocus(select);
@@ -1579,10 +1607,13 @@ async function start() {
     for (const { value, label } of status.standards || []) standard.add(new Option(`${value} ${label}`, value));
     // Search words entered while the catalog was loading are retained.
     const legacySubject = initialParams.get('subject') || '';
-    group.value = initialParams.get('group') || availableSubjects.find((entry) => entry.value === legacySubject)?.group || '';
+    group.value = initialParams.get('group') || availableSubjects.find((entry) => entry.value === legacySubject)?.group
+      || (initialParams.get('domain') || initialParams.get('month')?.startsWith('imyong') || initialParams.get('id')?.startsWith('t_') ? 'imyong' : '');
     updateSubjectOptions(legacySubject);
     setYearRange(readYearRange(initialParams));
     month.value = initialParams.get('month') || '';
+    syncImyongFilters();
+    domain.value = group.value === 'imyong' ? initialParams.get('domain') || '' : '';
     framework.value = initialParams.get('framework') || '';
     unit.value = initialParams.get('unit') || '';
     standard.value = initialParams.get('standard') || '';

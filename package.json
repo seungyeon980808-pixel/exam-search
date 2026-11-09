@@ -29,7 +29,10 @@
     "measure:images": "node tools/measure-image-loading.mjs",
     "qa:compact": "node tools/qa-compact-toolbar.mjs",
     "qa:frame": "node tools/frame-qa/run.mjs",
-    "qa:frame-e2e": "node tools/frame-qa/e2e.mjs"
+    "qa:frame-e2e": "node tools/frame-qa/e2e.mjs",
+    "test:imyong": "node --test test_imyong.mjs",
+    "build:imyong": "node tools/build-imyong-catalog.mjs",
+    "qa:imyong": "node tools/qa-imyong.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

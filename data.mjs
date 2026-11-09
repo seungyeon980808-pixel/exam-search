@@ -1,6 +1,6 @@
-import {loadCatalog} from './catalog-cache.mjs?v=hakpyeong-20261103';
-import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=hakpyeong-20261103';
-import {needsHakpyeong,mergeCatalogs} from './exam-scope.mjs';
+import {loadCatalog} from './catalog-cache.mjs?v=imyong-20261109-1';
+import {curriculumOptions,listFiles} from './catalog-filters.mjs?v=imyong-20261109-1';
+import {needsHakpyeong,mergeCatalogs} from './exam-scope.mjs?v=imyong-20261109-1';
 let catalogPromise, workerPromise,worker,answersPromise;
 let publicPaths=new Map(),nextId=0;
 const requests=new Map(),listeners=new Set();
@@ -10,7 +10,10 @@ function emit(state){searchState=state;for(const listener of listeners)listener(
 export function onSearchState(listener){listeners.add(listener);listener(searchState);return()=>listeners.delete(listener);}
 export function driveFilePath(name){return publicPaths.get(name)||'';}
 export async function browserCatalog(filters={}){
- if(!catalogPromise)catalogPromise=loadCatalog(()=>emit({...searchState,updateAvailable:true})).then(value=>{
+ if(!catalogPromise)catalogPromise=Promise.all([
+  loadCatalog(()=>emit({...searchState,updateAvailable:true})),
+  loadCatalog(()=>emit({...searchState,updateAvailable:true}),'data/imyong/catalog.json'),
+ ]).then(([base,imyong])=>mergeCatalogs(base,imyong)).then(value=>{
   publicPaths=new Map(value.files.map(f=>[f.pdfFile,f.publicPath]));return value;
  }).catch(e=>{catalogPromise=null;throw e;});
  const base=await catalogPromise;
@@ -35,7 +38,7 @@ async function searchWorker(filters={}){
  const catalog=await browserCatalog(filters);
  if(!workerPromise)workerPromise=(async()=>{
   workerExpanded=!!catalog.shards.hp_p1;
-  worker=new Worker(new URL('./search-worker.mjs?v=hakpyeong-20261103',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./search-worker.mjs?v=imyong-20261109-1',import.meta.url),{type:'module'});
   worker.onmessage=({data})=>{
    if(data.type==='progress'){if(requests.has(data.id))emit({...searchState,phase:'preparing',done:data.done,total:data.total});return;}
    const request=requests.get(data.id);if(!request)return;requests.delete(data.id);
@@ -81,7 +84,7 @@ export async function getJson(path, options={}){
  const catalog=await browserCatalog(filters);
  if(url.pathname==='/api/status')return catalog.status;
  if(url.pathname==='/api/curriculum')return curriculumOptions(catalog,Object.fromEntries(params));
- if(url.pathname==='/api/files' && !['q','framework','unit','standard'].some(k=>params.get(k))) {
+ if(url.pathname==='/api/files' && !['q','framework','unit','standard','domain'].some(k=>params.get(k))) {
   const found=listFiles(catalog,Object.fromEntries(params)),size=Math.max(1,Math.min(100,Number(params.get('pageSize'))||12));
   const focus=params.get('focus'),index=focus?found.findIndex(f=>f.pdfFile===focus):-1;
   const offset=index<0?Math.max(0,Math.min(100000,Number(params.get('offset'))||0)):Math.floor(index/size)*size;
